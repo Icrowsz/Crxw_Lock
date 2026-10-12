@@ -1,0 +1,44 @@
+[gd_scene format=3 uid="uid://cq1jhe32rjkns"]
+
+[ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_1csnf"]
+[ext_resource type="Script" uid="uid://deetw1nhru6r5" path="res://scr/perso/loki.gd" id="2_0dl0w"]
+[ext_resource type="Texture2D" uid="uid://dkwesr8156aif" path="res://img/icons/lokiicon.png" id="3_0dl0w"]
+[ext_resource type="Texture2D" uid="uid://cdvlfwflocoyn" path="res://img/mvps/loki.jpg" id="3_ejyid"]
+
+[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_1csnf")]
+script = ExtResource("2_0dl0w")
+run_speed_passive = 1.5
+charge_distance_per_step = 300.0
+charge_step_bonus = 0.03
+charge_max_bonus = 0.3
+vitesse_distance = 480.0
+vitesse_time = 0.28
+vitesse_cooldown = 2
+vitesse_meet_radius = 58.0
+genie_force = 150.0
+genie_chance = 0.5
+assault_cooldown = 3
+assault_range = 300.0
+assault_dash_time = 0.2
+assault_chance = 0.7
+assault_run_time = 1.0
+assault_run_boost = 1.4
+renverse_run_time = 0.6
+renverse_max_repeats = 4
+contact_pad = 6.0
+too_slow_leap_time = 0.3
+too_slow_pass_range = 460.0
+prey_range = 270.0
+prey_cooldown = 2
+prey_dash_time = 0.2
+prey_run_mult = 0.5
+prey_rounds = 2
+kick_fx = null
+skill_icons = {}
+display_name = "Julian Loki"
+mvp_image = ExtResource("3_ejyid")
+visual_root = NodePath("SprPlayer")
+
+[node name="SprPlayer" parent="." index="1" unique_id=395354675]
+scale = Vector2(0.2, 0.2)
+texture = ExtResource("3_0dl0w")

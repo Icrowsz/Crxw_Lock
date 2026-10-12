@@ -1,0 +1,42 @@
+[gd_scene format=3 uid="uid://bl884lugcjx06"]
+
+[ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_e18gt"]
+[ext_resource type="Script" uid="uid://5ywp3s1bscqu" path="res://scr/perso/yukimiya.gd" id="2_1clbs"]
+[ext_resource type="Texture2D" uid="uid://bpj52nrwe4qvg" path="res://img/icons/yukimiyaicon.png" id="2_or71m"]
+[ext_resource type="Texture2D" uid="uid://vb61hyg8okjv" path="res://img/mvps/yukimiya.jpg" id="3_qgf87"]
+
+[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_e18gt")]
+script = ExtResource("2_1clbs")
+chance_gyro = 0.45
+chance_sword = 0.5
+shot_cooldown = 2
+gyro_segments = 2
+gyro_segment_time = 0.35
+gyro_curve_min_deg = 25.0
+gyro_curve_max_deg = 55.0
+screw_leg_time = 0.4
+screw_speed_mult = 0.7
+dribble_runs = 2
+dribble_run_mult = 0.6
+dribble_catch_margin = 14.0
+dribble_cooldown = 3
+blind_shots = 3
+blind_bonus = 0.05
+blind_extra_segments = 2
+blind_extra_bounces = 1
+emperor_cooldown = 2
+emperor_extra_general = 1
+chance_goal = 0.45
+goal_enemy_radius = 180.0
+goal_enemies_needed = 2
+goal_curve_time = 0.2
+goal_curve_deg = 30.0
+kick_fx = null
+kick_fx_blind = null
+display_name = "Yukimiya Kenyu"
+mvp_image = ExtResource("3_qgf87")
+visual_root = NodePath("SprPlayer")
+
+[node name="SprPlayer" parent="." index="1" unique_id=395354675]
+scale = Vector2(0.2, 0.2)
+texture = ExtResource("2_or71m")

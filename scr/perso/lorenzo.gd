@@ -756,29 +756,27 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 		SKILL_ZOMBIE:
 			if _ball_is_near():
 				title = "Zombie Dribble"
-				text = "Com a bola próxima e no chão, cola ela nos pés e começa um Correr normal, mas com os controles INVERTIDOS. A bola não pode ser roubada durante a corrida.\nNo fim, com um aliado a até %d px, libera o Undead Pass." % int(undead_range)
+				text = "Cola a bola nos pés e começa um Correr com os controles invertidos. A bola não pode ser roubada. No fim, libera o Undead Pass."
 			else:
 				title = "Buh!"
-				text = "Sem a bola próxima: escolhe uma direção e avança %d px. Inimigos no caminho ficam atordoados pela rodada e o Lorenzo passa direto. Se encontrar a bola, para nela e libera o Undead Pass." % int(buh_distance)
-			text += "\nRecarga: %d rodadas (compartilhada com a outra variante e o Undead Pass)." % zombie_cooldown
+				text = "Avança em linha reta, atordoando os inimigos no caminho. Se encontrar a bola, para nela e libera o Undead Pass."
+			text += "\nRecarga: %d rodadas." % zombie_cooldown
 		SKILL_UNDEAD:
 			title = "Undead Pass"
-			text = "Complemento gratuito: passe rasteiro para um aliado a até %d px." % int(undead_range)
+			text = "Complemento grátis: passe rasteiro para um aliado."
 		SKILL_YO:
 			if height_level == Heights.Level.SUSPENDED:
 				title = "Horrific Intercept"
-				text = "Suspenso, com a bola suspensa ou voando a até %d px: avança até ela, domina suspenso e dá um passe alto para o 2º aliado mais próximo." % int(intercept_range)
+				text = "Avança até a bola no ar, a domina e dá um passe alto para um aliado."
 			else:
 				title = "Yo.."
-				text = "No chão: vai até um inimigo (em qualquer estado) a até %d px e o marca por %d rodadas, ou até o Lorenzo se afastar mais de %d px.\nO marcado tem -%d%% em qualquer chute, corre bem mais devagar e por menos tempo." % [
-					int(yo_range), yo_rounds, int(yo_leash_range), _pct(yo_shot_penalty)]
-			text += "\nRecarga: %d rodadas (compartilhada entre as duas)." % yo_cooldown
+				text = "Vai até um inimigo e o marca por %d rodadas: ele perde %d%% de chance de gol nos chutes e corre bem mais devagar." % [
+					yo_rounds, _pct(yo_shot_penalty)]
+			text += "\nRecarga: %d rodadas." % yo_cooldown
 		SKILL_ACE:
 			title = "Ace Eater"
-			text = ("Marca um inimigo num alcance gigante (%d px) por %d rodadas: ele não pode receber passes e tem -%d%% nos chutes.\n"
-				+ "CEMETERY: se um marcado tentar chutar (ou receber um passe), o efeito contamina o aliado mais próximo dele, os dois CAEM, e a marca é renovada. Isso continua se espalhando.\n"
-				+ "Recarga: %d rodadas (compartilhada com o Cemetery).") % [
-				int(ace_range), ace_rounds, _pct(ace_shot_penalty), ace_cooldown]
+			text = ("Marca um inimigo por %d rodadas: ele não pode receber passes e perde %d%% de chance de gol. Se ele tentar chutar ou receber um passe, o efeito passa para o aliado mais próximo e os dois caem.\n"
+				+ "Recarga: %d rodadas.") % [ace_rounds, _pct(ace_shot_penalty), ace_cooldown]
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D

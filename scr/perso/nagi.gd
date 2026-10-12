@@ -752,28 +752,30 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	match skill_id:
 		SKILL_TRAP:
 			title = "Trap"
-			text = ("Com a bola Suspensa e próxima, Nagi salta até ela, domina e fica Suspenso.\n"
-				+ "Não gasta ação de habilidade (%d vez por turno). Logo depois, o Heavy também sai de graça.") % max_traps_per_turn
+			text = "Salta até a bola no ar, a domina e fica suspenso. Não gasta ação de habilidade e libera o Heavy de graça."
 		SKILL_HEAVY:
-			title = "Bicycle" if get_heavy_variant() == HeavyVariant.BICYCLE else "Heavy"
-			text = ("Chute de habilidade. A variante muda sozinha com a altura dele e da bola:\n"
-				+ "• Heavy: a trajetória é Suspensa, mas a bola cai para o chão sem quicar. %d%% de chance de gol. Sozinho, com o Nagi no chão e a bola ao alcance (no chão ou suspensa); também com Nagi e bola Suspensos ou Voando. É GRATUITO logo depois do Trap.\n"
-				+ "• Bicycle (Nagi Suspenso e bola Voando): bicicleta. %d%%.\n"
-				+ "Recarga: %d rodadas, compartilhada entre os dois.") % [
-				_pct(chance_heavy), _pct(chance_bicycle), heavy_cooldown]
+			if get_heavy_variant() == HeavyVariant.BICYCLE:
+				title = "Bicycle"
+				text = "Bicicleta no ar. %d%% de chance de gol." % _pct(chance_bicycle)
+			else:
+				title = "Heavy"
+				text = "Chute em que a bola cai no chão sem quicar. %d%% de chance de gol. De graça logo depois do Trap." % _pct(chance_heavy)
+			text += "\nRecarga: %d rodadas." % heavy_cooldown
 		SKILL_ZERO:
-			title = "Fake Volley" if get_zero_variant() == ZeroVariant.FAKE_VOLLEY else "Zero Reset Turn"
-			text = ("A variante muda sozinha com a altura dele e da bola:\n"
-				+ "• Zero Reset Turn (os dois no chão, bola próxima): Nagi segura a bola até o próximo turno do time dele. Os adversários não conseguem tocar nela e, se algum tentar chegar perto ou der carrinho, Nagi desvia e ganha +%d ação de habilidade no próximo turno. Recarga: %d rodadas.\n"
-				+ "• Fake Volley (os dois Suspensos e próximos): chute falso, a bola sai e volta. Com inimigo próximo, +%d%% no próximo chute. Recarga: %d rodadas.") % [
-				zero_extra_skills, zero_cooldown, _pct(fake_bonus), fake_cooldown]
+			if get_zero_variant() == ZeroVariant.FAKE_VOLLEY:
+				title = "Fake Volley"
+				text = ("Chute falso: a bola sai e volta. Com um inimigo perto, ganha +%d%% de chance de gol no próximo chute.\n"
+					+ "Recarga: %d rodadas.") % [_pct(fake_bonus), fake_cooldown]
+			else:
+				title = "Zero Reset Turn"
+				text = ("Nagi segura a bola até o próximo turno do time dele. Se um inimigo tentar pegá-la, ele desvia e ganha +%d ação de habilidade.\n"
+					+ "Recarga: %d rodadas.") % [zero_extra_skills, zero_cooldown]
 		SKILL_LIFT:
 			title = "Lift"
-			text = ("Com a bola próxima, levanta a bola e ele um nível: Chão -> Suspenso -> Voando.\n"
-				+ "Recarga: %d rodada(s).") % lift_cooldown
+			text = "Levanta a bola e o Nagi um nível de altura.\nRecarga: %d rodada(s)." % lift_cooldown
 		SKILL_CONTROL:
 			title = "Control"
-			text = ("Com a bola já Voando e Nagi Suspenso ou Voando: +%d ação de habilidade extra neste turno.\n"
+			text = ("+%d ação de habilidade extra neste turno.\n"
 				+ "%sRecarga: %d rodada(s).") % [
 				control_extra_skills, "Não gasta ação de habilidade. " if control_is_free else "", control_cooldown]
 		_:

@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://cto7y84o6asn1"]
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_oj453"]
-[ext_resource type="Texture2D" uid="uid://b8b6d85wtiw73" path="res://img/shidouicon.png" id="2_1ifi4"]
+[ext_resource type="Texture2D" uid="uid://b8b6d85wtiw73" path="res://img/icons/shidouicon.png" id="2_1ifi4"]
 [ext_resource type="Script" uid="uid://bsq3cw35871qs" path="res://scr/perso/shidou.gd" id="2_65f7p"]
 [ext_resource type="Texture2D" uid="uid://bc7e617k24xwc" path="res://img/mvps/shidou.jpg" id="3_hu5on"]
 
@@ -28,6 +28,14 @@ lover_pick_range = 500.0
 lover_break_distance = 800.0
 hater_pick_range = 500.0
 hater_break_distance = 800.0
+chance_carnival = 0.9
+carnival_chance_is_final = true
+carnival_needs_qte = true
+carnival_shake = 14.0
+carnival_wings_rounds = 2
+wings_offset = Vector2(0, -14)
+wings_scale = 1.0
+carnival_fx = null
 kick_fx = null
 big_bang_fx = null
 skill_icons = {}

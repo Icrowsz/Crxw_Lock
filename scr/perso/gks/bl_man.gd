@@ -30,3 +30,8 @@ func modify_shot_chance(chance: float, _shot_ball: Ball) -> float:
 	if absf(save_chance - chance) <= adapt_threshold + 0.001:
 		return maxf(chance - adapt_bonus, 0.0)
 	return chance
+
+
+func get_description() -> String:
+	return "Passiva Adaptável: quando o chute e a defesa estão parelhos (diferença de até %d%%), ele se adapta: o chute perde %d%% de chance e a defesa ganha o mesmo. Chute muito melhor ou muito pior que a defesa não muda." % [
+		_pct(adapt_threshold), _pct(adapt_bonus)]

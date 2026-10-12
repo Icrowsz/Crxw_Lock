@@ -33,7 +33,7 @@ const CD_METAVISION: StringName = &"cd_metavision"
 enum ShotVariant { NONE, BACKHEEL, DIRECT, TWO_GUN }
 
 @export_group("Backheel Shot")
-@export_range(0.0, 1.0) var chance_backheel: float = 0.4
+@export_range(0.0, 1.0) var chance_backheel: float = 0.45
 @export_range(0.0, 1.0) var chance_direct: float = 0.45
 @export_range(0.0, 1.0) var chance_two_gun: float = 0.50
 @export var shot_cooldown: int = 2                             # recarga (rodadas), igual para as 3 variantes
@@ -391,25 +391,28 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	match skill_id:
 		SKILL_SHOT:
 			title = _shot_skill_name()
-			text = ("Chute de habilidade. A variante muda sozinha com a altura dele e da bola:\n"
-				+ "• Backheel Shot (os dois no chão): a bola vai na direção CONTRÁRIA da mira. %d%% de chance de gol.\n"
-				+ "• Direct Shot (ele no chão e bola suspensa, ou os dois suspensos): voleio com QTE fácil. %d%%.\n"
-				+ "• Two Gun Volley (ele suspenso/voando e bola voando): voleio voador com QTE difícil. %d%%.\n"
-				+ "Recarga: %d rodadas, compartilhada entre as três.") % [
-				_pct(chance_backheel), _pct(chance_direct), _pct(chance_two_gun), shot_cooldown]
+			match get_shot_variant():
+				ShotVariant.BACKHEEL:
+					text = "Chute de calcanhar: a bola vai para o lado contrário da mira. %d%% de chance de gol." % _pct(chance_backheel)
+				ShotVariant.DIRECT:
+					text = "Voleio direto para o gol. %d%% de chance de gol." % _pct(chance_direct)
+				ShotVariant.TWO_GUN:
+					text = "Voleio no ar para o gol. %d%% de chance de gol." % _pct(chance_two_gun)
+				_:
+					text = "Chute especial que muda conforme a altura dele e da bola. De %d%% a %d%% de chance de gol." % [
+						_pct(minf(chance_backheel, minf(chance_direct, chance_two_gun))),
+						_pct(maxf(chance_backheel, maxf(chance_direct, chance_two_gun)))]
+			text += "\nRecarga: %d rodadas." % shot_cooldown
 		SKILL_PIECES:
 			title = "Pieces"
-			text = ("As 3 peças aparecem no campo por %d rodadas e só afetam o Isagi:\n"
-				+ "• Ataque: +%d%% em qualquer chute.\n"
-				+ "• Meio-campo: +%.1f s no Correr.\n"
-				+ "• Defesa: o Pular chega ao nível Voando.\n"
-				+ "Recarga: %d rodadas, contadas a partir do fim do efeito.") % [
+			text = ("Cria 3 peças no campo por %d rodadas. Elas dão ao Isagi +%d%% de chance de gol, +%.1f s no Correr e um Pular mais alto.\n"
+				+ "Recarga: %d rodadas.") % [
 				pieces_rounds, _pct(attack_piece_bonus), midfield_run_bonus, pieces_cooldown]
 		SKILL_METAVISION:
 			title = "Metavision"
-			text = ("Por %d rodadas depois da atual: +%d ação(ões) de habilidade extra para os aliados, +%d%% em qualquer chute e nenhum QTE nos chutes do Isagi.\n"
-				+ "Recarga: %d rodadas, contadas a partir do fim do efeito.") % [
-				metavision_rounds, metavision_extra_ally_skills, _pct(metavision_bonus), metavision_cooldown]
+			text = ("Por %d rodadas: +%d%% de chance de gol, chutes do Isagi sem QTE e +%d ação de habilidade para os aliados.\n"
+				+ "Recarga: %d rodadas.") % [
+				metavision_rounds, _pct(metavision_bonus), metavision_extra_ally_skills, metavision_cooldown]
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D

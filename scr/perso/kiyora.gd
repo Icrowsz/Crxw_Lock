@@ -545,25 +545,28 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	match skill_id:
 		SKILL_DANCE:
 			title = "Dance Battle"
-			text = ("Com a bola ao alcance (no chão ou suspensa) e o Kiyora no chão, ele puxa a bola e a gruda nele: "
-				+ "ela acompanha o Kiyora e os adversários não conseguem tocar nela. "
-				+ "Se um inimigo tentar interagir (correr ou deslizar para perto, ou dar Carrinho nele), o inimigo cai e o Kiyora libera o Backspin: "
-				+ "por %d rodadas, as habilidades dele ficam melhores (Even the Gods e Twister). "
-				+ "A bola solta no fim do próximo turno do adversário.\n"
+			text = ("Kiyora puxa a bola para ele. Se um inimigo tentar pegá-la, o inimigo cai e Kiyora ganha o Backspin por %d rodadas, que melhora as outras habilidades dele.\n"
 				+ "Recarga: %d rodadas.") % [backspin_rounds, dance_cooldown]
 		SKILL_BORDER:
-			title = "Even the Gods" if get_pass_skill() == PassSkill.GODS else "Borderline"
-			text = ("Passe alto que sobe a Voando no caminho. Escolha dois aliados: a bola vai para o que tiver "
-				+ "MENOS gols (empate = sorteio).\n"
-				+ "• Even the Gods (com o Backspin ativo): você também escolhe onde a bola cai, perto de quem vai receber.\n"
-				+ "Recarga: %d rodadas, compartilhada entre as duas.") % border_cooldown
+			if get_pass_skill() == PassSkill.GODS:
+				title = "Even the Gods"
+				text = "Passe alto entre dois aliados: a bola vai para quem tiver menos gols, e você escolhe onde ela cai."
+			else:
+				title = "Borderline"
+				text = "Passe alto entre dois aliados: a bola vai para quem tiver menos gols."
+			text += "\nRecarga: %d rodadas." % border_cooldown
 		SKILL_WIND:
 			title = _wind_skill_name()
-			text = ("A variante muda sozinha:\n"
-				+ "• Windmill (bola no chão e ao alcance): giro e passe rasteiro para o aliado mais próximo.\n"
-				+ "• Twister (Backspin ativo; bola no chão ou suspensa): a bola sobe a Voando e chega Suspensa no aliado mais próximo.\n"
-				+ "• Six-Step (bola longe): carrinho mais longo; se encontrar a bola, vira um passe rasteiro simples.\n"
-				+ "Recarga: %d rodadas, compartilhada entre as três.") % wind_cooldown
+			match get_wind_skill():
+				WindSkill.WINDMILL:
+					text = "Giro e passe rasteiro para o aliado mais próximo."
+				WindSkill.TWISTER:
+					text = "Passe no ar para o aliado mais próximo."
+				WindSkill.SIX_STEP:
+					text = "Carrinho longo; se encontrar a bola, vira um passe rasteiro."
+				_:
+					text = "Passe ou carrinho especial, conforme a situação."
+			text += "\nRecarga: %d rodadas." % wind_cooldown
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D

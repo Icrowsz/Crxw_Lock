@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://bbspfq1cfgcub"]
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_3kjtc"]
-[ext_resource type="Texture2D" uid="uid://cx1e1yyfw8305" path="res://img/kaisericon.png" id="2_3j4hb"]
+[ext_resource type="Texture2D" uid="uid://cx1e1yyfw8305" path="res://img/icons/kaisericon.png" id="2_3j4hb"]
 [ext_resource type="Script" uid="uid://dc0ftsv6adbeq" path="res://scr/perso/kaiser.gd" id="2_12ngf"]
 [ext_resource type="Texture2D" uid="uid://bhbfbcraa58em" path="res://img/mvps/kaiser.jpg" id="3_12ngf"]
 

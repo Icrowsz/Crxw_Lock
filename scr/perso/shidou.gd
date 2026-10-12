@@ -24,10 +24,15 @@ extends Player
 ##        (Correr, Pular, Carrinho, Chutar ou Passe) enquanto durar. Acaba se ele passar de
 ##        hater_break_distance.
 ##
+## 4. REAÇÃO QUÍMICA "Carnival" (com a Sae; ver reaction_carnival.gd): se a Sae está sob o Obsessive
+##      Lover e deu um Perfect Pass nele neste turno, o Big Bang Drive vira o CARNIVAL: cutscene +
+##      diálogo, chance de gol 83%, câmera tremendo, efeitos rosa-choque e asas por 2 rodadas
+##      (só visual). Recarga da reação: 12 rodadas (controlada pelo ReactionManager).
+##
 ## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
 ## -> renomeie o nó raiz para "Shidou". Animações opcionais (se faltar alguma, nada quebra):
 ## "kablamo", "dragon_drive", "big_bang_drive", "demonic_rush", "draconic_header",
-## "obsessive_lover", "obsessive_hater".
+## "obsessive_lover", "obsessive_hater", "carnival" (sem ela, usa a do "big_bang_drive").
 
 const SKILL_SHOT: StringName = &"kablamo"           # o mesmo botão vira Dragon Drive / Big Bang Drive
 const SKILL_RUSH: StringName = &"demonic_rush"      # e vira Draconic Header depois da corrida
@@ -39,6 +44,9 @@ const CD_RUSH: StringName = &"cd_shidou_rush"
 const CD_OBSESSIVE: StringName = &"cd_shidou_obsessive"
 
 enum ShotVariant { NONE, KABLAMO, DRAGON, BIG_BANG }
+
+const CARNIVAL_PINK := Color(1.0, 0.1, 0.6)         # rosa-choque
+const CARNIVAL_LIGHT := Color(1.0, 0.65, 0.85)
 
 @export_group("Kablamo / Dragon Drive / Big Bang Drive")
 @export_range(0.0, 1.0) var chance_kablamo: float = 0.40
@@ -67,6 +75,17 @@ enum ShotVariant { NONE, KABLAMO, DRAGON, BIG_BANG }
 @export var hater_pick_range: float = 500.0              # alcance para ESCOLHER o inimigo (px)
 @export var hater_break_distance: float = 800.0          # o efeito acaba se o inimigo ficar mais longe que isso (px)
 
+@export_group("Carnival (Reação Química com a Sae)")
+@export_range(0.0, 1.0) var chance_carnival: float = 0.90     # chance de gol do Carnival
+@export var carnival_chance_is_final: bool = true
+@export var carnival_needs_qte: bool = true                  # o Carnival ainda tem o QTE difícil do Big Bang?
+@export var carnival_shake: float = 14.0                     # tremor da câmera no impacto (px)
+@export var carnival_wings_rounds: int = 2                   # asas visíveis por tantas rodadas (contando a atual)
+@export var wings_offset: Vector2 = Vector2(0.0, -14.0)      # onde as asas nascem (a partir dos pés)
+@export var wings_scale: float = 1.0                         # tamanho das asas
+## Aura do Carnival (rosa-choque). Vazio = usa o estilo padrão (veja _make_carnival_fx)
+@export var carnival_fx: KickFX
+
 @export_group("Visual do chute")
 ## Aura + partículas dos chutes de habilidade. Vazio = usa o estilo padrão do Shidou (veja _make_kick_fx)
 @export var kick_fx: KickFX
@@ -84,6 +103,10 @@ var _base_move_speed: float = 0.0
 # Demonic Rush
 var _rushing: bool = false
 var _rush_round: int = -1              # rodada em que ele usou o Rush (o Header vale só nela)
+
+# Carnival: asas só visuais (um nó filho desenhado atrás do corpo)
+var _wings: _Wings = null
+var _wings_until_round: int = -1
 
 # Obsessive Lover / Hater
 var _lover: Player = null
@@ -112,6 +135,8 @@ func _ready() -> void:
 		kick_fx = _make_kick_fx()
 	if big_bang_fx == null:
 		big_bang_fx = _make_big_bang_fx()
+	if carnival_fx == null:
+		carnival_fx = _make_carnival_fx()
 	_hook_manager.call_deferred()
 
 
@@ -152,6 +177,25 @@ func _make_big_bang_fx() -> KickFX:
 	return fx
 
 
+## Carnival: como o Big Bang Drive, mas rosa-choque e ainda mais exagerado
+func _make_carnival_fx() -> KickFX:
+	var fx := KickFX.new()
+	fx.color = CARNIVAL_PINK
+	fx.trail_width = 32.0
+	fx.particle_color = CARNIVAL_LIGHT
+	fx.amount = 56
+	fx.lifetime = 0.6
+	fx.speed_min = 40.0
+	fx.speed_max = 150.0
+	fx.gravity = Vector2(0.0, -90.0)
+	fx.spin = 300.0
+	fx.scale_min = 0.2
+	fx.scale_max = 0.6
+	fx.burst_amount = 40
+	fx.burst_speed = 460.0
+	return fx
+
+
 func _hook_manager() -> void:
 	var m: MatchManager = _get_manager()
 	if m:
@@ -187,6 +231,11 @@ func is_lover_active() -> bool:
 	if not alive:
 		_end_lover()
 	return alive
+
+
+## O amigo do Obsessive Lover (null se o efeito não está valendo). A reação Carnival usa isto.
+func get_lover() -> Player:
+	return _lover if is_lover_active() else null
 
 
 func _end_lover() -> void:
@@ -248,8 +297,24 @@ func _shot_skill_name() -> String:
 		ShotVariant.DRAGON:
 			return "Dragon Drive"
 		ShotVariant.BIG_BANG:
-			return "Big Bang Drive"
+			return "Carnival" if _carnival_reaction() != null else "Big Bang Drive"
 	return "Kablamo"
+
+
+## A Reação Química Carnival pode ser usada agora? (Big Bang Drive disponível + parceiro certo,
+## fora de recarga e com as condições cumpridas). Devolve a reação ou null.
+func _carnival_reaction() -> ChemicalReaction:
+	if not is_inside_tree() or get_shot_variant() != ShotVariant.BIG_BANG:
+		return null
+	var rm: ReactionManager = ReactionManager.get_for(self)
+	return rm.find_available(self) if rm != null else null
+
+
+## Usa a animação preferida se o personagem tiver; senão a reserva
+func _anim_or(preferred: StringName, fallback: StringName) -> StringName:
+	if _has_art and animated_sprite.sprite_frames.has_animation(preferred):
+		return preferred
+	return fallback
 
 
 func _use_shot_skill() -> bool:
@@ -267,6 +332,15 @@ func _use_shot_skill() -> bool:
 	if variant == ShotVariant.NONE:
 		return false
 
+	# Reação Química: o Big Bang Drive vira o Carnival se as condições com a Sae estão cumpridas
+	var reaction: ChemicalReaction = null
+	var partner: Player = null
+	if variant == ShotVariant.BIG_BANG:
+		reaction = _carnival_reaction()
+		if reaction != null:
+			partner = reaction.find_partner(self)
+	var is_carnival: bool = reaction != null and partner != null
+
 	var base_chance: float = chance_kablamo
 	var needs_qte: bool = false
 	var qte_kind: KickType = KickType.VOLLEY
@@ -276,15 +350,23 @@ func _use_shot_skill() -> bool:
 			needs_qte = true
 			qte_kind = KickType.VOLLEY    # QTE fácil
 		ShotVariant.BIG_BANG:
-			base_chance = chance_big_bang
-			needs_qte = true
+			base_chance = chance_carnival if is_carnival else chance_big_bang
+			needs_qte = carnival_needs_qte or not is_carnival
 			qte_kind = KickType.FLYING    # QTE difícil
+
+	# CARNIVAL: a partida congela e roda a cutscene + diálogo. SÓ DEPOIS vêm o QTE e o chute.
+	# (A mira já foi confirmada acima: cancelar a mira não gasta a reação nem a recarga dela.)
+	if is_carnival:
+		await ReactionManager.get_for(self).play(reaction, self, partner)
 
 	var qte_ok: bool = true
 	if needs_qte and not skips_qte():
 		qte_ok = await m.run_qte(qte_kind)
 
-	var chance: float = minf(base_chance + _shot_bonus(), 1.0)
+	var final_chance: bool = is_carnival and carnival_chance_is_final
+	var chance: float = minf(base_chance + (0.0 if final_chance else _shot_bonus()), 1.0)
+	if final_chance:
+		next_shot_bonus = 0.0   # o bônus do QTE de recepção da Sae não soma: o número final é o 83%
 	# Errou o QTE = chute fraquinho, sem aura
 	var fx: KickFX = kick_fx if qte_ok else null
 
@@ -307,15 +389,23 @@ func _use_shot_skill() -> bool:
 			var origin: Vector2 = ball.global_position
 			var origin_height: float = ball.height
 			next_kick_force_mult = big_bang_force_mult
-			var big_fx: KickFX = big_bang_fx if qte_ok else null
-			await kick_ball(ball, aim, KickType.FLYING, qte_ok, chance, false, big_fx, &"big_bang_drive")
+			var big_fx: KickFX = null
+			if qte_ok:
+				big_fx = carnival_fx if is_carnival else big_bang_fx
+			var big_anim: StringName = &"big_bang_drive"
+			if is_carnival:
+				big_anim = _anim_or(&"carnival", &"big_bang_drive")
+			await kick_ball(ball, aim, KickType.FLYING, qte_ok, chance, false, big_fx, big_anim)
 			if ball.interaction_count == touches:   # o chute não saiu (ação cancelada)
 				return false
 			if qte_ok:   # chute de verdade (não o fraquinho): onda de choque, tremor e imagens fantasma
-				_spawn_shockwave(origin, origin_height, 95.0, 0.4)
-				_shake_camera(big_bang_shake)
-				if big_bang_afterimages:
-					_ghost_trail(ball)   # sem await: acontece enquanto a bola voa
+				if is_carnival:
+					_carnival_impact(origin, origin_height, ball)
+				else:
+					_spawn_shockwave(origin, origin_height, 95.0, 0.4)
+					_shake_camera(big_bang_shake)
+					if big_bang_afterimages:
+						_ghost_trail(ball)   # sem await: acontece enquanto a bola voa
 
 	start_cooldown(CD_SHOT, shot_cooldown)
 	return true
@@ -352,11 +442,11 @@ func _curve_ball(ball: Ball, bend_sign: float) -> void:
 
 ## Imagens fantasma atrás da bola enquanto ela voa. Para quando alguém toca na bola, o goleiro
 ## pega, ela fica pairando ou perde a velocidade.
-func _ghost_trail(ball: Ball) -> void:
+func _ghost_trail(ball: Ball, color: Color = Color(0.85, 0.35, 1.0)) -> void:
 	var touches: int = ball.interaction_count
 	var time_left: float = 1.2   # trava de segurança
 	while time_left > 0.0:
-		_spawn_ghost(ball)
+		_spawn_ghost(ball, color)
 		await get_tree().create_timer(0.03).timeout
 		time_left -= 0.03
 		if ball.interaction_count != touches or ball.is_held() or ball.hovering \
@@ -365,10 +455,10 @@ func _ghost_trail(ball: Ball) -> void:
 
 
 ## Imagem fantasma da bola (some em instantes)
-func _spawn_ghost(ball: Ball) -> void:
+func _spawn_ghost(ball: Ball, color: Color = Color(0.85, 0.35, 1.0)) -> void:
 	var g := _Ghost.new()
 	g.radius = ball.ball_radius * 1.3
-	g.color = Color(0.85, 0.35, 1.0)
+	g.color = color
 	ball.get_parent().add_child(g)
 	g.global_position = ball.global_position + Vector2(0.0, -ball.height)
 	g.z_as_relative = false
@@ -376,7 +466,8 @@ func _spawn_ghost(ball: Ball) -> void:
 
 
 ## Onda de choque no chão (anel + raios), na altura "lift"
-func _spawn_shockwave(at: Vector2, lift: float, radius: float, life: float) -> void:
+func _spawn_shockwave(at: Vector2, lift: float, radius: float, life: float,
+		color: Color = Color(0.85, 0.35, 1.0)) -> void:
 	var ball: Ball = _get_ball()
 	if ball == null:
 		return
@@ -384,6 +475,7 @@ func _spawn_shockwave(at: Vector2, lift: float, radius: float, life: float) -> v
 	w.max_radius = radius
 	w.life = life
 	w.lift = lift
+	w.color = color
 	ball.get_parent().add_child(w)
 	w.global_position = at
 	w.z_as_relative = false
@@ -393,7 +485,7 @@ func _spawn_shockwave(at: Vector2, lift: float, radius: float, life: float) -> v
 var _shaking: bool = false
 
 ## Tremor curto da câmera (se houver uma Camera2D ativa)
-func _shake_camera(strength: float) -> void:
+func _shake_camera(strength: float, steps: int = 6) -> void:
 	if strength <= 0.0 or _shaking:
 		return
 	var cam: Camera2D = get_viewport().get_camera_2d()
@@ -402,12 +494,57 @@ func _shake_camera(strength: float) -> void:
 	_shaking = true
 	var base: Vector2 = cam.offset
 	var tw := create_tween()
-	for i in 6:
-		var amount: float = strength * (1.0 - float(i) / 6.0)
+	for i in steps:
+		var amount: float = strength * (1.0 - float(i) / float(steps))
 		tw.tween_property(cam, "offset",
 			base + Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * amount, 0.035)
 	tw.tween_property(cam, "offset", base, 0.04)
 	tw.finished.connect(func() -> void: _shaking = false)
+
+
+# ---------- CARNIVAL (impacto e asas) ----------
+
+## Depois do chute do Carnival: duas ondas de choque rosa, tremor longo, imagens fantasma
+## rosa, o texto "CARNIVAL!" e as asas
+func _carnival_impact(origin: Vector2, origin_height: float, ball: Ball) -> void:
+	_spawn_shockwave(origin, origin_height, 170.0, 0.55, CARNIVAL_PINK)
+	_spawn_shockwave(origin, origin_height, 100.0, 0.4, CARNIVAL_LIGHT)
+	_shake_camera(carnival_shake, 14)
+	_ghost_trail(ball, CARNIVAL_PINK)   # sem await: acontece enquanto a bola voa
+	_show_popup("CARNIVAL!", CARNIVAL_PINK)
+	_start_wings()
+
+
+func _wings_active() -> bool:
+	if _wings == null:
+		return false
+	var m: MatchManager = _get_manager()
+	return m != null and m.round_number <= _wings_until_round
+
+
+## Asas rosa-choque (só visual) pelas próximas carnival_wings_rounds rodadas
+func _start_wings() -> void:
+	var m: MatchManager = _get_manager()
+	if m == null:
+		return
+	_wings_until_round = m.round_number + carnival_wings_rounds - 1   # a rodada atual conta
+	if _wings == null:
+		_wings = _Wings.new()
+		_wings.player = self
+		add_child(_wings)
+	_wings.offset = wings_offset
+	_wings.scale_mult = wings_scale
+	# As asas "abrem" com um pop
+	_wings.scale = Vector2.ZERO
+	create_tween().tween_property(_wings, "scale", Vector2.ONE, 0.45) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+
+
+func _end_wings() -> void:
+	_wings_until_round = -1
+	if _wings != null and is_instance_valid(_wings):
+		_wings.queue_free()
+	_wings = null
 
 
 # ---------- DEMONIC RUSH / DRACONIC HEADER ----------
@@ -617,29 +754,41 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	match skill_id:
 		SKILL_SHOT:
 			title = _shot_skill_name()
-			text = ("Chute de habilidade. A variante muda sozinha com a altura dele e da bola:\n"
-				+ "• Kablamo (os dois no chão): chute forte com curva bem pequena; a bola atravessa o próprio Shidou. %d%% de chance de gol.\n"
-				+ "• Dragon Drive (os dois suspensos): voleio com QTE fácil; a bola sobe até voando no caminho e cai até o chão. %d%%.\n"
-				+ "• Big Bang Drive (ele suspenso e bola voando): voleio voador mais forte, com QTE difícil. %d%%.\n"
-				+ "Recarga: %d rodadas, compartilhada entre as três.") % [
-				_pct(chance_kablamo), _pct(chance_dragon), _pct(chance_big_bang), shot_cooldown]
+			match get_shot_variant():
+				ShotVariant.KABLAMO:
+					text = "Chute forte que atravessa o próprio Shidou. %d%% de chance de gol." % _pct(chance_kablamo)
+				ShotVariant.DRAGON:
+					text = "Voleio em que a bola sobe e desce. %d%% de chance de gol." % _pct(chance_dragon)
+				ShotVariant.BIG_BANG:
+					var rx: ChemicalReaction = _carnival_reaction()
+					if rx != null:
+						title = "Carnival"
+						text = ("REAÇÃO QUÍMICA com a Sae! Big Bang Drive com cutscene, %d%% de chance de gol e asas por %d rodadas.\n"
+							+ "Recarga da reação: %d rodadas.") % [_pct(chance_carnival), carnival_wings_rounds, rx.cooldown_rounds]
+					else:
+						text = "Voleio voador mais forte. %d%% de chance de gol." % _pct(chance_big_bang)
+				_:
+					text = "Chute especial que muda conforme a altura dele e da bola. De %d%% a %d%% de chance de gol." % [
+						_pct(minf(chance_kablamo, minf(chance_dragon, chance_big_bang))),
+						_pct(maxf(chance_kablamo, maxf(chance_dragon, chance_big_bang)))]
+			text += "\nRecarga: %d rodadas." % shot_cooldown
 		SKILL_RUSH:
-			title = "Draconic Header" if _header_available() else "Demonic Rush"
-			text = ("Demonic Rush: um Correr com o mesmo tempo, mas %.1fx mais veloz. Só no chão e não conta no limite de Correr. Se ao fim da corrida ele alcançou uma bola suspensa, o botão vira Draconic Header.\n"
-				+ "Draconic Header (complemento, vale na mesma rodada): chute reto; a bola sobe até voando e desce até o chão. %d%% de chance de gol. NÃO gasta ação de habilidade.\n"
-				+ "Recarga: %d rodadas, compartilhada.") % [
-				rush_speed_mult, _pct(chance_header), rush_cooldown]
+			if _header_available():
+				title = "Draconic Header"
+				text = "Complemento grátis: chute reto em que a bola sobe e desce. %d%% de chance de gol." % _pct(chance_header)
+			else:
+				title = "Demonic Rush"
+				text = "Corrida %.1fx mais veloz que não conta no limite de Correr. Se alcançar uma bola suspensa, libera o Draconic Header." % rush_speed_mult
+			text += "\nRecarga: %d rodadas." % rush_cooldown
 		SKILL_LOVER:
 			title = "Obsessive Lover"
-			text = ("Escolhe um aliado a até %d px. Por %d rodadas ele ganha +%d ação(ões) de habilidade a cada turno do time, e os chutes do Shidou (Chutar e habilidades) ganham +%d%% quando vêm de um passe dele. Acaba se o aliado ficar a mais de %d px do Shidou.\n"
-				+ "Recarga: %d rodadas, compartilhada com o Obsessive Hater.") % [
-				int(lover_pick_range), obsessive_rounds, lover_extra_skill_actions, _pct(lover_pass_bonus),
-				int(lover_break_distance), obsessive_cooldown]
+			text = ("Escolhe um aliado: por %d rodadas ele ganha +%d ação de habilidade por turno, e os chutes do Shidou depois de um passe dele ganham +%d%% de chance de gol.\n"
+				+ "Recarga: %d rodadas.") % [
+				obsessive_rounds, lover_extra_skill_actions, _pct(lover_pass_bonus), obsessive_cooldown]
 		SKILL_HATER:
 			title = "Obsessive Hater"
-			text = ("Escolhe um inimigo a até %d px. Por %d rodadas ele perde UMA ação geral sorteada (Correr, Pular, Carrinho, Chutar ou Passar). Acaba se o inimigo ficar a mais de %d px do Shidou.\n"
-				+ "Recarga: %d rodadas, compartilhada com o Obsessive Lover.") % [
-				int(hater_pick_range), obsessive_rounds, int(hater_break_distance), obsessive_cooldown]
+			text = ("Escolhe um inimigo: por %d rodadas ele perde uma ação geral sorteada.\n"
+				+ "Recarga: %d rodadas.") % [obsessive_rounds, obsessive_cooldown]
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D
@@ -655,6 +804,7 @@ func reset_for_new_match() -> void:
 	_rush_round = -1
 	_end_lover()
 	_end_hater()
+	_end_wings()
 	_popup_left = 0.0
 	queue_redraw()
 
@@ -665,6 +815,9 @@ func _process(delta: float) -> void:
 	super(delta)
 	if _popup_left > 0.0:
 		_popup_left -= delta
+	# As asas somem quando as rodadas do Carnival acabam
+	if _wings != null and not _wings_active():
+		_end_wings()
 	# Confere TODO frame (para o efeito acabar no instante em que o alvo passa da distância máxima)
 	var lover_on: bool = is_lover_active()
 	var hater_on: bool = is_hater_active()
@@ -775,3 +928,45 @@ class _Shockwave extends Node2D:
 			var ang: float = TAU * float(i) / 10.0 + 0.3
 			var d := Vector2(cos(ang), sin(ang) * 0.55)
 			draw_line(c + d * r * 0.55, c + d * r * 1.05, Color(color, a), 2.0)
+
+
+## Asas do Carnival: desenhadas ATRÁS do corpo, batendo de leve. Só visual.
+class _Wings extends Node2D:
+	const LENGTHS := [44.0, 58.0, 62.0, 54.0, 40.0]   # comprimento de cada pena
+
+	var player: Player
+	var offset: Vector2 = Vector2(0.0, -14.0)
+	var scale_mult: float = 1.0
+	var color: Color = Color(1.0, 0.1, 0.6)
+	var light: Color = Color(1.0, 0.7, 0.88)
+	var _t: float = 0.0
+
+	func _ready() -> void:
+		show_behind_parent = true   # as asas ficam atrás do personagem
+
+	func _process(delta: float) -> void:
+		_t += delta
+		if is_instance_valid(player):
+			position = offset + Vector2(0.0, -player.height)   # acompanha o pulo
+		queue_redraw()
+
+	func _draw() -> void:
+		_draw_wing(-1.0)
+		_draw_wing(1.0)
+
+	## side: -1 = asa esquerda, +1 = direita
+	func _draw_wing(side: float) -> void:
+		var flap: float = sin(_t * 6.0) * 0.14   # o bater das asas
+		var root := Vector2(side * 6.0, 0.0)
+		var feathers: int = LENGTHS.size()
+		for i in feathers:
+			var k: float = float(i) / float(feathers - 1)             # 0 = pena de cima, 1 = de baixo
+			var ang: float = deg_to_rad(lerpf(72.0, 6.0, k)) + flap   # ângulo acima da horizontal
+			var dir := Vector2(side * cos(ang), -sin(ang))
+			var feather_len: float = float(LENGTHS[i]) * scale_mult
+			var mid: Vector2 = root + dir * feather_len * 0.5
+			var tip: Vector2 = root + dir * feather_len
+			var perp: Vector2 = dir.orthogonal() * 9.0 * scale_mult
+			var pts := PackedVector2Array([root, mid + perp, tip, mid - perp])
+			draw_colored_polygon(pts, color)
+			draw_polyline(PackedVector2Array([root, mid + perp, tip, mid - perp, root]), light, 2.0)

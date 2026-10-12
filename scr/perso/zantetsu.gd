@@ -625,27 +625,21 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	match skill_id:
 		SKILL_BULLET_TRAIN:
 			title = "Bullet Train"
-			text = ("Avanço (dash) de até %d px na direção escolhida com WASD (diagonais valem). Pode ser usado no chão ou suspenso; se suspenso, ele cai no chão ao fim. Se encostar num inimigo na mesma altura, o avanço para ali e libera o A-Train.\n"
-				+ "Recarga: %d rodadas, compartilhada com o A-Train.") % [
-				int(train_distance), train_cooldown]
+			text = "Avanço rápido na direção escolhida. Se encostar num inimigo, libera o A-Train.\nRecarga: %d rodadas." % train_cooldown
 		SKILL_A_TRAIN:
 			title = "A-Train"
-			text = ("Complemento GRATUITO: NÃO gasta ação de habilidade. Só fica disponível depois que o Bullet Train encostou num inimigo. Dá mais um avanço de até %d px, mais curto, numa nova direção, até o fim do turno do time.\n"
-				+ "Recarga: a mesma do Bullet Train (%d rodadas).") % [
-				int(a_train_distance), train_cooldown]
+			text = "Complemento grátis: mais um avanço curto, em outra direção."
 		SKILL_RAILS:
 			title = "Rails"
-			text = ("Cria um trilho cinza com %d%% do comprimento do campo, centrado em Zantetsu. Ele precisa ficar DENTRO do trilho durante as %d rodadas em que ele existe; se parar fora antes disso, fica atordoado por %d rodada(s), sem ações gerais nem habilidades. Dentro do trilho o Correr é %.1fx mais rápido e Lefty Dumb e Idiot Volley ganham +%d%%.\n"
-				+ "Recarga: %d rodadas.") % [
-				_pct(rails_length_ratio), rails_rounds, rails_stun_rounds, rails_run_speed_mult,
-				_pct(rails_shot_bonus), rails_cooldown]
+			text = ("Cria um trilho por %d rodadas: dentro dele o Correr é %.1fx mais rápido e os chutes ganham +%d%% de chance de gol. Se ficar fora do trilho, Zantetsu fica atordoado.\n"
+				+ "Recarga: %d rodadas.") % [rails_rounds, rails_run_speed_mult, _pct(rails_shot_bonus), rails_cooldown]
 		SKILL_KICK:
 			title = _kick_skill_name()
-			text = ("Chute de habilidade com curva fraca. A variante muda sozinha com a altura dele:\n"
-				+ "• Lefty Dumb (ele e a bola no chão): chute rasteiro. %d%% de chance de gol.\n"
-				+ "• Idiot Volley (ele suspenso): pequeno avanço de até %d px ainda suspenso; se encontrar a bola suspensa no caminho, dá um voleio. %d%%.\n"
-				+ "Recarga: %d rodadas, compartilhada entre as duas.") % [
-				_pct(chance_lefty), int(volley_dash_distance), _pct(chance_idiot_volley), kick_cooldown]
+			if height_level == Heights.Level.SUSPENDED:
+				text = "Pequeno avanço no ar; se encontrar a bola, dá um voleio. %d%% de chance de gol." % _pct(chance_idiot_volley)
+			else:
+				text = "Chute rasteiro com curva fraca. %d%% de chance de gol." % _pct(chance_lefty)
+			text += "\nRecarga: %d rodadas." % kick_cooldown
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D

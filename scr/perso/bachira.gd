@@ -423,9 +423,9 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	var text: String = ""
 	match skill_id:
 		SKILL_SHOT:
-			var bon_text: String = "Bon! (qualquer situação, menos os dois suspensos): chute que leva a bola até o nível Voando, e ela quica só %d vez(es). %d%% de chance de gol. Sem QTE com a bola no chão; com a bola mais alta, vale o QTE do chute comum." % [
+			var bon_text: String = "Chute que sobe a bola, e ela quica só %d vez(es). %d%% de chance de gol." % [
 				bon_max_bounces, _pct(chance_bon)]
-			var bee_text: String = "Bee Shot (Bachira e bola os dois suspensos): voleio SEM QTE, com %d%% de chance de gol." % _pct(chance_bee)
+			var bee_text: String = "Voleio SEM QTE, com %d%% de chance de gol." % _pct(chance_bee)
 			match get_shot_variant():
 				ShotVariant.BEE:
 					title = "Bee Shot"
@@ -436,18 +436,16 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 				_:
 					title = "Bon! / Bee Shot"
 					text = bon_text + "\n" + bee_text
-			text += "\nRecarga: %d rodadas, compartilhada entre as duas." % shot_cooldown
+			text += "\nRecarga: %d rodadas." % shot_cooldown
 		SKILL_STEP:
 			title = "Step Overs"
-			text = ("Com Bachira e a bola no chão (bola ao alcance), ele faz as passadas e atordoa até %d inimigos no chão a até %d px. Eles ficam sem Correr e sem Carrinho no próximo turno do time deles. Precisa de pelo menos um inimigo por perto.\n"
+			text = ("Bachira faz passadas e atordoa inimigos.\n"
 				+ "Recarga: %d rodadas.") % [
-				step_max_targets, int(step_range), step_cooldown]
+				step_cooldown]
 		SKILL_INSTINCT:
 			title = "Unleash Instinct"
-			text = ("Com a bola nos pés (os dois no chão), Bachira arma um counter. Se um inimigo acertar um Carrinho nele, ele desvia sozinho e ganha %d ação geral extra, que vale para tudo menos Correr." % instinct_extra_generals)
-			if instinct_sticks_ball:
-				text += " A bola também fica grudada nele até o fim da rodada."
-			text += "\nSe ele for derrubado antes, o counter se desfaz. Recarga: %d rodadas." % instinct_cooldown
+			text = ("Bachira arma um counter. Se um inimigo acertar um carrinho nele, ele desvia sozinho e ganha %d ação geral extra, que vale para tudo menos Correr." % instinct_extra_generals)
+			text += "\nRecarga: %d rodadas." % instinct_cooldown
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D

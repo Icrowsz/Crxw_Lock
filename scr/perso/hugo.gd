@@ -1018,67 +1018,60 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	var text: String = ""
 	match skill_id:
 		SKILL_COORD:
-			var coord_text: String = "Coordination (bola próxima e no chão): Hugo segura a bola até o fim do próximo turno do adversário. Se ele é o Protagonista: +1 ação geral e +1 de habilidade para os Secundários. Se é Secundário: +1 de habilidade para o Protagonista e +1 ação geral só dele."
-			var adeq_text: String = "Adequation (sem bola próxima): escolhe até %d inimigos a até %d px. Eles ficam proibidos de ser Protagonista e com o Correr %d%% mais lento pelos próximos %d turnos do time deles. Se todo o time estiver proibido, a regra não vale." % [
-				adequation_targets, int(adequation_range), _pct(1.0 - adequation_run_mult), adequation_turns]
-			var unsuit_text: String = "Unsuitable (bola próxima, suspensa ou voando; Hugo no chão ou suspenso): salta até a bola e dá um deflect, refletindo-a para a direção contrária (parada, ela vai para longe do gol dele). Não é tentativa de gol."
 			match get_coord_variant():
 				CoordVariant.COORDINATION:
 					title = "Coordination"
-					text = coord_text
+					text = "Hugo segura a bola e o time ganha ações extras."
 				CoordVariant.ADEQUATION:
 					title = "Adequation"
-					text = adeq_text
+					text = "Escolhe até %d inimigos: eles não podem ser Protagonista e ficam mais lentos no Correr por %d turnos." % [
+						adequation_targets, adequation_turns]
 				CoordVariant.UNSUITABLE:
 					title = "Unsuitable"
-					text = unsuit_text
+					text = "Hugo salta na bola no ar e a rebate para a direção contrária."
 				_:
 					title = "Coordination / Adequation / Unsuitable"
-					text = coord_text + "\n" + adeq_text + "\n" + unsuit_text
-			text += "\nRecarga: %d rodadas, compartilhada entre as três." % coord_cooldown
+					text = "Segura a bola e dá ações extras ao time, atrapalha inimigos ou rebate a bola no ar, conforme a situação."
+			text += "\nRecarga: %d rodadas." % coord_cooldown
 		SKILL_BEE:
-			var bee_text: String = "Bee-Blep! Focus (Hugo no chão, bola próxima no chão ou suspensa): passe rasteiro longo (até %d px) que sobe até Suspenso no meio do caminho e desce de novo. O aliado que receber ganha +%d%% nos próximos %d chutes dele." % [
-				int(bee_range), _pct(bee_bonus), bee_bonus_shots]
-			var fou_text: String = "Fou (Hugo suspenso, bola próxima): passe alto (QTE difícil) para um local à sua escolha (até %d px). Se ninguém interceptar e a bola chegar, cria uma marcação no chão por %d rodadas: qualquer chute dado ali ganha +%d%% de chance e força aumentada." % [
-				int(fou_range), fou_mark_rounds, _pct(fou_mark_chance_bonus)]
-			var dest_text: String = "Destination (sem bola próxima): vai até um inimigo (até %d px) e proíbe as habilidades dele por %d rodadas, ou até o Hugo se afastar." % [
-				int(destination_range), destination_rounds]
-			var coll_text: String = "Collision (sem bola próxima, inimigo suspenso): salta até ele e disputa na sorte (%d%%). Ganhando, o inimigo é derrubado e recebe o efeito do Destination." % _pct(collision_chance)
 			match get_bee_variant():
 				BeeVariant.BEE_BLEP:
 					title = "Bee-Blep! Focus"
-					text = bee_text
+					text = "Passe longo que sobe e desce. O aliado que receber ganha +%d%% de chance de gol nos próximos %d chutes." % [
+						_pct(bee_bonus), bee_bonus_shots]
 				BeeVariant.FOU:
 					title = "Fou"
-					text = fou_text
+					text = "Passe alto para onde você escolher. Se a bola chegar, cria uma marcação no chão: os chutes dados ali ganham +%d%% de chance de gol e mais força." % _pct(fou_mark_chance_bonus)
 				BeeVariant.ENEMY:
 					title = _enemy_skill_name()
-					text = dest_text + "\n" + coll_text
+					match title:
+						"Collision":
+							text = "Hugo salta até um inimigo no ar e disputa na sorte (%d%%). Se ganhar, derruba o inimigo e trava as habilidades dele por %d rodadas." % [
+								_pct(collision_chance), destination_rounds]
+						"Destination":
+							text = "Hugo vai até um inimigo e trava as habilidades dele por %d rodadas, ou até ele se afastar." % destination_rounds
+						_:
+							text = "Trava as habilidades de um inimigo por %d rodadas. Se ele estiver no ar, Hugo o disputa na sorte (%d%%) e, ganhando, o derruba." % [
+								destination_rounds, _pct(collision_chance)]
 				_:
 					title = "Bee-Blep! Focus / Fou / Destination / Collision"
-					text = bee_text + "\n" + fou_text + "\n" + dest_text + "\n" + coll_text
-			text += "\nRecarga: %d rodadas, compartilhada entre as quatro." % bee_cooldown
+					text = "Passe especial para um aliado ou ataque a um inimigo, conforme a situação."
+			text += "\nRecarga: %d rodadas." % bee_cooldown
 		SKILL_GEARS:
-			var mec_text: String = "Mecanicien (lado do campo aliado): vai até um inimigo (até %d px) e gruda nele. Enquanto o Hugo ficar a menos de %d px, os chutes desse inimigo perdem %d%% de chance de gol." % [
-				int(mecanicien_range), int(mecanicien_break_distance), _pct(mecanicien_penalty)]
-			var bri_text: String = "Brille (meio-campo): passe rasteiro longo (até %d px) para um aliado, que dá +%d ação de habilidade aos Secundários." % [
-				int(brille_range), brille_extra_skills]
-			var reve_text: String = "Rêve (lado do campo inimigo): avança até a bola (até %d px) e, se alcançar, dá um chute forte (%d%% de chance de gol) que sobe até Suspenso no meio da trajetória." % [
-				int(reve_dash_distance), _pct(reve_chance)]
 			match get_gears_form():
 				GearsForm.MECANICIEN:
 					title = "Mecanicien"
-					text = mec_text
+					text = "Hugo gruda em um inimigo e tira %d%% de chance de gol dos chutes dele enquanto estiver perto." % _pct(mecanicien_penalty)
 				GearsForm.BRILLE:
 					title = "Brille"
-					text = bri_text
+					text = "Passe rasteiro longo para um aliado. Os Secundários ganham +%d ação de habilidade." % brille_extra_skills
 				GearsForm.REVE:
 					title = "Rêve"
-					text = reve_text
+					text = "Hugo avança até a bola e dá um chute forte que sobe no caminho. %d%% de chance de gol." % _pct(reve_chance)
 				_:
 					title = "Gears"
-					text = mec_text + "\n" + bri_text + "\n" + reve_text
-			text += "\nRecarga: %d rodadas, compartilhada entre as três." % gears_cooldown
+					text = "Muda conforme o lado do campo: atrapalha um inimigo, passa a bola ou chuta."
+			text += "\nRecarga: %d rodadas." % gears_cooldown
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D

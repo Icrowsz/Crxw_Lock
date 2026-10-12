@@ -2,8 +2,8 @@
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_nmfa0"]
 [ext_resource type="Script" uid="uid://bci5nf7yka56f" path="res://scr/perso/isagi.gd" id="2_rema1"]
-[ext_resource type="Texture2D" uid="uid://dljkng3hwb457" path="res://img/isagiicon.png" id="3_pmpwr"]
-[ext_resource type="Script" uid="uid://ilb76etk0iey" path="res://scr/kick_fx.gd" id="3_rp0o0"]
+[ext_resource type="Texture2D" uid="uid://dljkng3hwb457" path="res://img/icons/isagiicon.png" id="3_pmpwr"]
+[ext_resource type="Script" uid="uid://ilb76etk0iey" path="res://scr/ui e visual/kick_fx.gd" id="3_rp0o0"]
 [ext_resource type="Texture2D" uid="uid://bbt5ci05ne47v" path="res://img/skills/isagi/backheel_shot.webp" id="4_hkwn6"]
 [ext_resource type="Texture2D" uid="uid://ikgjwfrs6wm5" path="res://img/mvps/isagi.jpg" id="5_arvxo"]
 

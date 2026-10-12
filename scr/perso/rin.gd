@@ -555,29 +555,37 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	match skill_id:
 		SKILL_CURVE:
 			title = _curve_skill_name()
-			text = ("Chute de habilidade. A variante muda sozinha com a situação:\n"
-				+ "• Curve Shot (Rin e bola no chão): chute curvo longo; a bola sobe ao nível suspenso no trajeto e cai de novo. %d%% de chance de gol.\n"
-				+ "• Trivela Shot (Rin e bola suspensos): chute ainda mais curvo, com QTE difícil. %d%%.\n"
-				+ "• Crash Shot (como a Trivela, com um inimigo colado em Rin): QTE fácil. %d%%.\n"
-				+ "• Parabolic Curve (Curve Shot com o Destroyer Mode ativo): a bola sobe ao nível voando. %d%%.\n"
-				+ "A curva vai para o lado do gol que o time ataca; segure SHIFT ao confirmar para inverter. Recarga: %d rodadas, compartilhada.") % [
-				_pct(chance_curve), _pct(chance_trivela), _pct(chance_crash), _pct(chance_curve), curve_cooldown]
+			match get_curve_variant():
+				CurveVariant.CURVE:
+					text = "Chute curvo longo: a bola sobe e cai de novo. %d%% de chance de gol." % _pct(chance_curve)
+				CurveVariant.PARABOLIC:
+					text = "Curve Shot mais alto: a bola sobe até voando. %d%% de chance de gol." % _pct(chance_curve)
+				CurveVariant.TRIVELA:
+					text = "Chute ainda mais curvo. %d%% de chance de gol." % _pct(chance_trivela)
+				CurveVariant.CRASH:
+					text = "Chute curvo com um inimigo colado nele. %d%% de chance de gol." % _pct(chance_crash)
+				_:
+					text = "Chute curvo que muda conforme a situação. De %d%% a %d%% de chance de gol." % [
+						_pct(minf(chance_curve, minf(chance_trivela, chance_crash))),
+						_pct(maxf(chance_curve, maxf(chance_trivela, chance_crash)))]
+			text += "\nSegure SHIFT ao confirmar para inverter a curva.\nRecarga: %d rodadas." % curve_cooldown
 		SKILL_GRAVITY:
 			title = _gravity_skill_name()
-			text = ("Derruba o inimigo mais próximo (a até %d px) e, se a bola estiver bem perto (até %d px), ela vem até Rin.\n"
-				+ "• Puppets (bola suspensa perto de Rin e um aliado a até %d px): em vez de derrubar, faz um passe curvo para o aliado.\n"
-				+ "• Mangle You (com o Destroyer Mode ativo): além de derrubar, empurra o inimigo para longe.\n"
-				+ "Recarga: %d rodadas, compartilhada.") % [
-				int(gravity_range), int(pull_ball_radius), int(puppets_range), gravity_cooldown]
+			match get_gravity_variant():
+				GravityVariant.PUPPETS:
+					text = "Faz um passe curvo para um aliado, em vez de derrubar o inimigo."
+				GravityVariant.MANGLE:
+					text = "Derruba o inimigo mais próximo e o empurra para longe."
+				_:
+					text = "Derruba o inimigo mais próximo. Se a bola estiver perto, ela vem até Rin."
+			text += "\nRecarga: %d rodadas." % gravity_cooldown
 		SKILL_DESTROYER:
 			title = "Destroyer Mode"
-			text = ("Transformação de %d rodadas. Libera Parabolic Curve, Mangle You e a habilidade Opposite Direction.\n"
-				+ "Recarga: %d rodadas, contadas a partir do fim do efeito.") % [
-				destroyer_rounds, destroyer_cooldown]
+			text = ("Transformação de %d rodadas que melhora as habilidades do Rin e libera o Opposite Direction.\n"
+				+ "Recarga: %d rodadas.") % [destroyer_rounds, destroyer_cooldown]
 		SKILL_OPPOSITE:
 			title = "Opposite Direction"
-			text = ("Só aparece com o Destroyer Mode ativo. Minigame de digitação: digite a palavra em até %.1f segundos. Se acertar, Rin ganha uma ação de Correr de graça (não conta no limite de Correr). Tentar já usa a habilidade, mesmo errando. Não tem recarga própria.") % [
-				typing_time]
+			text = "Minigame de digitação: digite a palavra em até %.1f segundos para ganhar um Correr de graça." % typing_time
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D

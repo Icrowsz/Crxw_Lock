@@ -2,10 +2,10 @@
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_mshyg"]
 [ext_resource type="Script" uid="uid://btobmnhcic4n7" path="res://scr/perso/raichi.gd" id="2_goh3g"]
-[ext_resource type="Texture2D" uid="uid://cmsdyt2ltx014" path="res://img/raichiicon.png" id="2_pwr3a"]
+[ext_resource type="Texture2D" uid="uid://cmsdyt2ltx014" path="res://img/icons/raichiicon.png" id="2_pwr3a"]
 [ext_resource type="Texture2D" uid="uid://bvd40w13tuifi" path="res://img/mvps/raichi.jpg" id="3_goh3g"]
 
-[node name="Player" unique_id=1241627939 instance=ExtResource("1_mshyg")]
+[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_mshyg")]
 script = ExtResource("2_goh3g")
 stalk_range = 160.0
 stalk_penalty = 0.05
@@ -28,6 +28,7 @@ kick_fx = null
 skill_icons = {}
 display_name = "Jingo Raichi"
 mvp_image = ExtResource("3_goh3g")
+visual_root = NodePath("SprPlayer")
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

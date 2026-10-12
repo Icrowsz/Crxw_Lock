@@ -587,37 +587,28 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	var text: String = ""
 	match skill_id:
 		SKILL_SHARP:
-			var sharp_text: String = "Sharp Sharp: escolhe um aliado no chão a até %d px e começa um 1-2. No fim de cada turno do time, se a bola estiver a até %d px de um dos dois, quem a tem toca para o outro, sem gastar ação. Cada rodada mantida dá +%d%% no próximo chute do aliado. O 1-2 acaba se alguém tocar na bola, se ela não estiver perto no fim do turno ou se um dos dois cair. Kurona no chão e bola no chão ou suspensa. Recarga de %d rodadas, depois do fim." % [
-				int(sharp_range), int(sharp_touch_range), _pct(sharp_bonus_per_round), sharp_cooldown]
-			var lie_text: String = "Lie Lie: com o 1-2 ativo e a bola com o Kurona, use a ação geral Pular para liberar este botão. Passe curto (até %d px) para um aliado de fora da dupla; se ele receber, ganha %d%% do bônus acumulado no próximo chute. O 1-2 acaba." % [
-				int(lie_pass_range), _pct(lie_bonus_ratio)]
 			if _ss_active and _lie_available():
 				title = "Lie Lie"
-				text = lie_text
+				text = "Passe curto para um aliado de fora da dupla, que ganha parte do bônus acumulado no próximo chute. O 1-2 termina."
 			else:
 				title = "Sharp Sharp (1-2 ativo)" if _ss_active else "Sharp Sharp"
-				text = sharp_text + "\n" + lie_text
+				text = ("Escolhe um aliado e começa um 1-2: no fim de cada turno, quem estiver com a bola toca para o outro de graça. Cada rodada mantida dá +%d%% de chance de gol no próximo chute do aliado.\n"
+					+ "Recarga: %d rodadas.") % [_pct(sharp_bonus_per_round), sharp_cooldown]
 		SKILL_ORBITAL:
 			title = "Orbital Orbital"
-			text = ("Escolhe um aliado no chão a até %d px e liga os dois por uma corrente (tamanho máximo = distância original + %d%%). Por %d rodadas, os dois ficam imunes a Carrinho (pulam por cima), com +%d px no alcance do Passe e +%.1f s no Correr. Kurona no chão ou suspenso.\n"
-				+ "Recarga: %d rodadas, a partir do fim do efeito.") % [
-				int(orbital_range), _pct(orbital_chain_extra), orbital_rounds,
-				int(orbital_pass_range_bonus), orbital_run_bonus, orbital_cooldown]
+			text = ("Liga o Kurona a um aliado por uma corrente. Por %d rodadas, os dois ficam imunes a Carrinho, passam a bola mais longe e correm por mais tempo.\n"
+				+ "Recarga: %d rodadas.") % [orbital_rounds, orbital_cooldown]
 		SKILL_BITE:
-			var bite_text: String = "Bite Bite (Kurona no chão): um Carrinho %d%% mais longo, sem gastar o Carrinho geral. Derruba inimigos no caminho; se acertar a bola, ela vai em passe para o aliado mais próximo (até %d px). Sem recarga própria." % [
-				_pct(bite_distance_mult - 1.0), int(bite_pass_range)]
-			var assault_text: String = "Assault Assault (Kurona e bola no ar): ele voa até a bola (a até %d px) e passa rasteiro para o aliado mais próximo (até %d px). Recarga: %d rodadas." % [
-				int(assault_reach), int(bite_pass_range), assault_cooldown]
 			match _bite_variant():
 				BiteVariant.BITE:
 					title = "Bite Bite"
-					text = bite_text
+					text = "Carrinho mais longo que derruba inimigos. Se acertar a bola, ela vai em passe para o aliado mais próximo."
 				BiteVariant.ASSAULT:
 					title = "Assault Assault"
-					text = assault_text
+					text = "Voa até a bola no ar e passa rasteiro para o aliado mais próximo.\nRecarga: %d rodadas." % assault_cooldown
 				_:
 					title = "Bite Bite / Assault Assault"
-					text = bite_text + "\n" + assault_text
+					text = "Carrinho que derruba inimigos ou voo até a bola no ar, conforme a situação."
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D

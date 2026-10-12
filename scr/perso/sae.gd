@@ -161,6 +161,10 @@ var _uv_until: int = -1
 var _uv_pass_applied: float = 0.0
 var _uv_turn_key: int = -1
 
+## Último Perfect Pass que CHEGOU ao alvo (não interceptado): {target, round, touches}.
+## A Reação Química Carnival (reaction_carnival.gd) lê isto.
+var last_perfect_pass: Dictionary = {}
+
 # --- Passiva do Beautiful Shot ---
 var _saves: int = 0
 var _prev_held: bool = false
@@ -626,6 +630,8 @@ func _run_perfect_pass(target: Player, ball: Ball, level: int) -> bool:
 		# Fica pairando no estado escolhido, igual a um passe alto recebido (cai no fim do turno)
 		m.register_skill_pass(team, target)
 	m.pass_completed.emit(self, target)
+	# Guarda o passe (rodada + toques na bola) para a Reação Química Carnival conferir
+	last_perfect_pass = {"target": target, "round": m.round_number, "touches": ball.interaction_count}
 	var controlled: bool = await _receive_qte(target, pass_receive_bonus, false)
 	if not controlled and epoch == _epoch:
 		await _let_ball_run_past(m, ball, dir)   # errou o controle: a bola passa direto e cai mais longe
@@ -1301,39 +1307,36 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 			match _pass_mode():
 				PassMode.FLAWLESS:
 					title = "Flawless"
-					text = "Sae e bola suspensos: passe alto para o PONTO exato que você escolher (alcance %d px). Inimigo que mexer na bola no meio do caminho disputa na sorte (%d%% Sae). O receptor faz um QTE difícil e, acertando, ganha +%d%% no próximo chute." % [
-						int(_range(flawless_range)), _pct(flawless_win_chance), _pct(flawless_receive_bonus)]
+					text = "Passe alto para o ponto exato que você escolher. Se o receptor acertar o QTE, ganha +%d%% de chance de gol no próximo chute." % _pct(flawless_receive_bonus)
 				PassMode.UNBALANCED:
 					title = "Unbalanced"
-					text = "Sem bola próxima: vai até um inimigo a até %d px e o marca. Enquanto Sae ficar perto (ou por %d rodadas) as habilidades dele ficam bloqueadas." % [
-						int(_range(unbalanced_range)), unbalanced_rounds]
+					text = "Vai até um inimigo e bloqueia as habilidades dele por %d rodadas, ou enquanto Sae ficar perto." % unbalanced_rounds
 				_:
 					title = "Perfect Pass"
-					text = "Bola próxima (chão ou suspensa): escolha em que estado ela chega (Chão, Suspensa ou Voando) e o aliado (alcance %d px). A bola chega NESTA rodada. Interceptar exige um QTE difícil; o receptor faz um QTE fácil e, acertando, ganha +%d%% no próximo chute. Se ele errar o QTE, a bola passa direto e cai mais longe." % [
-						int(_range(pass_range)), _pct(pass_receive_bonus)]
-			text += "\nRecarga: %d rodadas (compartilhada entre as 3 versões)." % pass_cooldown
+					text = "Passe para um aliado: você escolhe se a bola chega no chão, suspensa ou voando. Se o receptor acertar o QTE, ganha +%d%% de chance de gol no próximo chute." % _pct(pass_receive_bonus)
+			text += "\nRecarga: %d rodadas." % pass_cooldown
 		SKILL_ROYAL:
 			if _ball_near():
 				title = "Royalty"
-				text = "Com a bola nos pés, domina e corre com ela (mais curto e mais rápido que o Correr). Não perde a bola, derruba quem encontrar e passa direto. Se derrubar alguém, libera o Royal Heelflick."
+				text = "Domina a bola e corre com ela, mais curto e rápido que o Correr. Derruba quem encontrar; se derrubar alguém, libera o Royal Heelflick."
 			else:
 				title = "Ultra Vision"
-				text = "Sem bola próxima, por %d rodadas: +%d ação geral para os secundários, +%d de alcance no Passe e nas habilidades, +%d%% nos chutes do Sae e limpa os efeitos negativos que ele já tinha. A recarga só começa quando o efeito acaba." % [
-					uv_rounds, uv_extra_general, int(uv_range_bonus), _pct(uv_shot_bonus)]
-			text += "\nRecarga: %d rodadas (compartilhada)." % royal_cooldown
+				text = "Por %d rodadas: +%d ação geral para os secundários, mais alcance no Passe e nas habilidades, +%d%% de chance de gol e limpa os efeitos negativos do Sae." % [
+					uv_rounds, uv_extra_general, _pct(uv_shot_bonus)]
+			text += "\nRecarga: %d rodadas." % royal_cooldown
 		SKILL_HEEL:
 			title = "Royal Heelflick"
-			text = "Complemento gratuito: toque para frente/cima, a bola fica suspensa e o Sae salta até ela, ganhando mais uma ação de habilidade."
+			text = "Complemento grátis: toque para cima, Sae salta até a bola e ganha mais uma ação de habilidade."
 		SKILL_SHOT:
 			if _shot_possible() and _in_lead_zone():
 				title = "Lead Actor"
-				text = "Bola nas laterais do gol inimigo: chute com curva maior; a bola sobe a voando no meio e cai logo depois. QTE difícil. %d%% de chance." % _pct(minf(lead_chance + _shot_bonus(), 1.0))
+				text = "Chute com curva maior pelas laterais do gol inimigo. %d%% de chance de gol." % _pct(minf(lead_chance + _shot_bonus(), 1.0))
 			else:
 				title = "Beautiful Shot"
-				text = "Sae e bola no chão (ou os dois suspensos): chute levemente curvo e mais forte. %d%% de chance." % _pct(minf(beautiful_chance + _shot_bonus(), 1.0))
-			text += "\nPASSIVA: cada defesa do goleiro adversário dá +%d%% nos chutes do Sae (máx. +%d%%), zera a cada gol. Agora: +%d%%." % [
-				_pct(save_bonus_step), _pct(save_bonus_max), _pct(_save_bonus())]
-			text += "\nRecarga: %d rodadas (compartilhada com o Lead Actor)." % shot_cooldown
+				text = "Chute levemente curvo e mais forte. %d%% de chance de gol." % _pct(minf(beautiful_chance + _shot_bonus(), 1.0))
+			text += "\nPassiva: cada defesa do goleiro adversário dá +%d%% de chance de gol nos chutes do Sae (agora +%d%%). Zera a cada gol." % [
+				_pct(save_bonus_step), _pct(_save_bonus())]
+			text += "\nRecarga: %d rodadas." % shot_cooldown
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D
@@ -1358,6 +1361,7 @@ func reset_for_new_match() -> void:
 	_uv_turn_key = -1
 	_saves = 0
 	_prev_held = false
+	last_perfect_pass = {}
 	_popup_left = 0.0
 	_pulse = 0.0
 	queue_redraw()

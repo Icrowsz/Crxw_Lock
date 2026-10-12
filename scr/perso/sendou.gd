@@ -533,25 +533,29 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	match skill_id:
 		SKILL_SHOT:
 			title = _shot_skill_name()
-			text = ("Chute de habilidade. A variante muda sozinha com a altura dele e da bola:\n"
-				+ "• Ace (bola no chão): chute reto, um pouco mais forte que o normal. %d%% de chance de gol.\n"
-				+ "• Star (ele e a bola suspensos): mais forte, QTE fácil. %d%%.\n"
-				+ "• Sniper (ele suspenso e bola voando): bicicleta com QTE difícil. %d%%. Cada inimigo na trajetória tem %d%% de chance de ser atravessado pela bola.\n"
-				+ "Recarga: %d rodadas, compartilhada entre as três.") % [
-				_pct(chance_ace), _pct(chance_star), _pct(chance_sniper),
-				_pct(sniper_pierce_chance), shot_cooldown]
+			match get_shot_variant():
+				ShotVariant.ACE:
+					text = "Chute reto e um pouco mais forte. %d%% de chance de gol." % _pct(chance_ace)
+				ShotVariant.STAR:
+					text = "Chute mais forte. %d%% de chance de gol." % _pct(chance_star)
+				ShotVariant.SNIPER:
+					text = "Bicicleta no ar; a bola pode atravessar inimigos no caminho. %d%% de chance de gol." % _pct(chance_sniper)
+				_:
+					text = "Chute especial que muda conforme a altura dele e da bola. De %d%% a %d%% de chance de gol." % [
+						_pct(minf(chance_ace, minf(chance_star, chance_sniper))),
+						_pct(maxf(chance_ace, maxf(chance_star, chance_sniper)))]
+			text += "\nRecarga: %d rodadas." % shot_cooldown
 		SKILL_STRIKER:
 			title = "Second Striker"
-			text = ("Com a bola ao alcance, marque um aliado (alcance %d): o Sendou faz um passe "
-				+ "rasteiro para ele e, logo depois, dá um avanço em direção ao gol inimigo.\n"
-				+ "Recarga: %d rodadas.") % [int(striker_range), striker_cooldown]
+			text = "Passe rasteiro para um aliado e, logo depois, um avanço em direção ao gol inimigo.\nRecarga: %d rodadas." % striker_cooldown
 		SKILL_TALENT:
 			title = _talent_skill_name()
-			text = ("Avanço (dash) mirável, feito no chão. A variante muda sozinha pelo setor do campo:\n"
-				+ "• Star Talent (setor defensivo): se encontrar a bola (no chão ou suspensa), arremessa ela na direção CONTRÁRIA ao avanço. QTE fácil.\n"
-				+ "• Semi Predator (setor ofensivo): se encontrar a bola (no chão ou suspensa), domina ela e ganha +%d ação de habilidade, +%d%% de chance nos próximos %d chutes e um pouco mais de força em qualquer chute.\n"
-				+ "Recarga: %d rodadas, compartilhada entre as duas.") % [
-				semi_extra_skills, _pct(semi_shot_bonus), semi_shots, talent_cooldown]
+			if is_in_defensive_sector():
+				text = "Avanço mirável. Se encontrar a bola, a arremessa na direção contrária ao avanço."
+			else:
+				text = "Avanço mirável. Se encontrar a bola, a domina e ganha +%d ação de habilidade e +%d%% de chance de gol nos próximos %d chutes." % [
+					semi_extra_skills, _pct(semi_shot_bonus), semi_shots]
+			text += "\nRecarga: %d rodadas." % talent_cooldown
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D

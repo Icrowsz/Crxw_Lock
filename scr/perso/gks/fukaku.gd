@@ -44,3 +44,7 @@ func _allies_in_range() -> Array[Player]:
 		if p.team == team and global_position.distance_to(p.global_position) <= throw_range:
 			result.append(p)
 	return result
+
+
+func get_description() -> String:
+	return "Lançamento dirigido: em vez de sortear, o jogador do time escolhe para quem ele lança a bola (quando há mais de um aliado ao alcance). Também é forte contra chute com a bola no chão: o chute perde %d%% de chance." % _pct(ground_shot_penalty)

@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://b3ostnej5bsky"]
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_uwgvi"]
-[ext_resource type="Texture2D" uid="uid://djcyw7lpuvggj" path="res://img/aryuicon.png" id="2_m11k7"]
+[ext_resource type="Texture2D" uid="uid://djcyw7lpuvggj" path="res://img/icons/aryuicon.png" id="2_m11k7"]
 [ext_resource type="Script" uid="uid://c8raj8w0tm156" path="res://scr/perso/aryu.gd" id="2_ywvi1"]
 [ext_resource type="Texture2D" uid="uid://dldlyj277fly5" path="res://img/mvps/aryu.png" id="3_ywvi1"]
 

@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://celvxhj05n28w"]
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_kn1um"]
-[ext_resource type="Texture2D" uid="uid://c8c0ggwttdqjr" path="res://img/nikoicon.png" id="2_024ko"]
+[ext_resource type="Texture2D" uid="uid://c8c0ggwttdqjr" path="res://img/icons/nikoicon.png" id="2_024ko"]
 [ext_resource type="Script" uid="uid://bf4n2p314klxq" path="res://scr/perso/niko.gd" id="2_aen06"]
 [ext_resource type="Texture2D" uid="uid://d1l4a10m0vv03" path="res://img/mvps/niko.jpg" id="3_aen06"]
 

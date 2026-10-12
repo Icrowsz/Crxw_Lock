@@ -492,44 +492,35 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	var text: String = ""
 	match skill_id:
 		SKILL_PASS:
-			var chilling_text: String = "Chilling Pass (Hiori no chão; bola no chão ou Suspensa): passe alto para um ALIADO, até %d px. A bola sobe a Voando no meio do caminho e pousa Suspensa nele quando o turno de Hiori voltar. Sem QTE." % int(chilling_pass_range)
-			var no_look_text: String = "No Look Cross (Hiori Suspenso, bola próxima): mesma coisa, só que com bem mais alcance (%d px)." % int(no_look_cross_range)
 			match get_pass_variant():
 				PassVariant.CHILLING:
 					title = "Chilling Pass"
-					text = chilling_text
+					text = "Passe alto para um aliado: a bola sobe no meio do caminho e chega nele no ar."
 				PassVariant.NO_LOOK:
 					title = "No Look Cross"
-					text = no_look_text
+					text = "O mesmo passe alto, mas com muito mais alcance."
 				_:
 					title = "Chilling Pass / No Look Cross"
-					text = chilling_text + "\n" + no_look_text
-			text += "\nRecarga: %d rodadas, compartilhada entre as duas." % pass_cooldown
+					text = "Passe alto para um aliado. Com o Hiori no ar, ele chega bem mais longe."
+			text += "\nRecarga: %d rodadas." % pass_cooldown
 		SKILL_GLACIAL:
 			title = "Glacial Cut"
-			text = ("Corrida curta e um pouco mais veloz que o Correr normal (não gasta nem conta como ele). "
-				+ "Se alcançar a bola durante a corrida, libera o Ultrasadist de graça (não gasta outra ação de habilidade).\n"
-				+ "Recarga: %d rodadas.") % glacial_cooldown
+			text = "Corrida curta e rápida. Se alcançar a bola, libera o Ultrasadist de graça.\nRecarga: %d rodadas." % glacial_cooldown
 		SKILL_ULTRASADIST:
 			title = "Ultrasadist"
-			text = ("Complemento GRATUITO do Glacial Cut: escolha um LOCAL do campo (até %d px). "
-				+ "A bola sobe a Voando e pousa lá, Suspensa. QTE fácil: errar encurta e desvia o local.\n"
-				+ "Se o turno acabar sem usar, a chance se perde.") % int(ultrasadist_range)
+			text = "Complemento grátis do Glacial Cut: passe alto para o local do campo que você escolher."
 		SKILL_METAVISION:
 			title = "Coldest Metavision (ativa)" if is_metavision_active() else "Coldest Metavision"
-			text = ("Por %d rodadas depois da atual: a PRÓXIMA Correr de Hiori ganha +%.1fs; os chutes do "
-				+ "próprio Hiori e os de quem acabou de receber um passe dele ganham +%d%% de chance de gol; "
-				+ "e Hiori ganha o Frost Guard (lado da defesa) ou o Cryo Shot (lado do ataque).\n"
-				+ "Recarga: %d rodadas, a partir do fim do efeito.") % [
+			text = ("Por %d rodadas: +%.1f s no próximo Correr e +%d%% de chance de gol nos chutes do Hiori e nos chutes depois de um passe dele. Libera uma habilidade nova, conforme o lado do campo.\n"
+				+ "Recarga: %d rodadas.") % [
 				metavision_rounds, metavision_run_bonus, _pct(metavision_self_shot_bonus), metavision_cooldown]
 		SKILL_FROST_GUARD:
 			title = "Frost Guard"
-			text = ("Lado da defesa, bola Suspensa e perto (até %d px): Hiori salta até ela e deflete para a "
-				+ "direção contrária.\nRecarga: %d rodadas.") % [int(frost_guard_reach), frost_guard_cooldown]
+			text = "Salta até a bola no ar e a rebate para a direção contrária.\nRecarga: %d rodadas." % frost_guard_cooldown
 		SKILL_CRYO_SHOT:
 			title = "Cryo Shot"
-			text = ("Lado do ataque, Hiori e a bola no chão ou Suspensos: chute comum, SEM QTE, %d%% de "
-				+ "chance de gol.\nRecarga: %d rodadas.") % [_pct(cryo_shot_chance), cryo_shot_cooldown]
+			text = "Chute comum, sem QTE. %d%% de chance de gol.\nRecarga: %d rodadas." % [
+				_pct(cryo_shot_chance), cryo_shot_cooldown]
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D

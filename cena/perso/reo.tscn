@@ -1,0 +1,37 @@
+[gd_scene format=3 uid="uid://bng5ojuu1vq4h"]
+
+[ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_2ayge"]
+[ext_resource type="Script" uid="uid://brkp2fq0e8f8k" path="res://scr/perso/reo.gd" id="2_qmuls"]
+[ext_resource type="Texture2D" uid="uid://bl1ryn270lxbj" path="res://img/mvps/reo.jpg" id="3_s0rjy"]
+[ext_resource type="Texture2D" uid="uid://c163p8f6nlleo" path="res://img/icons/reoicon.png" id="4_7l457"]
+
+[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_2ayge")]
+script = ExtResource("2_qmuls")
+copy_range = 900.0
+copy_rounds = 4
+copy_cooldown = 2
+role_cooldown = 2
+zone_threshold = 0.33
+chance_attack = -1.0
+support_range = 500.0
+defense_range = 450.0
+duel_chance = 0.6
+duel_dash_time = 0.3
+header_range = 250.0
+header_jump_time = 0.3
+chance_header = -1.0
+kick_fx = null
+aura_amount = 46
+aura_scale_min = 3.0
+aura_scale_max = 6.5
+aura_radius_mult = 1.6
+face_dir = "res://img/rostinhos/"
+face_size = 44.0
+face_offset = 46.0
+display_name = "Reo Mikage"
+mvp_image = ExtResource("3_s0rjy")
+visual_root = NodePath("SprPlayer")
+
+[node name="SprPlayer" parent="." index="1" unique_id=395354675]
+scale = Vector2(0.2, 0.2)
+texture = ExtResource("4_7l457")

@@ -488,9 +488,9 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 		SKILL_ZONE:
 			var cd_text: String = ""
 			if golden_zone_cooldown > 0:
-				cd_text = "\nRecarga da Golden Zone: %d rodadas." % golden_zone_cooldown
-			var create_text: String = "Golden Zone: cria um círculo dourado fora da pequena área do gol adversário, no canto externo do lado direito de quem ataca. Dura %d rodadas." % golden_zone_rounds
-			var pant_text: String = "44 Pant: com a zona ativa, Chigiri DENTRO dela, no chão e com a bola ao alcance, dá um chute com %d%% de chance de gol (bola alta tem QTE). Sem recarga própria: dá para repetir enquanto a zona durar." % _pct(chance_44_pant)
+				cd_text = "\nRecarga %d rodadas." % golden_zone_cooldown
+			var create_text: String = "Cria zona fora da pequena área do gol adversário. Dura %d rodadas." % golden_zone_rounds
+			var pant_text: String = "Dá um chute com %d%% de chance de gol." % _pct(chance_44_pant)
 			match get_zone_variant():
 				ZoneVariant.CREATE:
 					title = "Golden Zone"
@@ -504,12 +504,12 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 			text += cd_text
 		SKILL_ONCE_MORE:
 			title = "Once More"
-			text = ("Só com Chigiri suspenso. Ele avança reto em direção à bola (até %d px). Se alcançar, domina a bola, desce ao chão e ganha +%d ação de habilidade extra. Se não alcançar, continua suspenso.\n"
-				+ "Recarga: %d rodadas, mesmo se não alcançar a bola.") % [
-				int(once_more_dash_range), once_more_extra_skills, once_more_cooldown]
+			text = ("Chigiri avança reto em direção à bola. Se alcançar, domina a bola, desce ao chão e ganha +%d ação de habilidade extra.\n"
+				+ "Recarga: %d rodadas.") % [
+				once_more_extra_skills, once_more_cooldown]
 		SKILL_MIAU:
-			var miau_text: String = "Miau! (bola longe): um Carrinho mais longo (%d px) na direção mirada. Derruba inimigos no chão e não gasta o Carrinho geral do turno." % int(miau_slide_distance)
-			var princess_text: String = "Red Princess (bola perto, no chão ou suspensa): cruzamento alto para um aliado entre %d e %d px de distância. A bola sobe e desce no chão, nos pés dele." % [
+			var miau_text: String = "Um carrinho mais longo."
+			var princess_text: String = "Cruzamento alto para um aliado entre %d e %d px de distância." % [
 				int(red_princess_min_range), int(red_princess_range)]
 			match get_miau_variant():
 				MiauVariant.RED_PRINCESS:
@@ -521,7 +521,7 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 				_:
 					title = "Miau! / Red Princess"
 					text = miau_text + "\n" + princess_text
-			text += "\nSó com Chigiri no chão. Recarga: %d rodadas, compartilhada entre as duas." % miau_cooldown
+			text += "\nRecarga: %d rodadas" % miau_cooldown
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D
@@ -555,7 +555,7 @@ func _draw() -> void:
 		draw_arc(local_center, golden_zone_radius, 0.0, TAU, 32, Color(1.0, 0.85, 0.1, 0.22), golden_zone_radius)
 		draw_arc(local_center, golden_zone_radius, 0.0, TAU, 32, Color(1.0, 0.9, 0.3, 0.85), 2.0)
 		draw_line(local_center, local_center + Vector2(cos(sweep), sin(sweep)) * golden_zone_radius,
-			Color(1.0, 0.95, 0.5, 0.7), 2.0)
+			Color(0.718, 0.706, 0.0, 0.7), 2.0)
 
 	if state == State.RUNNING:
 		_draw_panther(Vector2(0.0, -height))

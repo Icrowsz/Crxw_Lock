@@ -34,5 +34,5 @@ theme/custom_font="uid://b74g88qg1fi14"
 
 [rendering]
 
-textures/canvas_textures/default_texture_filter=0
+textures/canvas_textures/default_texture_filter=2
 rendering_device/driver.windows="d3d12"

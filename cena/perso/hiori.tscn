@@ -2,7 +2,7 @@
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_0m4lv"]
 [ext_resource type="Script" uid="uid://bmcwg88idcawk" path="res://scr/perso/hiori.gd" id="2_6tajc"]
-[ext_resource type="Texture2D" uid="uid://dp0nj3hwsey0e" path="res://img/hioriicon.png" id="2_sts3e"]
+[ext_resource type="Texture2D" uid="uid://dp0nj3hwsey0e" path="res://img/icons/hioriicon.png" id="2_sts3e"]
 
 [node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_0m4lv")]
 script = ExtResource("2_6tajc")

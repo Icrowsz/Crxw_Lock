@@ -803,16 +803,13 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	match skill_id:
 		SKILL_FEINT:
 			title = "Corvine Feint"
-			text = ("Com a bola ao alcance (no chão ou suspenso, nunca voando), Karasu a segura. Dura até o fim do próximo turno do adversário: se um inimigo que alcança a bola chegar perto (ou acertar um Carrinho nele), Karasu e a bola DESVIAM e ele ganha:\n"
-				+ "• +%d ação de habilidade extra;\n"
-				+ "• +%.1f s no Correr e +%d%% de chance de gol (dele e dos aliados a até %d px) por %d rodadas depois da atual.\n"
-				+ "Depois de desviar, a bola fica grudada nele até o fim da rodada. Se ele for derrubado antes, solta a bola. Recarga: %d rodadas.") % [
-				feint_extra_skills, feint_run_bonus, _pct(feint_shot_bonus), int(feint_ally_range),
-				feint_rounds, feint_cooldown]
+			text = ("Karasu segura a bola. Se um inimigo tentar pegá-la, ele desvia e ganha +%d ação de habilidade, +%.1f s no Correr e +%d%% de chance de gol (dele e dos aliados próximos) por %d rodadas.\n"
+				+ "Recarga: %d rodadas.") % [
+				feint_extra_skills, feint_run_bonus, _pct(feint_shot_bonus), feint_rounds, feint_cooldown]
 		SKILL_ASSAULT:
-			var aerial_text: String = "Aerial Pass (bola no chão e ao alcance): passe que sobe ao nível Voando e desce no chão, nos pés do aliado escolhido (precisa de um aliado ao alcance do passe alto)."
-			var dive_text: String = "Dive Bomb Assault (Karasu e bola no mesmo nível, suspensos ou voando): chute curvo com %d%% de chance de gol. QTE fácil se suspensos, difícil se voando." % _pct(dive_bomb_chance)
-			var raven_text: String = "Raven Assault (bola longe e Karasu no chão): um Carrinho que derruba inimigos. Você escolhe antes o aliado; se o carrinho encostar na bola, ele acaba ali e Karasu passa rasteiro para esse aliado."
+			var aerial_text: String = "Passe que sobe e desce nos pés do aliado escolhido."
+			var dive_text: String = "Chute curvo no ar. %d%% de chance de gol." % _pct(dive_bomb_chance)
+			var raven_text: String = "Carrinho que derruba os inimigos; se encostar na bola, termina num passe para o aliado escolhido."
 			match get_assault_variant():
 				AssaultVariant.AERIAL:
 					title = "Aerial Pass"
@@ -825,12 +822,12 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 					text = raven_text
 				_:
 					title = "Aerial Pass / Dive Bomb / Raven Assault"
-					text = aerial_text + "\n" + dive_text + "\n" + raven_text
-			text += "\nRecarga: %d rodadas, compartilhada entre as três." % assault_cooldown
+					text = "Passe, chute (%d%% de chance de gol) ou carrinho, conforme a situação." % _pct(dive_bomb_chance)
+			text += "\nRecarga: %d rodadas." % assault_cooldown
 		SKILL_WINGS:
-			var block_text: String = "Wings Block (Karasu no chão): agarra os %d inimigos mais próximos (a até %d px) e os impede de usar habilidades por %d rodadas, ou até Karasu se afastar deles. As ações gerais ficam livres." % [
-				wings_max_targets, int(wings_range), wings_rounds]
-			var steal_text: String = "Silent Steal (Karasu suspenso e bola suspensa ou voando a até %d px): ele alcança a bola, a domina e os dois descem até o chão." % int(steal_range)
+			var block_text: String = "Agarra os %d inimigos mais próximos e os impede de usar habilidades por %d rodadas, ou até Karasu se afastar." % [
+				wings_max_targets, wings_rounds]
+			var steal_text: String = "Alcança a bola no ar, a domina e desce com ela até o chão."
 			match get_wings_variant():
 				WingsVariant.BLOCK:
 					title = "Wings Block"
@@ -840,8 +837,8 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 					text = steal_text
 				_:
 					title = "Wings Block / Silent Steal"
-					text = block_text + "\n" + steal_text
-			text += "\nRecarga: %d rodadas, compartilhada entre as duas." % wings_cooldown
+					text = "Trava as habilidades dos inimigos próximos ou rouba a bola do ar, conforme a situação."
+			text += "\nRecarga: %d rodadas." % wings_cooldown
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D

@@ -647,37 +647,35 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	match skill_id:
 		SKILL_SHOT:
 			title = _shot_skill_name()
-			text = ("Chute de habilidade. A variante muda sozinha com a altura dele e da bola:\n"
-				+ "• Magnus (bola no chão; ele no chão ou suspenso): chute curvo; a bola sobe ao nível Suspenso durante a trajetória. %d%% de chance de gol.\n"
-				+ "• Beinschuss (ele suspenso e bola voando): bicicleta com QTE difícil. %d%%.\n"
-				+ "• Kaiser Impact (ele suspenso e bola suspensa): chute reto e rápido, a bola vai suspensa o trajeto todo. %d%%.\n"
-				+ "Recarga: %d rodadas, compartilhada entre as três.") % [
-				_pct(chance_magnus), _pct(chance_beinschuss), _pct(chance_impact), shot_cooldown]
+			match get_shot_variant():
+				ShotVariant.MAGNUS:
+					text = "Chute curvo que sobe durante o trajeto. %d%% de chance de gol." % _pct(chance_magnus)
+				ShotVariant.BEINSCHUSS:
+					text = "Bicicleta no ar. %d%% de chance de gol." % _pct(chance_beinschuss)
+				ShotVariant.IMPACT:
+					text = "Chute reto e rápido. %d%% de chance de gol." % _pct(chance_impact)
+				_:
+					text = "Chute especial que muda conforme a altura dele e da bola. De %d%% a %d%% de chance de gol." % [
+						_pct(minf(chance_magnus, minf(chance_beinschuss, chance_impact))),
+						_pct(maxf(chance_magnus, maxf(chance_beinschuss, chance_impact)))]
+			text += "\nRecarga: %d rodadas." % shot_cooldown
 		SKILL_EMPIRE:
 			title = "Empire"
-			text = ("Marca aliados no alcance como servos, pela partida inteira:\n"
-				+ "• 1ª escolha - Servo Garçom (flor dourada): chutes do Kaiser com passe/assistência dele ganham +%d%%.\n"
-				+ "• 2ª escolha - Servo Palhaço (flor azul-escura): libera o Auf die Knee. Cancele a 2ª escolha para marcar só um.\n"
-				+ "Cada gol do Kaiser dá +1 uso. Usos agora: %d.") % [_pct(waiter_bonus), _empire_uses_left]
+			text = ("Marca dois aliados como servos pela partida toda. O Garçom dá +%d%% de chance de gol aos chutes do Kaiser depois de um passe dele; o Palhaço libera o Auf die Knee.\n"
+				+ "Usos restantes: %d.") % [_pct(waiter_bonus), _empire_uses_left]
 		SKILL_KNEE:
 			title = "Auf die Knee"
-			text = ("Se a bola está perto de um Servo Palhaço e o Kaiser está ao alcance do passe dele, "
-				+ "o Palhaço é obrigado a passar rasteiro para o Kaiser. Gasta uma ação geral do Palhaço "
-				+ "(ele precisa ter uma sobrando) e a ação de habilidade do Kaiser.\nRecarga: %d rodadas.") % knee_cooldown
+			text = "Obriga o Palhaço a passar a bola para o Kaiser.\nRecarga: %d rodadas." % knee_cooldown
 		SKILL_PREDATOR:
 			title = "Blue Rose: Predator"
-			text = ("Por %d rodadas: o Chutar fica mais forte (x%.2f), o Carrinho vai +%d%% mais longe "
-				+ "e qualquer chute do Kaiser ganha +%d%% de chance.\n"
-				+ "Recarga: %d rodadas depois do fim. Não dá para usar a mesma variante mais de %d vezes seguidas.") % [
-				rose_rounds, predator_force_mult, _pct(predator_slide_bonus), _pct(predator_shot_bonus),
-				rose_cooldown, rose_max_repeat]
+			text = ("Por %d rodadas: o Kaiser chuta mais forte, o Carrinho vai mais longe e os chutes ganham +%d%% de chance de gol.\n"
+				+ "Recarga: %d rodadas.") % [
+				rose_rounds, _pct(predator_shot_bonus), rose_cooldown]
 		SKILL_META:
 			title = "Blue Rose: Meta"
-			text = ("Por %d rodadas: nenhum QTE nos chutes do Kaiser e +%.1f s no Correr. "
-				+ "Nas próximas %d rodadas, os Secundários ganham +%d ação(ões) de habilidade.\n"
-				+ "Recarga: %d rodadas depois do fim. Não dá para usar a mesma variante mais de %d vezes seguidas.") % [
-				rose_rounds, meta_run_bonus, meta_ally_rounds, meta_extra_ally_skills,
-				rose_cooldown, rose_max_repeat]
+			text = ("Por %d rodadas: o Kaiser chuta sem QTE e corre por mais tempo. Os Secundários ganham +%d ação de habilidade.\n"
+				+ "Recarga: %d rodadas.") % [
+				rose_rounds, meta_extra_ally_skills, rose_cooldown]
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D

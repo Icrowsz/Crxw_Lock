@@ -427,27 +427,22 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	var text: String = ""
 	match skill_id:
 		SKILL_STALKER:
-			title = "Dog Trick" if _dog_ok() else "Stalker"
-			text = ("Stalker: prende com uma corrente um inimigo a até %d px. Ele perde %d%% de chance de gol em todos os chutes por %d rodadas (%d%% com Sexy Mode). Acaba antes se Raichi usar Correr; enquanto durar, se o inimigo andar, Raichi é puxado junto. Recarga: %d rodadas.\n"
-				+ "Dog Trick (aparece no lugar quando Raichi está suspenso e a bola está suspensa ou voando perto dele): defleta a bola na direção contrária à que ela vinha; com Sexy Mode vira um passe rasteiro para um aliado. Recarga própria: %d rodadas.") % [
-				int(stalk_range), _pct(stalk_penalty), stalk_rounds, _pct(stalk_penalty_sexy), stalker_cooldown,
-				dog_cooldown]
+			if _dog_ok():
+				title = "Dog Trick"
+				text = "Rebate a bola no ar para a direção contrária. Com Sexy Mode, vira um passe rasteiro para um aliado.\nRecarga: %d rodadas." % dog_cooldown
+			else:
+				title = "Stalker"
+				text = ("Prende um inimigo com uma corrente: ele perde %d%% de chance de gol nos chutes por %d rodadas (%d%% com Sexy Mode).\n"
+					+ "Recarga: %d rodadas.") % [
+					_pct(stalk_penalty), stalk_rounds, _pct(stalk_penalty_sexy), stalker_cooldown]
 		SKILL_RADIUS:
 			title = "Radius"
-			text = ("Cria um esquadro amarelo de %d° (raio de %d px) apontando para o inimigo mais próximo, que precisa estar a até %d px. A direção fica fixa. Inimigos dentro dele correm %.1f s a menos e não podem usar habilidades. Dura %d rodadas. Com Sexy Mode: raio %d%% maior e %.1f s a menos.\n"
-				+ "Recarga: %d rodadas.") % [
-				int(rad_to_deg(RADIUS_ANGLE)), int(radius_range), int(radius_cast_range), radius_slow,
-				radius_rounds, _pct(radius_area_mult_sexy - 1.0), radius_slow_sexy, radius_cooldown]
+			text = ("Cria uma área amarela na direção do inimigo mais próximo: quem estiver dentro corre %.1f s a menos e não pode usar habilidades. Dura %d rodadas.\n"
+				+ "Recarga: %d rodadas.") % [radius_slow, radius_rounds, radius_cooldown]
 		SKILL_SEXY:
 			title = "Sexy Mode"
-			text = ("Dura %d rodadas e melhora tudo:\n"
-				+ "• Stalker: a punição sobe para %d%%.\n"
-				+ "• Dog Trick: vira um passe rasteiro (mesmos requisitos).\n"
-				+ "• Radius: inimigos ficam ainda mais lentos e a área aumenta.\n"
-				+ "• Correr dura +%.1f s e o Carrinho fica %d%% mais longo.\n"
-				+ "Recarga: %d rodadas.") % [
-				sexy_rounds, _pct(stalk_penalty_sexy), sexy_run_bonus, _pct(sexy_slide_mult - 1.0),
-				sexy_cooldown]
+			text = ("Por %d rodadas melhora as habilidades do Raichi, o Correr dura +%.1f s e o Carrinho vai mais longe.\n"
+				+ "Recarga: %d rodadas.") % [sexy_rounds, sexy_run_bonus, sexy_cooldown]
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D

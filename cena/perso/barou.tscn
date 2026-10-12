@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://cbavhn0867lme"]
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_7y5xy"]
-[ext_resource type="Texture2D" uid="uid://coyuwd4ow5mfq" path="res://img/barouicon.png" id="2_lu7d7"]
+[ext_resource type="Texture2D" uid="uid://coyuwd4ow5mfq" path="res://img/icons/barouicon.png" id="2_lu7d7"]
 [ext_resource type="Script" uid="uid://du734206arvny" path="res://scr/perso/barou.gd" id="2_xb4w8"]
 [ext_resource type="Texture2D" uid="uid://cqmrcih02um6m" path="res://img/mvps/barou.jpg" id="3_xb4w8"]
 

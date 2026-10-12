@@ -562,9 +562,9 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	var text: String = ""
 	match skill_id:
 		SKILL_HEADER:
-			var header_text: String = "Elegant Header: com a bola ao alcance (até %d px) e suspensa ou voando, vai até ela no nível dela e a cabeceia na direção mirada. É uma tentativa de gol (%d%% de chance)." % [
-				int(header_range), int(round(header_chance * 100.0))]
-			var block_text: String = "Vain Block: sem bola ao alcance, mas com um inimigo suspenso ou voando (até %d px), vai até ele, ocupa o lugar e a altura dele, e o empurra e derruba." % int(block_range)
+			var header_text: String = "Com a bola suspensa ou voando, vai até ela e a cabeceia (%d%% de chance)." % [
+				int(round(header_chance * 100.0))]
+			var block_text: String = "Sem bola ao alcance, mas com um inimigo suspenso ou voando, vai até ele, ocupa o lugar dele, e o derruba."
 			match get_header_variant():
 				HeaderVariant.HEADER:
 					title = "Elegant Header"
@@ -575,18 +575,18 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 				_:
 					title = "Elegant Header / Vain Block"
 					text = header_text + "\n" + block_text
-			text += "\nRecarga: %d rodadas, compartilhada entre as duas." % header_cooldown
+			text += "\nRecarga: %d rodadas." % header_cooldown
 		SKILL_GLAM:
 			title = "Glam!"
-			text = "Com a bola próxima (até %d px), Aryu a segura. Dura até o fim do próximo turno do adversário: se alguém chegar perto, Aryu e a bola desviam e liberam o Mirror Glam.\nRecarga: %d rodadas." % [
-				int(glam_range), glam_cooldown]
+			text = "Com a bola próxima, Aryu a segura. Se alguém chegar perto, Aryu desvia e libera o Mirror Glam.\nRecarga: %d rodadas." % [
+				glam_cooldown]
 		SKILL_MIRROR:
 			title = "Mirror Glam"
-			text = "Passe rasteiro simples para um companheiro. Não gasta ação de habilidade e vale até o fim do próximo turno do seu time. Recarga compartilhada com o Glam!"
+			text = "Passe rasteiro simples. Recarga compartilhada com o Glam!"
 		SKILL_STAR:
 			title = "Shooting Star"
-			text = "Perto da grande área que defende e suspensa ou voando, Aryu vai até o gol e fecha uma parte com o corpo. Por %d rodadas, os chutes adversários perdem %d%% de chance de gol.\nRecarga: %d rodadas." % [
-				star_rounds, int(round(shooting_penalty * 100.0)), star_cooldown]
+			text = "Perto da grande área, suspenso ou voando, Aryu vai até o gol e fecha uma parte com o corpo. Os chutes adversários perdem %d%% de chance de gol.\nRecarga: %d rodadas." % [
+				int(round(shooting_penalty * 100.0)), star_cooldown]
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D

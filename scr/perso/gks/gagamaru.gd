@@ -60,3 +60,8 @@ func _draw() -> void:
 	draw_rect(Rect2(pos, Vector2(w, 6.0)), Color(0, 0, 0, 0.55))
 	draw_rect(Rect2(pos, Vector2(w * frac, 6.0)), Color(0.45, 0.85, 1.0))
 	draw_rect(Rect2(pos, Vector2(w, 6.0)), Color(1, 1, 1, 0.8), false, 1.0)
+
+
+func get_description() -> String:
+	return "Armazenamento: tem uma reserva de %d%%. A cada chute ele gasta %d%% dela para diminuir a chance do chute, e cada chute defendido devolve %d%%. Reserva vazia, sem efeito. A barra em cima dele mostra a reserva." % [
+		_pct(max_storage), _pct(spend_per_shot), _pct(recover_per_save)]

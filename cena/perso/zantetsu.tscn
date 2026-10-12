@@ -2,7 +2,7 @@
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_vy58h"]
 [ext_resource type="Script" uid="uid://x7dey66gb5hl" path="res://scr/perso/zantetsu.gd" id="2_e0om6"]
-[ext_resource type="Texture2D" uid="uid://bxnfntil3u51d" path="res://img/zantetsuicon.png" id="2_xrcm0"]
+[ext_resource type="Texture2D" uid="uid://bxnfntil3u51d" path="res://img/icons/zantetsuicon.png" id="2_xrcm0"]
 [ext_resource type="Texture2D" uid="uid://dj5mqn0i4ufa4" path="res://img/mvps/zantetsu.jpg" id="3_e0om6"]
 
 [node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_vy58h")]

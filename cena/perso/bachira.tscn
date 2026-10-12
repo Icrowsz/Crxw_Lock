@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://be12oigucca6e"]
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_ygkwl"]
-[ext_resource type="Texture2D" uid="uid://bc6g2wh646cjx" path="res://img/bachiraicon.png" id="2_3lb65"]
+[ext_resource type="Texture2D" uid="uid://bc6g2wh646cjx" path="res://img/icons/bachiraicon.png" id="2_3lb65"]
 [ext_resource type="Script" uid="uid://c5dwkomypbgg5" path="res://scr/perso/bachira.gd" id="2_6eyd0"]
 [ext_resource type="Texture2D" uid="uid://6hhnhjobeij1" path="res://img/mvps/bachira.jpg" id="3_dcfof"]
 

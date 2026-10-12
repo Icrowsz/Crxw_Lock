@@ -31,3 +31,8 @@ func modify_shot_chance(chance: float, shot_ball: Ball) -> float:
 	if shot_ball.get_level() == Heights.Level.SUSPENDED:
 		return maxf(chance - suspended_shot_penalty, 0.0)
 	return chance
+
+
+func get_description() -> String:
+	return "Área de defesa maior: salta até em bolas que ainda estão fora da grande área. Lançamento mais longo (%d px). Contra chute com a bola suspensa, o chute perde %d%% de chance." % [
+		int(throw_range), _pct(suspended_shot_penalty)]

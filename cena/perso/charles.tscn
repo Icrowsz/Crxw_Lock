@@ -1,7 +1,7 @@
 [gd_scene format=3 uid="uid://nudb1fidas5y"]
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_gm2bc"]
-[ext_resource type="Texture2D" uid="uid://cxqkfuv84tmfw" path="res://img/charlesicon.png" id="2_nocan"]
+[ext_resource type="Texture2D" uid="uid://cxqkfuv84tmfw" path="res://img/icons/charlesicon.png" id="2_nocan"]
 [ext_resource type="Script" uid="uid://caus58e22o8n8" path="res://scr/perso/charles.gd" id="2_tfkgw"]
 [ext_resource type="Texture2D" uid="uid://gps0nk7xobfu" path="res://img/mvps/charles.jpg" id="3_tfkgw"]
 

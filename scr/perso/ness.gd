@@ -615,39 +615,35 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	match skill_id:
 		SKILL_ALOHOMORA:
 			title = _spell_name()
-			text = ("Feitiço que muda sozinho conforme a situação da bola:\n"
-				+ "• Alohomora (bola ao alcance do pé): passe mágico em zigue-zague para um aliado a até %d px. A bola sobe ao nível suspenso no meio do trajeto e fica pairando no aliado.\n"
-				+ "• Depulso (bola suspensa a até %d px): Ness pula até ela e a repele na direção contrária à que ela vinha.\n"
-				+ "• Expelliarmus (bola fora do alcance): Ness corre até um inimigo a até %d px e tira %d%% da chance de gol dos chutes dele por %d turnos dele, ou até Ness se afastar mais de %d px.\n"
-				+ "Recarga: %d rodadas, compartilhada entre as três.") % [
-				int(alohomora_range), int(depulso_range), int(expelliarmus_range),
-				_pct(expelliarmus_shot_penalty), expelliarmus_rounds, int(expelliarmus_break_distance),
-				alohomora_cooldown]
+			match get_spell_variant():
+				SpellVariant.ALOHOMORA:
+					text = "Passe mágico em zigue-zague para um aliado. A bola fica pairando nele."
+				SpellVariant.DEPULSO:
+					text = "Ness salta até a bola no ar e a repele na direção contrária."
+				SpellVariant.EXPELLIARMUS:
+					text = "Ness corre até um inimigo e tira %d%% de chance de gol dos chutes dele por %d turnos, ou até Ness se afastar." % [
+						_pct(expelliarmus_shot_penalty), expelliarmus_rounds]
+				_:
+					text = "Feitiço que muda conforme a situação da bola: passe mágico, repelir a bola ou enfraquecer um inimigo."
+			text += "\nRecarga: %d rodadas." % alohomora_cooldown
 		SKILL_CONFUNDO:
 			title = "Confundo"
-			text = ("Embaralha as habilidades de um inimigo a até %d px: os botões dele viram \"???\" e trocam de ordem por %d turno(s) dele, a partir do próximo.\n"
-				+ "Recarga: %d rodadas, dividida com o Reparo.") % [
-				int(confundo_range), confundo_rounds, confundo_cooldown]
+			text = ("Embaralha as habilidades de um inimigo por %d turno(s) dele.\n"
+				+ "Recarga: %d rodadas.") % [confundo_rounds, confundo_cooldown]
 		SKILL_REPARO:
 			title = "Reparo"
-			text = ("Só aparece quando algum aliado tem habilidade em recarga. Tira %d rodada(s) da recarga de até %d habilidades de um aliado a até %d px.\n"
-				+ "Recarga: %d rodadas, dividida com o Confundo.") % [
-				reparo_rounds, reparo_skills, int(reparo_range), confundo_cooldown]
+			text = ("Reduz em %d rodada(s) a recarga de até %d habilidades de um aliado.\n"
+				+ "Recarga: %d rodadas.") % [reparo_rounds, reparo_skills, confundo_cooldown]
 		SKILL_LEVIOSA:
 			title = "Leviosa"
-			text = ("Sobe a bola um nível de altura (chão → suspensa → voando). A bola precisa estar solta (fora da mão do goleiro) e a até %d px de Ness. Ela fica pairando no novo nível até o fim do turno do time.\n"
-				+ "Recarga: %d rodada(s), dividida com Descendo e Arresto Momentum.") % [
-				int(ball_spell_range), spell_cooldown]
+			text = "Sobe a bola um nível de altura. Ela fica pairando até o fim do turno do time.\nRecarga: %d rodada(s)." % spell_cooldown
 		SKILL_DESCENDO:
 			title = "Descendo"
-			text = ("Só aparece com a bola fora do chão. Desce a bola um nível de altura (voando → suspensa → chão), com os mesmos requisitos do Leviosa (bola solta e a até %d px). Se ela não chega ao chão, fica pairando até o fim do turno do time.\n"
-				+ "Recarga: %d rodada(s), dividida com Leviosa e Arresto Momentum.") % [
-				int(ball_spell_range), spell_cooldown]
+			text = "Desce a bola um nível de altura.\nRecarga: %d rodada(s)." % spell_cooldown
 		SKILL_ARRESTO:
 			title = "Arresto Momentum"
-			text = ("Só aparece com a bola voando (mesmos requisitos do Leviosa). Prende a bola ali por %d rodadas, ou até um aliado interagir com ela; os adversários não conseguem tocá-la. Depois ela cai direto para o chão.\n"
-				+ "Recarga: %d rodada(s), dividida com Leviosa e Descendo.") % [
-				arresto_rounds, spell_cooldown]
+			text = ("Prende a bola no ar por %d rodadas e os adversários não conseguem tocá-la. Depois ela cai no chão.\n"
+				+ "Recarga: %d rodada(s).") % [arresto_rounds, spell_cooldown]
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D

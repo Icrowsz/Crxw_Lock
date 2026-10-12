@@ -447,13 +447,13 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	match skill_id:
 		SKILL_LEFTY:
 			title = "Lefty Shot"
-			text = ("Chute forte (%d%% mais força) em direção ao gol adversário, sem mira e sem QTE. %d%% de chance de gol. Funciona com Kunigami no chão ou suspenso e a bola no chão ou suspensa.\n"
+			text = ("Chute forte (%d%% mais força) em direção ao gol adversário, sem mira e sem QTE. %d%% de chance de gol.\n"
 				+ "Recarga: %d rodadas.") % [
 				_pct(lefty_force_mult - 1.0), _pct(lefty_shot_chance), lefty_cooldown]
 		SKILL_CLASH:
-			var clash_text: String = "Heroic Clash: disputa física com um inimigo de pé a até %d px. %d%% de chance de o Kunigami vencer: aí o inimigo é jogado %d px para longe, derrubado e travado (sem ações) por %d rodadas. Se perder, os dois só se chocam." % [
-				int(clash_range), _pct(clash_win_chance), int(clash_push_distance), stun_rounds]
-			var header_text: String = "Justice Header: com Kunigami suspenso e a bola suspensa ou voando perto, cabeceio com mira. %d%% de chance de gol, sem QTE." % _pct(header_shot_chance)
+			var clash_text: String = "Disputa física com um inimigo. %d%% de chance de o Kunigami vencer: O inimigo é jogado para longe. Se perder, os dois só se chocam." % [
+				_pct(clash_win_chance)]
+			var header_text: String = "Com Kunigami e a bola suspensa ou voando perto, cabeceio com mira. %d%% de chance de gol, sem QTE." % _pct(header_shot_chance)
 			if _header_variant_ok():
 				title = "Justice Header"
 				text = header_text
@@ -463,10 +463,10 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 			else:
 				title = "Heroic Clash / Justice Header"
 				text = clash_text + "\n" + header_text
-			text += "\nRecarga: %d rodadas, compartilhada entre os dois." % clash_cooldown
+			text += "\nRecarga: %d rodadas" % clash_cooldown
 		SKILL_BULK:
 			title = "Bulk Up"
-			text = ("Por %d rodadas (contando a atual), as próximas %d ações do Kunigami são reforçadas (o que acabar primeiro):\n"
+			text = ("Por %d rodadas, as próximas %d ações do Kunigami são reforçadas:\n"
 				+ "• Lefty Shot: +%d%% de força e +%d%% de chance de gol;\n"
 				+ "• Heroic Clash: +%d%% de chance de vencer;\n"
 				+ "• Justice Header: +%d%% de força;\n"

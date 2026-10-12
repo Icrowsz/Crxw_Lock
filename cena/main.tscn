@@ -1,11 +1,11 @@
 [gd_scene format=3 uid="uid://vyuwdkpu5dcw"]
 
-[ext_resource type="Script" uid="uid://c0u5r7smsq811" path="res://scr/match_manager.gd" id="1_3tt73"]
-[ext_resource type="Script" uid="uid://ip8snkgmpblr" path="res://scr/field.gd" id="1_mk8v6"]
-[ext_resource type="Script" uid="uid://14n0b1oxcpd" path="res://scr/action_menu.gd" id="2_7ije6"]
+[ext_resource type="Script" uid="uid://c0u5r7smsq811" path="res://scr/importantesmuito/match_manager.gd" id="1_3tt73"]
+[ext_resource type="Script" uid="uid://ip8snkgmpblr" path="res://scr/importantesmuito/field.gd" id="1_mk8v6"]
+[ext_resource type="Script" uid="uid://14n0b1oxcpd" path="res://scr/ui e visual/action_menu.gd" id="2_7ije6"]
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="3_y3eto"]
 [ext_resource type="PackedScene" uid="uid://bcstqrdud6opd" path="res://cena/bola.tscn" id="4_mk8v6"]
-[ext_resource type="Script" uid="uid://ma4vcvpvpn8j" path="res://scr/game_camera.gd" id="5_4fnda"]
+[ext_resource type="Script" uid="uid://ma4vcvpvpn8j" path="res://scr/ui e visual/game_camera.gd" id="5_4fnda"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_g6c8f"]
 size = Vector2(144, 1344)
@@ -47,10 +47,6 @@ margin = 500.0
 
 [node name="MatchManager" type="Node2D" parent="." unique_id=1461380594]
 script = ExtResource("1_3tt73")
-reposition_time = 0.1
-volley_qte_time_per_key = 0.8
-ground_pass_range = 350.0
-high_pass_range = 450.0
 
 [node name="Bola" parent="." unique_id=235203312 instance=ExtResource("4_mk8v6")]
 

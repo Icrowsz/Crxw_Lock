@@ -566,8 +566,8 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	var text: String = ""
 	match skill_id:
 		SKILL_PASS:
-			var rabona_text: String = "Rabona Cross (Charles e bola no chão): passe alto para um LOCAL que você clica no campo (até %d px). A bola paira lá, no nível Suspenso, e cai sozinha se ninguém tocar nela. QTE fácil: errar encurta e desvia o local." % int(rabona_range)
-			var sky_text: String = "Sky-Arc Pass (bola suspensa; Charles no chão ou suspenso): passe longo e curvo para um aliado a até %d px. A bola chega a ele no chão." % int(sky_arc_range)
+			var rabona_text: String = "Passe alto para um local que você clica no campo com QTE fácil"
+			var sky_text: String = "Passe longo e curvo para um aliado." 
 			match get_pass_variant():
 				PassVariant.RABONA:
 					title = "Rabona Cross"
@@ -578,12 +578,12 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 				_:
 					title = "Rabona Cross / Sky-Arc Pass"
 					text = rabona_text + "\n" + sky_text
-			text += "\nRecarga: %d rodadas, compartilhada entre os dois." % pass_cooldown
+			text += "\nRecarga: %d rodadas." % pass_cooldown
 		SKILL_TAUNT:
-			var taunt_text: String = "Gremlin Taunt (Charles e bola no chão, bola próxima): segura a bola nos pés até o fim do próximo turno do adversário. Ela acompanha o Charles e os adversários não conseguem tocar nela. Se um adversário chegar perto (ou der Carrinho nele), Charles desvia com a bola, ganha 1 ação geral extra para a próxima vez que agir, e a bola fica grudada nele até o fim da rodada. Derrubado, ele perde a bola."
-			var shot_text: String = "Gremlin Shot (Charles e bola suspensos): chute que desce até o chão, com uma curva fraquinha. QTE fácil, %d%% de chance de gol." % _pct(gremlin_shot_chance)
+			var taunt_text: String = "Segura a bola nos pés. Se um adversário chegar perto, Charles desvia com a bola, ganha 1 ação geral extra."
+			var shot_text: String = "Chute com uma curva fraquinha tem QTE fácil, %d%% de chance de gol." % _pct(gremlin_shot_chance)
 			if _taunt_state != TauntState.NONE:
-				title = "Gremlin Taunt (segurando)"
+				title = "Gremlin Taunt"
 				text = taunt_text
 			else:
 				match get_taunt_variant():
@@ -596,12 +596,12 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 					_:
 						title = "Gremlin Taunt / Gremlin Shot"
 						text = taunt_text + "\n" + shot_text
-			text += "\nRecarga: %d rodadas, compartilhada entre as duas." % gremlin_cooldown
+			text += "\nRecarga: %d rodadas." % gremlin_cooldown
 		SKILL_METAVISION:
 			title = "Tricheur's Metavision"
-			text = ("Por %d rodadas depois da atual: +%d ação(ões) de habilidade extra para os Secundários, nenhum QTE nos chutes do Charles, e todo chute INIMIGO dado a até %d px dele perde %d%% de chance de gol.\n"
-				+ "Recarga: %d rodadas, contadas a partir do fim do efeito.") % [
-				metavision_rounds, metavision_extra_ally_skills, int(metavision_range),
+			text = ("Por %d rodadas: +%d ação(ões) de habilidade extra para os Secundários, nenhum QTE nos chutes do Charles, e todo chute INIMIGO dado perde %d%% de chance de gol.\n"
+				+ "Recarga: %d rodadas.") % [
+				metavision_rounds, metavision_extra_ally_skills,
 				_pct(metavision_enemy_shot_penalty), metavision_cooldown]
 		_:
 			return {}
