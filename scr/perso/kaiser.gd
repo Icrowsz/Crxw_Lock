@@ -22,6 +22,10 @@ extends Player
 ##      - Meta: +1 ação de habilidade para os Secundários nas próximas 2 rodadas, nenhum QTE
 ##        para o Kaiser e mais segundos no Correr
 ##
+## Reação Química HERBIVICUS (com o Ness, veja reaction_herbivicus.gd): se o Ness (Servo Garçom) acabou
+## de usar o Alohomora no Kaiser e há um inimigo perto, o Kaiser Impact vira o Emperor Impact:
+## cutscene, mais forte e rápido, 75% de chance e uma rosa azul gigante no chute.
+##
 ## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
 ## -> renomeie o nó raiz para "Kaiser".
 ##
@@ -58,6 +62,14 @@ enum ServantType { WAITER, CLOWN }
 ## Kaiser Impact: multiplicador de força (rápido) e por quanto tempo a bola fica Suspensa
 @export var impact_force_mult: float = 1.1
 @export var impact_flight_time: float = 0.2
+
+@export_group("Emperor Impact (reação Herbivicus)")
+@export_range(0.0, 1.0) var chance_emperor: float = 0.75   # chance de gol (já é o valor final)
+@export var emperor_force_mult: float = 1.35               # mais forte que o Kaiser Impact (1.1)
+@export var emperor_flight_time: float = 0.3               # tempo Suspensa (o Kaiser Impact usa 0.2)
+@export var emperor_rose_radius: float = 260.0             # tamanho da rosa gigante (px)
+## Aura do chute. Vazio = usa o estilo padrão (veja _make_emperor_fx)
+@export var emperor_fx: KickFX
 
 @export_group("Empire")
 @export var empire_range: float = 450.0             # alcance para marcar os servos
@@ -116,6 +128,8 @@ func _ready() -> void:
 	super()
 	if kick_fx == null:
 		kick_fx = _make_kick_fx()
+	if emperor_fx == null:
+		emperor_fx = _make_emperor_fx()
 	_base_run_duration = run_duration
 	_base_slide_distance = slide_distance
 	_empire_uses_left = empire_starting_uses
@@ -138,6 +152,26 @@ func _make_kick_fx() -> KickFX:
 	fx.scale_max = 0.35
 	fx.burst_amount = 14
 	fx.burst_speed = 220.0
+	return fx
+
+
+## Emperor Impact: azul elétrico, bem mais largo e cheio de brilhos
+func _make_emperor_fx() -> KickFX:
+	var fx := _make_kick_fx()
+	fx.color = Color(0.2, 0.5, 1.0, 1.0)
+	fx.trail_width = 30.0
+	fx.particle_color = Color(0.85, 0.95, 1.0, 1.0)
+	fx.amount = 60
+	fx.lifetime = 0.8
+	fx.speed_min = 20.0
+	fx.speed_max = 110.0
+	fx.gravity = Vector2(0.0, -60.0)
+	fx.spin = 360.0
+	fx.swirl = 60.0
+	fx.scale_min = 0.2
+	fx.scale_max = 0.5
+	fx.burst_amount = 36
+	fx.burst_speed = 360.0
 	return fx
 
 
@@ -187,6 +221,11 @@ func _on_state_changed() -> void:
 
 func _is_servant(p: Player) -> bool:
 	return p in _waiters or p in _clowns
+
+
+## O jogador é um Servo Garçom do Empire? (a reação Herbivicus usa isto)
+func is_waiter(p: Player) -> bool:
+	return p in _waiters
 
 
 ## Quem pode ser marcado: companheiro (não ele mesmo) que ainda não é servo
@@ -460,8 +499,15 @@ func _shot_skill_name() -> String:
 		ShotVariant.BEINSCHUSS:
 			return "Beinschuss"
 		ShotVariant.IMPACT:
-			return "Kaiser Impact"
+			# Reação Química disponível: o botão muda de nome
+			return "Emperor Impact" if _find_reaction() != null else "Kaiser Impact"
 	return "Magnus"
+
+
+## Reação Química que o Kaiser pode usar agora (Herbivicus). null = nenhuma.
+func _find_reaction() -> ChemicalReaction:
+	var rm: ReactionManager = ReactionManager.get_for(self)
+	return rm.find_available(self) if rm != null else null
 
 
 func _use_shot_skill() -> bool:
@@ -483,6 +529,21 @@ func _use_shot_skill() -> bool:
 	var variant: ShotVariant = get_shot_variant()
 	if variant == ShotVariant.NONE:
 		return false
+
+	# Reação Química (Herbivicus): só vale para o Kaiser Impact. A partida congela, roda a cutscene
+	# e SÓ DEPOIS DO DIÁLOGO o chute acontece (antes do QTE e do chute).
+	var reaction: ChemicalReaction = null
+	if variant == ShotVariant.IMPACT:
+		reaction = _find_reaction()
+		if reaction != null:
+			var partner: Player = reaction.find_partner(self)
+			var rm: ReactionManager = ReactionManager.get_for(self)
+			if partner == null or rm == null:
+				reaction = null
+			else:
+				await rm.play(reaction, self, partner)
+				if m.match_over:
+					return false
 
 	var kind: KickType = KickType.GROUND
 	var anim: StringName = &"magnus"
@@ -506,18 +567,25 @@ func _use_shot_skill() -> bool:
 			anim = &"kaiser_impact"
 			base_chance = chance_impact
 			on_kick = _launch_impact
+			if reaction != null:   # Emperor Impact: mesmo conceito, mais forte, mais rápido e com a rosa
+				anim = _emperor_anim()
+				base_chance = chance_emperor
+				on_kick = _launch_emperor
 
 	var qte_ok: bool = true
 	if needs_qte and not skips_qte():
 		qte_ok = await m.run_qte(KickType.FLYING)
 
 	if variant == ShotVariant.IMPACT:
-		next_kick_force_mult *= impact_force_mult   # rápido (gasto dentro do kick_ball)
+		# rápido (gasto dentro do kick_ball)
+		next_kick_force_mult *= emperor_force_mult if reaction != null else impact_force_mult
 
-	var chance: float = minf(base_chance + _shot_bonus(), 1.0)
+	# Emperor Impact: os 75% são o valor final (sem somar Garçom/Predator). Os outros chutes somam.
+	var chance: float = base_chance if reaction != null else minf(base_chance + _shot_bonus(), 1.0)
+	var fx: KickFX = emperor_fx if reaction != null else kick_fx
 	# Errou o QTE = chute fraquinho, sem aura
 	await kick_ball(ball, dir, kind, qte_ok, chance, false,
-		kick_fx if qte_ok else null, anim, on_kick)
+		fx if qte_ok else null, anim, on_kick)
 	start_cooldown(CD_SHOT, shot_cooldown)
 	return true
 
@@ -536,6 +604,20 @@ func _launch_magnus(ball: Ball, _dir: Vector2, speed: float, aim: Vector2) -> vo
 
 func _launch_impact(ball: Ball, _dir: Vector2, _speed: float) -> void:
 	_drive_ball(ball, impact_flight_time, _impact_step)
+
+
+## Emperor Impact: igual ao Kaiser Impact (bola reta e Suspensa), só que por mais tempo, e no
+## instante do chute nasce a rosa azul gigante (+ clarão e tremida de câmera)
+func _launch_emperor(ball: Ball, _dir: Vector2, _speed: float) -> void:
+	_drive_ball(ball, emperor_flight_time, _impact_step)
+	HerbivicusFX.emperor_burst(self, global_position + Vector2(0.0, -height), ball, emperor_rose_radius)
+
+
+## Animação do Emperor Impact: usa a "emperor_impact" se o personagem tiver; senão, a do Kaiser Impact
+func _emperor_anim() -> StringName:
+	if _has_art and animated_sprite.sprite_frames.has_animation(&"emperor_impact"):
+		return &"emperor_impact"
+	return &"kaiser_impact"
 
 
 ## Um passo da condução do Magnus: curva a velocidade e sobe suavemente até o nível Suspenso
@@ -653,7 +735,13 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 				ShotVariant.BEINSCHUSS:
 					text = "Bicicleta no ar. %d%% de chance de gol." % _pct(chance_beinschuss)
 				ShotVariant.IMPACT:
-					text = "Chute reto e rápido. %d%% de chance de gol." % _pct(chance_impact)
+					var reaction: ChemicalReaction = _find_reaction()
+					if reaction != null:
+						title = "Emperor Impact"
+						text = "Reação Química Herbivicus com o Ness: chute reto, mais forte e mais rápido, com uma rosa azul gigante. %d%% de chance de gol.\nA reação recarrega em %d rodadas." % [
+							_pct(chance_emperor), reaction.cooldown_rounds]
+					else:
+						text = "Chute reto e rápido. %d%% de chance de gol." % _pct(chance_impact)
 				_:
 					text = "Chute especial que muda conforme a altura dele e da bola. De %d%% a %d%% de chance de gol." % [
 						_pct(minf(chance_magnus, minf(chance_beinschuss, chance_impact))),

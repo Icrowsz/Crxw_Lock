@@ -104,6 +104,9 @@ var _dribble_ball: Ball = null
 var _prev_spell_owner: Player = null
 ## O complemento Undead Pass está liberado neste turno?
 var _undead_ready: bool = false
+## Dado público do último Undead Pass (a reação Feeding do Barou lê isto):
+## {"target": quem recebeu, "round": rodada, "touches": toques na bola depois do passe}
+var last_undead_pass: Dictionary = {}
 
 # --- Yo.. ---
 var _yo_target: Player = null
@@ -397,10 +400,32 @@ func _use_undead_pass() -> bool:
 	var target: Player = await m.pick_ally_for_skill(self, undead_range)
 	if target == null:
 		return false   # cancelou: o complemento continua disponível
+	# Feeding: passe para o Barou com a reação disponível -> brilho + zumbi translúcido acompanhando a bola
+	var feeding_fx: FeedingFX = null
+	if _feeding_ready_for(target):
+		feeding_fx = FeedingFX.attach_to_ball(ball)
 	await m.run_ground_pass(self, target, ball)
+	if feeding_fx != null and is_instance_valid(feeding_fx):
+		feeding_fx.finish()
+	# Avisa a reação Feeding: quem recebeu, em que rodada e quantos toques a bola tinha depois do passe
+	last_undead_pass = {"target": target, "round": m.round_number, "touches": ball.interaction_count}
 	_undead_ready = false
 	queue_redraw()
 	return true
+
+
+## O passe para este jogador carrega a reação Feeding? (alvo = Barou com o Predator Eye ativo e a reação fora de recarga)
+func _feeding_ready_for(target: Player) -> bool:
+	var barou := target as Barou
+	if barou == null or not barou._predator_active():
+		return false
+	var rm: ReactionManager = ReactionManager.get_for(self)
+	if rm == null:
+		return false
+	for r: ChemicalReaction in rm.reactions:
+		if r.id == &"feeding":
+			return rm.is_ready(r, team)
+	return false
 
 
 # ---------- YO.. ----------
@@ -789,6 +814,7 @@ func reset_for_new_match() -> void:
 	super()
 	_end_dribble()
 	_undead_ready = false
+	last_undead_pass = {}
 	_yo_target = null
 	_yo_until = -1
 	_clear_all_marks()

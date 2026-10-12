@@ -43,6 +43,10 @@ extends Player
 ##   para habilidades, com animação/aura própria e alcance próprio. Usada pelo Chilling
 ##   Pass / No Look Cross.
 ##
+## Reação Química ONE MORE TIME (com o Isagi, veja reaction_one_more_time.gd): o Ultrasadist anota
+## o último uso em last_ultrasadist (a reação lê isto) e, quando cumpre as condições da reação,
+## sai brilhando e congelando o chão por onde a bola passa (charged_fx + one_more_time_fx.gd).
+##
 ## Como montar a cena: igual ao Isagi/Rin/Charles — Nova Cena Herdada de player.tscn ->
 ## anexe este script ao nó raiz -> renomeie o nó raiz para "Hiori".
 
@@ -95,6 +99,8 @@ enum PassVariant { NONE, CHILLING, NO_LOOK }
 @export_group("Visual do chute")
 ## Aura + partículas dos chutes/passes de habilidade. Vazio = usa o estilo padrão (veja _make_kick_fx)
 @export var kick_fx: KickFX
+## Aura do Ultrasadist quando ele cumpre as condições da reação One More Time. Vazio = estilo padrão
+@export var charged_fx: KickFX
 
 @export_group("Descrição (hover)")
 ## Imagem de cada habilidade no balão do menu. Chaves: chilling_pass, glacial_cut,
@@ -112,6 +118,10 @@ var _assist_target: Player = null
 ## A próxima chamada de start_run() deve somar o bônus da Coldest Metavision?
 var _coldest_run_bonus_pending: bool = false
 
+## Último Ultrasadist usado (as Reações Químicas leem isto, ex: One More Time):
+## {"landing": local escolhido, "touches": toques na bola logo depois do passe}
+var last_ultrasadist: Dictionary = {}
+
 
 func _init() -> void:
 	character_id = "hiori"   # o menu de formação usa isto para saber quem é quem
@@ -122,6 +132,8 @@ func _ready() -> void:
 	super()
 	if kick_fx == null:
 		kick_fx = _make_kick_fx()
+	if charged_fx == null:
+		charged_fx = _make_charged_fx()
 	_hook_manager.call_deferred()
 
 
@@ -141,6 +153,26 @@ func _make_kick_fx() -> KickFX:
 	fx.scale_max = 0.28
 	fx.burst_amount = 12
 	fx.burst_speed = 180.0
+	return fx
+
+
+## Ultrasadist "carregado" (One More Time): o mesmo estilo, só que bem mais largo, brilhante e
+## cheio de lascas de gelo
+func _make_charged_fx() -> KickFX:
+	var fx := _make_kick_fx()
+	fx.color = Color(0.75, 0.95, 1.0, 1.0)
+	fx.trail_width = 24.0
+	fx.particle_color = Color(1.0, 1.0, 1.0, 1.0)
+	fx.amount = 50
+	fx.lifetime = 0.8
+	fx.speed_min = 20.0
+	fx.speed_max = 100.0
+	fx.gravity = Vector2(0.0, -30.0)
+	fx.spin = 400.0
+	fx.scale_min = 0.15
+	fx.scale_max = 0.4
+	fx.burst_amount = 36
+	fx.burst_speed = 300.0
 	return fx
 
 
@@ -295,13 +327,27 @@ func _use_ultrasadist() -> bool:
 		landing = global_position + bad_dir * dist
 
 	ball.register_touch(self)   # o passe alto não usa kick(), então registra o toque aqui
-	if kick_fx:
+
+	# One More Time (Hiori + Isagi): se este Ultrasadist cumpre as condições da reação, ele brilha e
+	# congela o chão por onde a bola passa (inclusive quando ela chega ao local, no próximo turno)
+	var charged: bool = ReactionOneMoreTime.is_ultrasadist_charged(self)
+	last_ultrasadist = {}
+	if charged:
+		ball.play_fx(charged_fx)
+		OneMoreTimeFX.attach_frost_trail(ball, OneMoreTimeFX.Style.ULTRASADIST)
+		OneMoreTimeFX.ice_burst(self, ball.sprite.global_position, 40)
+	elif kick_fx:
 		ball.play_fx(kick_fx)
 	var midpoint: Vector2 = (ball.global_position + landing) * 0.5
 	var tween: Tween = ball.hover_to(midpoint, Heights.FLYING_HEIGHT, 0.9)
 	await tween.finished
 
 	m.begin_point_pass(team, landing)
+
+	# Avisa as Reações Químicas (a One More Time lê isto): o Ultrasadist saiu e a bola é dele
+	last_ultrasadist = {"landing": landing, "touches": ball.interaction_count}
+	if charged:
+		OneMoreTimeFX.ice_burst(self, ball.sprite.global_position, 30)
 	queue_redraw()
 	return true
 
@@ -535,6 +581,7 @@ func reset_for_new_match() -> void:
 	_metavision_until_round = -1
 	_assist_target = null
 	_coldest_run_bonus_pending = false
+	last_ultrasadist = {}
 	queue_redraw()
 
 

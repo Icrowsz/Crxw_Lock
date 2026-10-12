@@ -1,7 +1,8 @@
 class_name Reo
 extends Player
 ## Reo Mikage. Herda tudo do Player (ações gerais) e adiciona as habilidades próprias.
-## Este script NÃO exige mudanças em nenhum outro arquivo.
+## O Our Dream (habilidade 3) faz parte da Reação Química Miracle: ele depende do reaction_miracle.gd
+## e do registro dela no reaction_manager.gd. Sem o Nagi no time, o botão do Our Dream nem aparece.
 ##
 ## 1. Copy (ação de habilidade): escolhe qualquer personagem em campo a até copy_range px,
 ##      passa num QTE fácil e escolhe UMA habilidade dele para copiar. Só uma cópia por vez; ela
@@ -15,6 +16,10 @@ extends Player
 ##                            suspensa/voando -> salta até ela e cabeceia.
 ##      - terço do meio    -> Chameleon Support: passe rasteiro com alcance de 500
 ##      - terço de ataque  -> Chameleon Offensive: chute direto, em qualquer estado
+## 3. Our Dream (4º botão; só aparece se o Nagi é do mesmo time): passe alto CURVO de alcance dream_range.
+##      O Reo escolhe o ponto do campo onde a bola vai chegar; ela sobe agora e pousa Suspensa no começo
+##      do próximo turno do time (mesmo fluxo do passe alto comum). É a primeira metade da Reação Química
+##      Miracle (reaction_miracle.gd): o Reo guarda o último passe em last_our_dream e a reação lê esse dado.
 ##
 ## COMO A CÓPIA FUNCIONA ("personagem fantasma"):
 ##   Ao copiar, o Reo cria uma duplicata INVISÍVEL do personagem escolhido (mesma cena, então os
@@ -31,11 +36,12 @@ extends Player
 ##
 ## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
 ## -> renomeie o nó raiz para "Reo".
-## Animações opcionais: copy, chameleon_attack, chameleon_defense, chameleon_header.
+## Animações opcionais: copy, chameleon_attack, chameleon_defense, chameleon_header, our_dream.
 
 const SKILL_COPY: StringName = &"copy"
 const SKILL_ROLE: StringName = &"role"
 const SKILL_COPIED: StringName = &"copied"
+const SKILL_DREAM: StringName = &"our_dream"
 
 const CD_COPY: StringName = &"cd_copy"
 const CD_ROLE: StringName = &"cd_role"
@@ -43,6 +49,9 @@ const CD_ROLE: StringName = &"cd_role"
 enum Zone { DEFENSE, SUPPORT, OFFENSIVE }
 
 const COLOR_PURPLE := Color(0.65, 0.3, 0.95)
+
+## id da Reação Química Miracle (reaction_miracle.gd): o Our Dream só vale com ela fora de recarga
+const REACTION_MIRACLE: StringName = &"miracle"
 
 signal popup_done(index: int)
 
@@ -63,6 +72,17 @@ signal popup_done(index: int)
 @export var header_jump_time: float = 0.3
 @export var chance_header: float = -1.0               # -1 = a chance padrão do tipo de chute
 
+@export_group("Our Dream (Reação Miracle)")
+@export var dream_range: float = 500.0                # alcance do passe (px, medido a partir do Reo)
+@export_range(0.0, 0.6) var dream_curve: float = 0.25 # o quanto a bola curva (fração da distância; 0.25 = desvio de 25%)
+@export var dream_bend_sign: float = 1.0              # +1 / -1 = para qual lado a bola curva
+@export var dream_flight_time: float = 0.9            # tempo da subida (igual ao passe alto comum)
+@export_range(0.2, 0.9) var dream_flight_fraction: float = 0.6   # até onde da curva a bola vai agora; o resto o MatchManager faz no próximo turno
+## true = só aparece/vale com a reação Miracle fora de recarga. false = sempre pode (aí é só um passe curvo)
+@export var dream_only_when_reaction_ready: bool = true
+## true = o Our Dream NÃO gasta ação de habilidade ("recebida passivamente"). false = gasta uma, como as outras
+@export var dream_is_free: bool = false
+
 @export_group("Visual")
 @export var kick_fx: KickFX                           # vazio = estilo roxo padrão
 @export var aura_amount: int = 46                     # partículas roxas enquanto tem cópia
@@ -74,7 +94,7 @@ signal popup_done(index: int)
 @export var face_offset: float = 46.0                 # distância acima da cabeça
 
 @export_group("Descrição (hover)")
-## Imagem de cada habilidade no balão do menu. Chaves: copy, role, copied.
+## Imagem de cada habilidade no balão do menu. Chaves: copy, role, copied, our_dream.
 ## Sem imagem, o balão aparece só com o texto.
 @export var skill_icons: Dictionary = {}
 
@@ -82,6 +102,10 @@ var _copy_ghost: Player = null
 var _copy_skill_id: StringName = &""
 var _copy_until_round: int = -1
 var _ghost_busy: bool = false          # o fantasma está executando a habilidade agora
+
+## Último Our Dream feito (a Reação Miracle lê isto): {"point": onde a bola chega, "round": rodada em que
+## o passe saiu, "touches": toques na bola logo depois do passe}. Vazio = nenhum.
+var last_our_dream: Dictionary = {}
 
 var _aura: CPUParticles2D
 var _burst: CPUParticles2D            # explosão roxa na hora em que a cópia é feita
@@ -731,6 +755,122 @@ func _use_header() -> bool:
 	return true
 
 
+# ---------- OUR DREAM (Reação Química Miracle) ----------
+
+## O Nagi (parceiro da reação) do mesmo time do Reo. null = não tem: aí o botão nem aparece.
+func _find_dream_partner() -> Player:
+	var m: MatchManager = _get_manager()
+	if m == null:
+		return null
+	for p: Player in m.get_team_players(team):
+		if p.character_id == "nagi":
+			return p
+	return null
+
+
+## Rodadas que faltam para a reação Miracle voltar a poder ser usada pelo time (0 = pronta)
+func _miracle_rounds_left() -> int:
+	var rm: ReactionManager = ReactionManager.get_for(self)
+	if rm == null:
+		return 0
+	for reaction: ChemicalReaction in rm.reactions:
+		if reaction.id == REACTION_MIRACLE:
+			return rm.rounds_left(reaction, team)
+	return 0
+
+
+func _dream_available() -> bool:
+	if _find_dream_partner() == null:
+		return false
+	if dream_only_when_reaction_ready and _miracle_rounds_left() > 0:
+		return false
+	return get_kick_type(_get_ball()) != KickType.NONE   # a bola precisa estar ao alcance dele
+
+
+func _dream_label() -> String:
+	var left: int = _miracle_rounds_left()
+	if dream_only_when_reaction_ready and left > 0:
+		return "Our Dream (reação em recarga %d)" % left
+	return "Our Dream"
+
+
+## O Our Dream só deixa de gastar ação de habilidade se dream_is_free estiver ligado
+func skill_is_free(skill_id: StringName) -> bool:
+	return skill_id == SKILL_DREAM and dream_is_free
+
+
+## Our Dream: passe alto curvo. O Reo escolhe o ponto onde a bola vai chegar. Ela sobe fazendo a
+## curva até o nível Voando e fica pairando; no começo do próximo turno do time o MatchManager a
+## leva até o ponto, no nível Suspenso (igual ao passe alto comum). Se ninguém tocar, ela cai.
+func _use_dream() -> bool:
+	var m: MatchManager = _get_manager()
+	var ball: Ball = _get_ball()
+	if m == null or ball == null or not _dream_available():
+		return false
+
+	# 1) Onde a bola vai chegar (clique no campo; clique direito/Esc cancela e NÃO gasta a ação)
+	var point: Vector2 = await m.pick_point_for_skill(self, dream_range)
+	if point == Vector2.INF:
+		return false
+
+	# 2) Animação do passe (a bola só sai no frame de impacto). A bola pode ter se mexido: confere de novo
+	face_towards(point - global_position)
+	if not await play_action(&"our_dream", ANIM_PASS_HIGH):
+		return false
+	ball = _get_ball()
+	if ball == null or get_kick_type(ball) == KickType.NONE:
+		return false
+
+	m.clear_pending_pass()       # se a bola era um passe alto em andamento, ele deixa de valer
+	ball.register_touch(self)    # o passe alto não usa kick(), então registra o toque aqui
+
+	# 3) A bola sobe fazendo a curva e fica pairando
+	await _fly_dream_ball(ball, point)
+
+	# 4) O resto (descer até o ponto no próximo turno, cair se ninguém tocar) é do MatchManager
+	m.begin_point_pass(team, point)
+	m._spawn_pass_marker(team, point, ball)   # a marca no chão mostrando onde a bola vai chegar
+	last_our_dream = {
+		"point": point,
+		"round": get_current_round(),
+		"touches": ball.interaction_count,
+	}
+	return true
+
+
+## Leva a bola por uma curva (Bézier) até dream_flight_fraction do caminho, subindo até Voando
+func _fly_dream_ball(ball: Ball, point: Vector2) -> void:
+	var start: Vector2 = ball.global_position
+	var h0: float = ball.height
+	var control: Vector2 = MatchManager.curve_control_point(start, point, dream_curve, dream_bend_sign)
+
+	# Troca a física pelo modo "pairando" (um hover_to curtinho no lugar); depois o voo é nosso
+	await ball.hover_to(start, h0, 0.02).finished
+	ball.trail_enabled = true
+	var previous_fx: bool = ball.fx_during_hover
+	ball.fx_during_hover = true
+	ball.play_fx(kick_fx)
+
+	var t_end: float = dream_flight_fraction
+	var flight: Tween = ball.create_tween()
+	flight.tween_method(_step_dream_ball.bind(ball, start, control, point, h0, t_end),
+		0.0, t_end, dream_flight_time).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	await flight.finished
+
+	ball.trail_enabled = false
+	ball.stop_fx()
+	ball.fx_during_hover = previous_fx
+
+
+## Um passo do voo: t vai de 0 até t_end na curva; a altura sobe até Voando
+func _step_dream_ball(t: float, ball: Ball, start: Vector2, control: Vector2, point: Vector2,
+		h0: float, t_end: float) -> void:
+	if not is_instance_valid(ball):
+		return
+	ball.global_position = MatchManager.curve_point(start, control, point, t)
+	ball.height = lerpf(h0, Heights.FLYING_HEIGHT, sin(t / t_end * PI * 0.5))
+
+
 # ---------- SISTEMA DE HABILIDADES (menu) ----------
 
 func get_skills() -> Array[Dictionary]:
@@ -742,6 +882,8 @@ func get_skills() -> Array[Dictionary]:
 	if _copy_ghost != null:
 		copied_name = "%s (cópia)" % _ghost_skill_name()
 	list.append({"id": SKILL_COPIED, "name": copied_name})
+	if _find_dream_partner() != null:   # o Our Dream só existe se o Nagi é do time
+		list.append({"id": SKILL_DREAM, "name": _dream_label()})
 	return list
 
 
@@ -759,6 +901,8 @@ func can_use_skill(skill_id: StringName = &"default") -> bool:
 				return false
 			_sync_ghost_from_reo()
 			return _copy_ghost.can_use_skill(_copy_skill_id)
+		SKILL_DREAM:
+			return _dream_available()
 	return false
 
 
@@ -770,6 +914,8 @@ func use_skill(skill_id: StringName = &"default") -> bool:
 			return await _use_role()
 		SKILL_COPIED:
 			return await _use_copied()
+		SKILL_DREAM:
+			return await _use_dream()
 	return false
 
 
@@ -818,6 +964,12 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 			else:
 				title = "Cópia"
 				text = "Aqui aparece a habilidade que você copiar com o Copy."
+		SKILL_DREAM:
+			title = "Our Dream"
+			text = ("Passe alto curvo (alcance %d): você escolhe onde a bola vai chegar. Ela pousa Suspensa no começo do próximo turno do time.\n"
+				+ "Se o Nagi pegar a bola e usar o Fake Volley com um inimigo perto, nasce a Reação Química Miracle.") % int(dream_range)
+			if dream_only_when_reaction_ready and _miracle_rounds_left() > 0:
+				text += "\nReação Miracle em recarga: %d rodada(s)." % _miracle_rounds_left()
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D
@@ -827,6 +979,7 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 func reset_for_new_match() -> void:
 	super()
 	_drop_ghost()
+	last_our_dream = {}
 	range_preview = 0.0
 
 

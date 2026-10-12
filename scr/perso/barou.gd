@@ -15,6 +15,10 @@ extends Player
 ##    Tyrant (variante): aparece se houver um aliado perto da bola e a até 200 px de Barou.
 ##      Faz o mesmo efeito, e o aliado dá um passe rasteiro para Barou. Usa a mesma recarga.
 ##
+## 4. Devour (reação química Feeding, com o Lorenzo): é o Nero melhorado. Aparece no lugar do Nero quando o
+##      Lorenzo acabou de dar o Undead Pass para o Barou, o Predator Eye está ativo e há um inimigo perto
+##      (veja reaction_feeding.gd).
+##
 ## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
 ## -> renomeie o nó raiz para "Barou" (o nome aparece no placar de gols).
 ##
@@ -46,6 +50,12 @@ enum ShotVariant { NONE, NERO, TERROR, VILLAIN }
 @export var curve_side: float = 1.0                # 1 ou -1: para que lado a bola curva
 @export var terror_curve_time: float = 0.5         # curva pequena: dura pouco
 @export var villain_curve_time: float = 3.0        # curva se mantém até a bola parar (ou este limite)
+
+@export_group("Devour (reação Feeding)")
+@export_range(0.0, 1.0) var devour_chance: float = 0.80
+@export var devour_force_mult: float = 1.7         # "mais forte e veloz" (a velocidade da bola vem da força)
+@export var devour_lion_time: float = 1.7          # quanto tempo o leão fica na bola (s)
+@export var devour_lion_size: float = 110.0        # tamanho do leão (raio do rosto, em px)
 
 @export_group("Chop King")
 @export var chop_run_time: float = 0.7         # duração de cada corrida (muito curta)
@@ -147,7 +157,7 @@ func kick_ball(ball: Ball, direction: Vector2, kind: KickType, qte_success: bool
 	if _predator_active():
 		var base_chance: float = chance_override if chance_override >= 0.0 else get_shot_chance(kind)
 		chance_override = base_chance + predator_shot_bonus
-	await super(ball, direction, kind, qte_success, chance_override, ignore_self_collision, fx, anim)
+	await super(ball, direction, kind, qte_success, chance_override, ignore_self_collision, fx, anim, on_kick)
 
 
 # ---------- CHUTE: NERO / TERROR / VILLAIN ----------
@@ -171,6 +181,8 @@ func get_shot_variant() -> ShotVariant:
 
 
 func _shot_skill_name() -> String:
+	if _find_feeding() != null:
+		return "Devour"   # reação Feeding disponível: o Nero muda de nome
 	match get_shot_variant():
 		ShotVariant.TERROR:
 			return "Terror"
@@ -214,8 +226,28 @@ func _use_shot() -> bool:
 			force_mult = villain_force_mult
 			curve_time = villain_curve_time
 
+	# FEEDING (reação química Lorenzo + Barou): o Nero vira Devour
+	var reaction: ChemicalReaction = null
+	var partner: Player = null
+	var shot_fx: KickFX = kick_fx
+	var on_kick: Callable = Callable()
+	if variant == ShotVariant.NERO:
+		reaction = _find_feeding()
+		if reaction != null:
+			partner = reaction.find_partner(self)
+	if reaction != null and partner != null:
+		# Congela a partida, toca a cutscene e SÓ DEPOIS do diálogo o chute acontece
+		await ReactionManager.get_for(self).play(reaction, self, partner)
+		if not is_inside_tree():
+			return false
+		chance = devour_chance
+		anim = &"devour"          # sem essa animação no SpriteFrames, usa a do chute normal
+		force_mult = devour_force_mult
+		shot_fx = _make_devour_fx()
+		on_kick = _roar_lion       # o leão aparece no instante em que a bola sai
+
 	next_kick_force_mult *= force_mult
-	await kick_ball(ball, aim, kind, true, chance, false, kick_fx, anim)
+	await kick_ball(ball, aim, kind, true, chance, false, shot_fx, anim, on_kick)
 
 	# Curva: começa depois que a bola foi chutada (kick_ball já a soltou)
 	if curve_time > 0.0:
@@ -223,6 +255,43 @@ func _use_shot() -> bool:
 
 	start_cooldown(CD_SHOT, shot_cooldown)
 	return true
+
+
+## A reação Feeding está disponível agora? (só vale para o Nero; devolve a reação ou null)
+func _find_feeding() -> ChemicalReaction:
+	if get_shot_variant() != ShotVariant.NERO:
+		return null
+	var rm: ReactionManager = ReactionManager.get_for(self)
+	if rm == null:
+		return null
+	var reaction: ChemicalReaction = rm.find_available(self)
+	if reaction != null and reaction.id == &"feeding":
+		return reaction
+	return null
+
+
+## Aura do Devour: a mesma do Barou, só que maior e mais intensa
+func _make_devour_fx() -> KickFX:
+	var fx := KickFX.new()
+	fx.color = Color(0.9, 0.02, 0.03, 1.0)
+	fx.trail_width = 26.0
+	fx.particle_color = Color(0.05, 0.0, 0.0)
+	fx.amount = 48
+	fx.lifetime = 0.7
+	fx.speed_min = 50.0
+	fx.speed_max = 170.0
+	fx.gravity = Vector2.ZERO
+	fx.spin = 360.0
+	fx.scale_min = 0.2
+	fx.scale_max = 0.5
+	fx.burst_amount = 36
+	fx.burst_speed = 380.0
+	return fx
+
+
+## Chamado pelo kick_ball (on_kick) no instante em que a bola sai: o leão aparece na bola e ruge
+func _roar_lion(ball: Ball, _dir: Vector2, _speed: float) -> void:
+	FeedingFX.attach_lion(ball, devour_lion_time, devour_lion_size)
 
 
 ## Empurra a bola para o lado (perpendicular à direção dela) enquanto ela anda.
@@ -465,6 +534,10 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 				ShotVariant.NERO:
 					title = "Nero"
 					text = nero_text
+					if _find_feeding() != null:
+						title = "Devour"
+						text = "Reação Química (Feeding) com o Lorenzo: chute rasteiro com %d%% mais força e velocidade. %d%% de chance de gol." % [
+							_pct(devour_force_mult - 1.0), _pct(devour_chance)]
 				_:
 					title = "Nero / Terror / Villain"
 					text = nero_text + "\n" + terror_text + "\n" + villain_text

@@ -29,11 +29,14 @@ const CHARACTERS: Array[Dictionary] = [
 	{"id": "nagi", "name": "Nagi", "scene": "res://cena/perso/nagi.tscn"},
 	{"id": "ness", "name": "Ness", "scene": "res://cena/perso/ness.tscn"},
 	{"id": "niko", "name": "Niko", "scene": "res://cena/perso/niko.tscn"},
-	{"id": "sendou", "name": "Sendou", "scene": "res://cena/perso/sendou.tscn"},
+	{"id": "otoya", "name": "Otoya", "scene": "res://cena/perso/otoya.tscn"},
 	{"id": "raichi", "name": "Raichi", "scene": "res://cena/perso/raichi.tscn"},
+	{"id": "reo", "name": "Reo", "scene": "res://cena/perso/reo.tscn"},
 	{"id": "rin", "name": "Rin", "scene": "res://cena/perso/rin.tscn"},
 	{"id": "sae", "name": "Sae", "scene": "res://cena/perso/sae.tscn"},
+	{"id": "sendou", "name": "Sendou", "scene": "res://cena/perso/sendou.tscn"},
 	{"id": "shidou", "name": "Shidou", "scene": "res://cena/perso/shidou.tscn"},
+	{"id": "yukimiya", "name": "Yukimiya", "scene": "res://cena/perso/yukimiya.tscn"},
 	{"id": "zantetsu", "name": "Zantetsu", "scene": "res://cena/perso/zantetsu.tscn"},
 ]
 

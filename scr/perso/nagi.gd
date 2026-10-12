@@ -22,6 +22,11 @@ extends Player
 ##    - Fake Volley (variante automática; recarga de 2 rodadas): Nagi e bola Suspensos e
 ##      próximos -> chute falso (a bola sai e volta para ele). Com inimigo próximo,
 ##      +7% no PRÓXIMO chute. Uma caveira translúcida aparece.
+##      * Five Stage Volley (Reação Química Miracle, com o Reo; veja reaction_miracle.gd): se o Reo
+##        mandou um Our Dream até aqui, a bola chegou Suspensa e só o Nagi mexeu nela (o Trap), o Fake
+##        Volley com inimigo próximo vira este. Cutscene; depois o Nagi repete a finta (suspenso, andando
+##        e girando em volta da bola, com a caveira cada vez maior) e, na última etapa, volta ao ponto
+##        original e chuta forte (five_chance de chance de gol).
 ## 3. Lift (recarga de 1 rodada): com a bola próxima, levanta a bola E ele um nível
 ##      (Chão -> Suspenso -> Voando).
 ##    - Control (complemento, GRATUITO; recarga de 1 rodada): com a bola já Voando e Nagi
@@ -34,7 +39,7 @@ extends Player
 ## -> renomeie o nó raiz para "Nagi".
 ##
 ## Animações opcionais (nomes na SpriteFrames; as que faltarem são puladas):
-##   trap, heavy, bicycle, zero_reset_turn, fake_volley, lift, control
+##   trap, heavy, bicycle, zero_reset_turn, fake_volley, five_stage_volley, lift, control
 ## Frame de impacto em hit_frames, ex: {"heavy": 4, "bicycle": 5, "trap": 3}
 
 const SKILL_TRAP: StringName = &"trap"
@@ -83,6 +88,21 @@ enum ZeroVariant { NONE, ZERO_RESET, FAKE_VOLLEY }
 @export var fake_out_time: float = 0.18
 @export var fake_back_time: float = 0.22
 
+@export_group("Miracle (Five Stage Volley)")
+@export_range(0.0, 1.0) var five_chance: float = 0.80   # chance de gol do chute final
+@export var five_force_mult: float = 1.6                # força do chute final, em múltiplos do voleio normal ("bem forte")
+@export var five_uses_qte: bool = true                  # o chute final tem QTE de voleio (errou = chute fraco e cai)
+@export var five_stages: int = 6                        # etapas no total: a 1ª é o Fake Volley parado, a última é o chute
+@export var five_stage_time: float = 0.65               # duração do movimento de cada etapa do meio
+@export var five_orbit_radius: float = 95.0             # raio da órbita do Nagi em volta da bola
+@export var five_spin_turns: float = 2.0                # voltas completas que ele gira em cada etapa do meio
+@export var five_return_time: float = 0.22              # tempo da volta ao ponto original, na última etapa
+@export var five_travel_growth: float = 0.6             # a finta da bola vai ficando maior (0.6 = +60% na última)
+@export var five_skull_start: float = 1.5               # tamanho da caveira na 1ª etapa (1.0 = o do Fake Volley normal)
+@export var five_skull_end: float = 6.5                 # tamanho da caveira na última
+@export var five_shake: float = 8.0                     # tremor da câmera (px) na última finta; o chute final treme o dobro
+@export var five_fx: KickFX                             # vazio = estilo padrão (branco com brilho violeta, veja _make_five_fx)
+
 @export_group("Lift / Control")
 @export var lift_cooldown: int = 1
 @export var lift_time: float = 0.3
@@ -114,6 +134,12 @@ var _zero_anchor: Vector2 = Vector2.ZERO   # onde a bola foi deixada
 ## Ações extras temporárias (Control / Zero Reset Turn): sobra no fim do turno do time dele = some
 var _temp_extras: int = 0
 
+## Miracle (Five Stage Volley)
+var _five_aura: CPUParticles2D        # partículas brancas em volta do Nagi durante a sequência
+var _shake_tween: Tween
+var _shake_cam: Camera2D
+var _shake_rest: Vector2 = Vector2.ZERO
+
 # Efeitos visuais desenhados no _draw
 var _fx_kind: StringName = &""
 var _fx_color: Color = Color.WHITE
@@ -124,6 +150,7 @@ var _fx_t: float = 1.0:
 		queue_redraw()
 
 var _skull_tween: Tween
+var _skull_mult: float = 1.0   # tamanho da caveira (1.0 = a do Fake Volley normal)
 var _skull_t: float = 1.0:   # 1.0 = caveira escondida
 	set(v):
 		_skull_t = v
@@ -447,6 +474,9 @@ func _use_zero_skill() -> bool:
 		ZeroVariant.ZERO_RESET:
 			return await _use_zero_reset()
 		ZeroVariant.FAKE_VOLLEY:
+			# Reação Química Miracle: com as condições cumpridas, o Fake Volley vira o Five Stage Volley
+			if _miracle_available() != null:
+				return await _use_five_stage_volley()
 			return await _use_fake_volley()
 	return false
 
@@ -593,6 +623,270 @@ func _use_fake_volley() -> bool:
 	return true
 
 
+# ---------- 2a. FIVE STAGE VOLLEY (Reação Química Miracle, com o Reo) ----------
+
+## A reação Miracle está disponível agora? Devolve a reação ou null. Confere o que é do Nagi
+## (Fake Volley liberado + inimigo por perto); o resto (Our Dream do Reo, bola intocada, recarga
+## do time) é do reaction_miracle.gd e do ReactionManager.
+func _miracle_available() -> ChemicalReaction:
+	if get_zero_variant() != ZeroVariant.FAKE_VOLLEY:
+		return null
+	if _enemies_within(fake_enemy_radius).is_empty():
+		return null
+	var rm: ReactionManager = ReactionManager.get_for(self)
+	if rm == null:
+		return null
+	var reaction: ChemicalReaction = rm.find_available(self)
+	if reaction == null or reaction.id != &"miracle":
+		return null
+	return reaction
+
+
+func _use_five_stage_volley() -> bool:
+	var m: MatchManager = _get_manager()
+	var ball: Ball = _get_ball()
+	var reaction: ChemicalReaction = _miracle_available()
+	if m == null or ball == null or reaction == null:
+		return false
+	var partner: Player = reaction.find_partner(self)
+	if partner == null:
+		return false
+
+	# 1) Mira do chute final. Cancelar aqui NÃO gasta nada: a cutscene e a recarga só começam depois
+	var aim: Vector2 = await m.aim_for_skill(self, kick_aim_range)
+	if aim == Vector2.ZERO:
+		return false
+	# Tudo pode ter mudado enquanto ele mirava: confere de novo
+	ball = _get_ball()
+	reaction = _miracle_available()
+	if ball == null or reaction == null:
+		return false
+	partner = reaction.find_partner(self)
+	if partner == null:
+		return false
+
+	# 2) Cutscene: a partida congela, toca o diálogo e SÓ DEPOIS o movimento acontece
+	var rm: ReactionManager = ReactionManager.get_for(self)
+	if rm == null:
+		return false
+	await rm.play(reaction, self, partner)
+	ball = _get_ball()
+	if ball == null:
+		return false
+
+	# 3) Prepara a sequência
+	if five_fx == null:
+		five_fx = _make_five_fx()
+	var origin: Vector2 = global_position
+	var to_ball: Vector2 = ball.global_position - global_position
+	var rest_dir: Vector2 = to_ball.normalized() if to_ball.length() > 1.0 else Vector2(facing, 0.0)
+	var home: Vector2 = origin + rest_dir * zero_ball_distance   # onde a bola fica pairando, do lado dele
+	var level_height: float = Heights.SUSPENDED_HEIGHT
+	var out_dir: Vector2 = _nearest_enemy_dir(_enemies_within(fake_enemy_radius))
+	var base_angle: float = (origin - home).angle()               # de que lado da bola ele começou
+	var stage_count: int = maxi(five_stages, 2)
+
+	var previous_hover_fx: bool = ball.fx_during_hover
+	ball.fx_during_hover = true   # a aura da bola continua mesmo com ela pairando
+	_start_five_aura()
+
+	# 4) Etapas de finta: a 1ª é o Fake Volley parado; as do meio andam em órbita e giram, suspenso
+	for k in range(stage_count - 1):
+		var progress: float = float(k) / float(stage_count - 1)
+		_show_skull(lerpf(five_skull_start, five_skull_end, progress), five_stage_time + 0.4)
+		_say("STAGE %d" % (k + 1))
+		_pulse(&"ring", Color(0.92, 0.88, 1.0), five_stage_time)
+		_shake_camera(lerpf(1.5, five_shake, progress), 0.25)
+
+		var move_tw: Tween = null
+		if k > 0:
+			var angle: float = base_angle + TAU * float(k) / float(stage_count - 1)
+			var spot: Vector2 = home + Vector2.from_angle(angle) * five_orbit_radius
+			face_towards(home - spot)
+			move_tw = create_tween().set_parallel(true)
+			move_tw.tween_property(self, "global_position", spot, five_stage_time) \
+				.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+			if _lift_node != null:
+				move_tw.tween_property(_lift_node, "rotation", TAU * five_spin_turns * facing, five_stage_time) \
+					.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+		else:
+			face_towards(home - origin)
+
+		if not await play_action(&"fake_volley", ANIM_VOLLEY):
+			_five_cleanup(ball, previous_hover_fx)
+			return false
+		ball = _get_ball()
+		if ball == null:
+			_five_cleanup(null, previous_hover_fx)
+			return false
+
+		# A bola "sai" na direção do inimigo e volta; a cada etapa vai um pouco mais longe
+		var travel: float = fake_travel * (1.0 + five_travel_growth * progress)
+		ball.register_touch(self)
+		ball.play_fx(five_fx)   # chamado DEPOIS do register_touch: recomeça a aura e solta uma explosão
+		var out_tween: Tween = ball.hover_to(home + out_dir * travel, level_height + fake_lift, fake_out_time)
+		await out_tween.finished
+		var back_tween: Tween = ball.hover_to(home, level_height, fake_back_time)
+		await back_tween.finished
+
+		# Espera o Nagi acabar de andar/girar (se o tween já acabou, ele não é mais válido: não espera)
+		if move_tw != null and move_tw.is_valid():
+			await move_tw.finished
+		_reset_spin()
+
+	# 5) Última etapa: volta ao ponto original e dispara
+	_show_skull(five_skull_end, 1.0)
+	_say("MIRACLE!")
+	_pulse(&"beam", Color(1.0, 1.0, 1.0), 0.6)
+	_shake_camera(five_shake, 0.35)
+	face_towards(aim)
+	var dash: Tween = create_tween()
+	dash.tween_property(self, "global_position", origin, five_return_time) \
+		.set_trans(Tween.TRANS_EXPO).set_ease(Tween.EASE_OUT)
+	await dash.finished
+
+	ball = _get_ball()
+	if ball == null:
+		_five_cleanup(null, previous_hover_fx)
+		return false
+	var qte_ok: bool = true
+	if five_uses_qte and not skips_qte():
+		qte_ok = await m.run_qte(KickType.VOLLEY)
+	var touches_before: int = ball.interaction_count
+	next_kick_force_mult = five_force_mult   # "bem forte": o kick_ball gasta isto no chute
+	# Os dois estão Suspensos, então é um voleio. 80% (five_chance) no lugar da chance padrão do voleio
+	await kick_ball(ball, aim, KickType.VOLLEY, qte_ok, five_chance, false,
+		five_fx if qte_ok else null, _anim_or(&"five_stage_volley", _anim_or(&"fake_volley", ANIM_VOLLEY)),
+		_on_five_kick)
+
+	var kicked: bool = is_instance_valid(ball) and ball.interaction_count != touches_before
+	_five_cleanup(ball, previous_hover_fx)
+	if not kicked:
+		return false   # a ação foi cancelada antes do chute (ex: a partida reiniciou)
+	start_cooldown(CD_FAKE, fake_cooldown)   # a recarga do Fake Volley vale também para a versão da reação
+	return true
+
+
+## Direção até o inimigo mais próximo (ou para onde o Nagi olha, se não houver)
+func _nearest_enemy_dir(enemies: Array[Player]) -> Vector2:
+	if enemies.is_empty():
+		return Vector2(facing, 0.0)
+	var nearest: Player = enemies[0]
+	for e: Player in enemies:
+		if e.global_position.distance_to(global_position) < nearest.global_position.distance_to(global_position):
+			nearest = e
+	var to_enemy: Vector2 = nearest.global_position - global_position
+	return to_enemy.normalized() if to_enemy.length() > 1.0 else Vector2(facing, 0.0)
+
+
+## Chamado pelo kick_ball no instante em que a bola sai: tremor forte + clarão branco
+func _on_five_kick(_ball: Ball, _dir: Vector2, _speed: float) -> void:
+	_shake_camera(five_shake * 2.0, 0.5)
+	_screen_flash(Color(1.0, 1.0, 1.0, 0.85), 0.5)
+	_pulse(&"ring", Color.WHITE, 0.7)
+
+
+## Limpa o que a sequência deixou (giro, aura de partículas, aura da bola)
+func _five_cleanup(ball: Ball, previous_hover_fx: bool) -> void:
+	_reset_spin()
+	_stop_five_aura()
+	if ball != null and is_instance_valid(ball):
+		ball.fx_during_hover = previous_hover_fx
+
+
+## O giro mexe na rotação do nó que sobe com o Nagi (visual_root / sprite). Voltar ao normal =
+## deixar o próprio Player refazer o visual dele (também respeita o "deitado" de quem caiu).
+func _reset_spin() -> void:
+	if _lift_node != null:
+		_update_visual()
+
+
+## Branco com brilho violeta (a cor do Reo): rastro grosso e giratório, explosão grande
+func _make_five_fx() -> KickFX:
+	var fx := KickFX.new()
+	fx.color = Color(1.0, 1.0, 1.0)
+	fx.trail_width = 26.0
+	fx.particle_color = Color(0.82, 0.68, 1.0)
+	fx.amount = 40
+	fx.lifetime = 0.65
+	fx.speed_min = 40.0
+	fx.speed_max = 150.0
+	fx.gravity = Vector2.ZERO
+	fx.spin = 600.0
+	fx.swirl = 90.0
+	fx.scale_min = 0.2
+	fx.scale_max = 0.55
+	fx.burst_amount = 36
+	fx.burst_speed = 420.0
+	return fx
+
+
+## Partículas brancas/violeta que sobem do Nagi enquanto dura a sequência
+func _start_five_aura() -> void:
+	if _five_aura == null:
+		_five_aura = CPUParticles2D.new()
+		_five_aura.emitting = false
+		_five_aura.amount = 60
+		_five_aura.lifetime = 0.8
+		_five_aura.local_coords = false
+		_five_aura.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+		_five_aura.emission_sphere_radius = placeholder_radius * 1.4
+		_five_aura.direction = Vector2(0.0, -1.0)
+		_five_aura.spread = 60.0
+		_five_aura.gravity = Vector2(0.0, -60.0)
+		_five_aura.initial_velocity_min = 30.0
+		_five_aura.initial_velocity_max = 90.0
+		_five_aura.scale_amount_min = 3.0
+		_five_aura.scale_amount_max = 7.0
+		var ramp := Gradient.new()
+		ramp.set_color(0, Color(0.97, 0.93, 1.0, 0.9))
+		ramp.set_color(1, Color(0.65, 0.4, 1.0, 0.0))
+		_five_aura.color_ramp = ramp
+		_five_aura.z_index = 1
+		add_child(_five_aura)
+	_five_aura.emitting = true
+
+
+func _stop_five_aura() -> void:
+	if _five_aura != null:
+		_five_aura.emitting = false
+
+
+## Tremor da câmera (mexe no offset da Camera2D ativa e devolve ao normal no fim)
+func _shake_camera(strength: float, duration: float) -> void:
+	var cam: Camera2D = get_viewport().get_camera_2d()
+	if cam == null:
+		return
+	if _shake_tween != null and _shake_tween.is_valid():
+		_shake_tween.kill()
+		if is_instance_valid(_shake_cam):
+			_shake_cam.offset = _shake_rest   # um tremor novo começou no meio de outro: volta ao zero antes
+	_shake_cam = cam
+	_shake_rest = cam.offset
+	var steps: int = maxi(int(duration / 0.03), 2)
+	_shake_tween = create_tween()
+	for i in steps:
+		var fade: float = 1.0 - float(i) / float(steps)
+		var jitter := Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * strength * fade
+		_shake_tween.tween_property(cam, "offset", _shake_rest + jitter, 0.03)
+	_shake_tween.tween_property(cam, "offset", _shake_rest, 0.03)
+
+
+## Clarão de tela cheia que some rápido
+func _screen_flash(color: Color, time: float) -> void:
+	var layer := CanvasLayer.new()
+	layer.layer = 90
+	var rect := ColorRect.new()
+	rect.color = color
+	rect.set_anchors_preset(Control.PRESET_FULL_RECT)
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	layer.add_child(rect)
+	get_tree().root.add_child(layer)
+	var tw: Tween = rect.create_tween()
+	tw.tween_property(rect, "modulate:a", 0.0, time)
+	tw.tween_callback(layer.queue_free)
+
+
 # ---------- 3. LIFT ----------
 
 func _can_lift(ball: Ball) -> bool:
@@ -674,7 +968,9 @@ func get_skills() -> Array[Dictionary]:
 	var zero_name: String
 	match get_zero_variant():
 		ZeroVariant.FAKE_VOLLEY:
-			zero_name = skill_label("Fake Volley", CD_FAKE)
+			# Reação Química Miracle: com as condições cumpridas, o botão vira Five Stage Volley
+			var fake_name: String = "Five Stage Volley" if _miracle_available() != null else "Fake Volley"
+			zero_name = skill_label(fake_name, CD_FAKE)
 		_:
 			zero_name = "Zero Reset Turn (ativo)" if _zero_active \
 				else skill_label("Zero Reset Turn", CD_ZERO)
@@ -762,7 +1058,12 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 				text = "Chute em que a bola cai no chão sem quicar. %d%% de chance de gol. De graça logo depois do Trap." % _pct(chance_heavy)
 			text += "\nRecarga: %d rodadas." % heavy_cooldown
 		SKILL_ZERO:
-			if get_zero_variant() == ZeroVariant.FAKE_VOLLEY:
+			var miracle: ChemicalReaction = _miracle_available()
+			if miracle != null:
+				title = "Five Stage Volley"
+				text = ("Reação Química Miracle com o Reo: cutscene, cinco etapas do Fake Volley (o Nagi anda e gira suspenso, a caveira cresce) e, na última, um chute fortíssimo com %d%% de chance de gol.\n"
+					+ "Recarga do Fake Volley: %d rodadas. Recarga da reação: %d rodadas.") % [_pct(five_chance), fake_cooldown, miracle.cooldown_rounds]
+			elif get_zero_variant() == ZeroVariant.FAKE_VOLLEY:
 				title = "Fake Volley"
 				text = ("Chute falso: a bola sai e volta. Com um inimigo perto, ganha +%d%% de chance de gol no próximo chute.\n"
 					+ "Recarga: %d rodadas.") % [_pct(fake_bonus), fake_cooldown]
@@ -796,7 +1097,10 @@ func reset_for_new_match() -> void:
 	_zero_enemy_turn_pending = false
 	_fx_t = 1.0
 	_skull_t = 1.0
+	_skull_mult = 1.0
 	_text_alpha = 0.0
+	_stop_five_aura()
+	_reset_spin()
 	queue_redraw()
 
 
@@ -807,6 +1111,8 @@ func _process(delta: float) -> void:
 	_check_zero_reset()
 	if _zero_active:
 		queue_redraw()   # os anéis em volta da bola pulsam
+	if _five_aura != null:
+		_five_aura.position = Vector2(0.0, -height - 4.0)
 
 
 # ---------- VISUAL (branco e cinza) ----------
@@ -834,13 +1140,15 @@ func _say(text: String) -> void:
 	_text_tween.tween_property(self, "_text_alpha", 0.0, 0.5)
 
 
-## Caveira translúcida do Fake Volley: aparece, sobe um pouco e some
-func _show_skull() -> void:
+## Caveira translúcida do Fake Volley: aparece, sobe um pouco e some.
+## size_mult = tamanho (1.0 = o normal; o Five Stage Volley aumenta a cada etapa), duration = quanto dura
+func _show_skull(size_mult: float = 1.0, duration: float = 1.3) -> void:
 	if _skull_tween and _skull_tween.is_valid():
 		_skull_tween.kill()
+	_skull_mult = size_mult
 	_skull_t = 0.0
 	_skull_tween = create_tween()
-	_skull_tween.tween_property(self, "_skull_t", 1.0, 1.3)
+	_skull_tween.tween_property(self, "_skull_t", 1.0, duration)
 
 
 func _draw() -> void:
@@ -880,8 +1188,9 @@ func _draw() -> void:
 	# Caveira translúcida (Fake Volley)
 	if _skull_t < 1.0:
 		var alpha: float = minf(_skull_t / 0.15, 1.0) * minf((1.0 - _skull_t) / 0.45, 1.0)
-		var center := Vector2(0.0, -height - 62.0 - _skull_t * 30.0)
-		_draw_skull(center, lerpf(0.75, 1.15, _skull_t), alpha * 0.6)
+		# (com _skull_mult = 1.0 a posição e o tamanho são exatamente os de antes)
+		var center := Vector2(0.0, -height - 40.0 - 22.0 * _skull_mult - _skull_t * 30.0)
+		_draw_skull(center, lerpf(0.75, 1.15, _skull_t) * _skull_mult, alpha * 0.6)
 
 	# Texto curto em cima dele
 	if _text_alpha > 0.0:

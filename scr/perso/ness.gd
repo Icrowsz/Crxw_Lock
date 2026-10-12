@@ -19,6 +19,10 @@ extends Player
 ##    interagir com ela; depois ela cai direto para o chão. Leviosa/Descendo/Arresto dividem a recarga.
 ##    Bola levantada/baixada pelos feitiços (sem Arresto) fica pairando até o fim do turno do time.
 ##
+## Reação Química HERBIVICUS (com o Kaiser, veja reaction_herbivicus.gd): o Alohomora anota o último
+## passe em last_alohomora_pass (a reação lê isto) e, quando o passe cumpre as condições da
+## reação, ele sai com aura e brilhos muito mais fortes (charged_fx + herbivicus_fx.gd).
+##
 ## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
 ## -> renomeie o nó raiz para "Ness". Depois registre o personagem na tela de formação
 ## (ela usa o character_id "ness" para saber quem é quem).
@@ -84,6 +88,8 @@ enum SpellVariant { NONE, ALOHOMORA, DEPULSO, EXPELLIARMUS }
 @export_group("Visual dos feitiços")
 ## Aura + partículas rosa. Vazio = usa o estilo padrão do Ness (veja _make_kick_fx)
 @export var kick_fx: KickFX
+## Aura do Alohomora quando ele cumpre as condições da reação Herbivicus. Vazio = estilo padrão
+@export var charged_fx: KickFX
 
 @export_group("Descrição (hover)")
 ## Imagem de cada habilidade no balão do menu. Chaves: alohomora, confundo, reparo, leviosa, descendo, arresto_momentum.
@@ -98,6 +104,10 @@ var _ball_dir: Vector2 = Vector2.ZERO
 var _last_ball_pos: Vector2 = Vector2.ZERO
 var _ball_pos_known: bool = false
 
+## Último Alohomora que CHEGOU no aliado (as Reações Químicas leem isto, ex: Herbivicus):
+## {"target": Player, "round": rodada, "touches": toques na bola logo depois do passe}
+var last_alohomora_pass: Dictionary = {}
+
 
 func _init() -> void:
 	character_id = "ness"            # o menu de formação usa isto para saber quem é quem
@@ -108,6 +118,8 @@ func _ready() -> void:
 	super()
 	if kick_fx == null:
 		kick_fx = _make_kick_fx()
+	if charged_fx == null:
+		charged_fx = _make_charged_fx()
 	_hook_manager.call_deferred()   # o MatchManager entra na árvore no mesmo frame
 
 
@@ -128,6 +140,26 @@ func _make_kick_fx() -> KickFX:
 	fx.scale_max = 0.3
 	fx.burst_amount = 16
 	fx.burst_speed = 200.0
+	return fx
+
+
+## Alohomora "carregado" (Herbivicus): o mesmo estilo, só que bem mais largo, brilhante e cheio de
+## faíscas, com tons de rosa virando azul
+func _make_charged_fx() -> KickFX:
+	var fx := _make_kick_fx()
+	fx.color = Color(0.7, 0.6, 1.0)
+	fx.trail_width = 24.0
+	fx.particle_color = Color(0.75, 0.95, 1.0)
+	fx.amount = 60
+	fx.lifetime = 0.8
+	fx.speed_min = 20.0
+	fx.speed_max = 100.0
+	fx.spin = 420.0
+	fx.swirl = 80.0
+	fx.scale_min = 0.2
+	fx.scale_max = 0.45
+	fx.burst_amount = 40
+	fx.burst_speed = 320.0
 	return fx
 
 
@@ -291,7 +323,16 @@ func _fly_alohomora(m: MatchManager, ball: Ball, target: Player) -> void:
 	ball.velocity = Vector2.ZERO
 	ball.vel_z = 0.0
 	ball.fx_during_hover = true
-	ball.play_fx(kick_fx)
+
+	# Herbivicus (Ness + Kaiser): se este passe cumpre as condições da reação, ele brilha MUITO mais
+	var charged: bool = ReactionHerbivicus.is_pass_charged(self, target)
+	last_alohomora_pass = {}
+	if charged:
+		ball.play_fx(charged_fx)
+		HerbivicusFX.attach_ball_glow(ball, HerbivicusFX.Style.PASS)
+		HerbivicusFX.sparkle_burst(self, ball.sprite.global_position, HerbivicusFX.PINK, 30, 220.0, 0.4)
+	else:
+		ball.play_fx(kick_fx)
 
 	var elapsed: float = 0.0
 	var intercepted: bool = false
@@ -313,6 +354,12 @@ func _fly_alohomora(m: MatchManager, ball: Ball, target: Player) -> void:
 	ball.global_position = end
 	ball.height = Heights.SUSPENDED_HEIGHT
 	m.register_skill_pass(team, target)   # pairando Suspensa no aliado até tocarem ou o turno acabar
+
+	# Avisa as Reações Químicas (a Herbivicus lê isto): este passe chegou no aliado
+	last_alohomora_pass = {"target": target, "round": m.round_number, "touches": ball.interaction_count}
+	if charged:
+		HerbivicusFX.sparkle_burst(self, target.global_position + Vector2(0.0, -Heights.SUSPENDED_HEIGHT),
+			HerbivicusFX.BLUE_LIGHT, 36, 260.0, 0.45, 1.0)
 
 
 ## Ponto do trajeto em t (0..1): reta + ondulação lateral que some nas pontas (sai e chega certinho)
@@ -657,6 +704,7 @@ func reset_for_new_match() -> void:
 	_arresto_until_round = -1
 	_ball_dir = Vector2.ZERO
 	_ball_pos_known = false
+	last_alohomora_pass = {}
 
 
 # ---------- LOOP / VISUAL ----------

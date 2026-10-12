@@ -17,6 +17,10 @@ extends Player
 ##      +5% em qualquer chute e nenhum QTE nos chutes do Isagi pelas próximas 3 rodadas.
 ##      Recarga de 3 rodadas a partir do fim do efeito.
 ##
+## Reação Química ONE MORE TIME (com o Hiori, veja reaction_one_more_time.gd): com a Metavision dele
+## e a Coldest Metavision do Hiori ativas, e o Ultrasadist do Hiori como dono da bola, o Direct Shot
+## vira o Go Beyond: muito mais forte, 85% de chance e vidro quebrando no chute.
+##
 ## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
 ## -> renomeie o nó raiz para "Isagi" (o nome aparece no placar de gols).
 
@@ -37,6 +41,12 @@ enum ShotVariant { NONE, BACKHEEL, DIRECT, TWO_GUN }
 @export_range(0.0, 1.0) var chance_direct: float = 0.45
 @export_range(0.0, 1.0) var chance_two_gun: float = 0.50
 @export var shot_cooldown: int = 2                             # recarga (rodadas), igual para as 3 variantes
+
+@export_group("Go Beyond (reação One More Time)")
+@export_range(0.0, 1.0) var chance_go_beyond: float = 0.85    # chance de gol (já é o valor final)
+@export var go_beyond_force_mult: float = 3.0                  # muito mais forte que o Direct Shot (1.0)
+## Aura do chute. Vazio = usa o estilo padrão (veja _make_go_beyond_fx)
+@export var go_beyond_fx: KickFX
 
 @export_group("Pieces")
 @export var piece_size: Vector2 = Vector2(500.0, 650.0)
@@ -88,6 +98,8 @@ func _ready() -> void:
 	super()
 	if kick_fx == null:
 		kick_fx = _make_kick_fx()
+	if go_beyond_fx == null:
+		go_beyond_fx = _make_go_beyond_fx()
 	_base_run_duration = run_duration
 	_build_pieces.call_deferred()   # o Field e o MatchManager entram na árvore no mesmo frame
 	_hook_manager.call_deferred()
@@ -110,6 +122,24 @@ func _make_kick_fx() -> KickFX:
 	fx.scale_max = 0.35
 	fx.burst_amount = 14
 	fx.burst_speed = 220.0
+	return fx
+
+
+## Go Beyond: azul elétrico com lascas de gelo, bem mais largo e cheio de brilhos
+func _make_go_beyond_fx() -> KickFX:
+	var fx := _make_kick_fx()
+	fx.color = Color(0.25, 0.7, 1.0)
+	fx.trail_width = 30.0
+	fx.particle_color = Color(0.85, 0.97, 1.0)
+	fx.amount = 60
+	fx.lifetime = 0.8
+	fx.speed_min = 20.0
+	fx.speed_max = 120.0
+	fx.spin = 480.0
+	fx.scale_min = 0.2
+	fx.scale_max = 0.5
+	fx.burst_amount = 40
+	fx.burst_speed = 380.0
 	return fx
 
 
@@ -278,10 +308,17 @@ func get_shot_variant() -> ShotVariant:
 func _shot_skill_name() -> String:
 	match get_shot_variant():
 		ShotVariant.DIRECT:
-			return "Direct Shot"
+			# Reação Química disponível: o botão muda de nome
+			return "Go Beyond" if _find_reaction() != null else "Direct Shot"
 		ShotVariant.TWO_GUN:
 			return "Two Gun Volley"
 	return "Backheel Shot"
+
+
+## Reação Química que o Isagi pode usar agora (One More Time). null = nenhuma.
+func _find_reaction() -> ChemicalReaction:
+	var rm: ReactionManager = ReactionManager.get_for(self)
+	return rm.find_available(self) if rm != null else null
 
 
 func _use_shot_skill() -> bool:
@@ -304,12 +341,28 @@ func _use_shot_skill() -> bool:
 	if variant == ShotVariant.NONE:
 		return false
 
+	# Reação Química (One More Time): só vale para o Direct Shot. A partida congela, roda a
+	# cutscene e SÓ DEPOIS DO DIÁLOGO o chute acontece (antes do QTE e do chute).
+	var reaction: ChemicalReaction = null
+	if variant == ShotVariant.DIRECT:
+		reaction = _find_reaction()
+		if reaction != null:
+			var partner: Player = reaction.find_partner(self)
+			var rm: ReactionManager = ReactionManager.get_for(self)
+			if partner == null or rm == null:
+				reaction = null
+			else:
+				await rm.play(reaction, self, partner)
+				if m.match_over:
+					return false
+
 	var kind: KickType = KickType.GROUND
 	var anim: StringName = &"backheel_shot"
 	var base_chance: float = chance_backheel
 	var dir: Vector2 = aim
 	var needs_qte: bool = false
 	var qte_kind: KickType = KickType.VOLLEY
+	var on_kick: Callable = Callable()
 
 	match variant:
 		ShotVariant.BACKHEEL:
@@ -320,6 +373,10 @@ func _use_shot_skill() -> bool:
 			base_chance = chance_direct
 			needs_qte = true
 			qte_kind = KickType.VOLLEY    # QTE fácil
+			if reaction != null:   # Go Beyond: mesmo chute, muito mais forte e com o vidro quebrando
+				anim = _go_beyond_anim()
+				base_chance = chance_go_beyond
+				on_kick = _launch_go_beyond
 		ShotVariant.TWO_GUN:
 			kind = KickType.FLYING
 			anim = &"two_gun_volley"
@@ -331,13 +388,32 @@ func _use_shot_skill() -> bool:
 	if needs_qte and not skips_qte():
 		qte_ok = await m.run_qte(qte_kind)
 
-	var chance: float = minf(base_chance + _shot_bonus(), 1.0)
+	if reaction != null:
+		next_kick_force_mult *= go_beyond_force_mult   # muito mais forte (gasto dentro do kick_ball)
+
+	# Go Beyond: os 85% são o valor final (sem somar Metavision/peça de ataque). Os outros chutes somam.
+	var chance: float = base_chance if reaction != null else minf(base_chance + _shot_bonus(), 1.0)
+	var fx: KickFX = go_beyond_fx if reaction != null else kick_fx
 	# Backheel Shot: a bola ignora a colisão do próprio Isagi
 	# Errou o QTE = chute fraquinho, sem aura
 	await kick_ball(ball, dir, kind, qte_ok, chance, variant == ShotVariant.BACKHEEL,
-		kick_fx if qte_ok else null, anim)
+		fx if qte_ok else null, anim, on_kick)
 	start_cooldown(CD_SHOT, shot_cooldown)
 	return true
+
+
+## Go Beyond: chamado pelo kick_ball() logo depois que a bola sai (on_kick). Peças de quebra-cabeça
+## geladas, estilhaços de gelo, clarão, tremida de câmera e o VIDRO QUEBRANDO na tela.
+func _launch_go_beyond(ball: Ball, _dir: Vector2, _speed: float) -> void:
+	OneMoreTimeFX.go_beyond_burst(self, global_position + Vector2(0.0, -height),
+		ball.sprite.global_position, ball)
+
+
+## Animação do Go Beyond: usa a "go_beyond" se o personagem tiver; senão, a do Direct Shot
+func _go_beyond_anim() -> StringName:
+	if _has_art and animated_sprite.sprite_frames.has_animation(&"go_beyond"):
+		return &"go_beyond"
+	return &"direct_shot"
 
 
 # ---------- SISTEMA DE HABILIDADES (menu) ----------
@@ -395,7 +471,13 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 				ShotVariant.BACKHEEL:
 					text = "Chute de calcanhar: a bola vai para o lado contrário da mira. %d%% de chance de gol." % _pct(chance_backheel)
 				ShotVariant.DIRECT:
-					text = "Voleio direto para o gol. %d%% de chance de gol." % _pct(chance_direct)
+					var reaction: ChemicalReaction = _find_reaction()
+					if reaction != null:
+						title = "Go Beyond"
+						text = "Reação Química One More Time com o Hiori: voleio muito mais forte, com quebra-cabeças de gelo e vidro quebrando. %d%% de chance de gol.\nA reação recarrega em %d rodadas." % [
+							_pct(chance_go_beyond), reaction.cooldown_rounds]
+					else:
+						text = "Voleio direto para o gol. %d%% de chance de gol." % _pct(chance_direct)
 				ShotVariant.TWO_GUN:
 					text = "Voleio no ar para o gol. %d%% de chance de gol." % _pct(chance_two_gun)
 				_:
