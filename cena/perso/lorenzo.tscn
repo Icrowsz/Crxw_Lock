@@ -2,8 +2,8 @@
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_lsvxa"]
 [ext_resource type="Script" uid="uid://dbnq6q5a6ixem" path="res://scr/perso/lorenzo.gd" id="2_2280n"]
-[ext_resource type="Texture2D" uid="uid://c5ocjsajlys71" path="res://img/icons/lorenzoicon.png" id="2_ahf8w"]
 [ext_resource type="Texture2D" uid="uid://clnnoev3m6vwi" path="res://img/mvps/lorenzo.jpg" id="3_2280n"]
+[ext_resource type="Texture2D" uid="uid://d3ysr4ee5vhd0" path="res://img/testes/lorenzo.png" id="4_2280n"]
 
 [node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_lsvxa")]
 script = ExtResource("2_2280n")
@@ -31,9 +31,9 @@ intercept_range = 230.0
 intercept_dash_time = 0.2
 intercept_pass_range = 650.0
 ace_range = 1000.0
-ace_rounds = 3
+ace_rounds = 2
 ace_shot_penalty = 0.15
-ace_cooldown = 3
+ace_cooldown = 2
 kick_fx = null
 skill_icons = {}
 display_name = "Don Lorenzo"
@@ -42,4 +42,4 @@ visual_root = NodePath("SprPlayer")
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)
-texture = ExtResource("2_ahf8w")
+texture = ExtResource("4_2280n")

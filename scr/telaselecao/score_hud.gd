@@ -223,6 +223,11 @@ func _on_match_ended(winner: int) -> void:
 		_banner_tween.kill()
 	_banner.hide()
 
+	# O MatchEffects já mostra a tela final própria (FIM DE JOGO + MVP + estatísticas):
+	# não monta este resumo antigo por cima, senão aparecem duas telas.
+	if manager.effects != null and manager.effects.show_end_card:
+		return
+
 	for child in _summary_box.get_children():
 		_summary_box.remove_child(child)
 		child.queue_free()

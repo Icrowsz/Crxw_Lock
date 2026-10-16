@@ -357,6 +357,8 @@ func _use_shot_skill() -> bool:
 	# CARNIVAL: a partida congela e roda a cutscene + diálogo. SÓ DEPOIS vêm o QTE e o chute.
 	# (A mira já foi confirmada acima: cancelar a mira não gasta a reação nem a recarga dela.)
 	if is_carnival:
+		# Números rosa em volta da Sae (o passe dela carrega a reação) e do Shidou
+		CarnivalFX.attach_numbers(partner, 2.6, 46.0)	
 		await ReactionManager.get_for(self).play(reaction, self, partner)
 
 	var qte_ok: bool = true
@@ -510,10 +512,11 @@ func _carnival_impact(origin: Vector2, origin_height: float, ball: Ball) -> void
 	_spawn_shockwave(origin, origin_height, 170.0, 0.55, CARNIVAL_PINK)
 	_spawn_shockwave(origin, origin_height, 100.0, 0.4, CARNIVAL_LIGHT)
 	_shake_camera(carnival_shake, 14)
-	_ghost_trail(ball, CARNIVAL_PINK)   # sem await: acontece enquanto a bola voa
+	_ghost_trail(ball, CARNIVAL_PINK)          # imagens fantasma atrás da bola
+	CarnivalFX.attach_dragon(ball, 2.2)        # dragão serpente segue o chute
+	CarnivalFX.attach_numbers(self, 2.6, 46.0) # números rosa em volta do Shidou
 	_show_popup("CARNIVAL!", CARNIVAL_PINK)
 	_start_wings()
-
 
 func _wings_active() -> bool:
 	if _wings == null:

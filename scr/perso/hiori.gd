@@ -21,7 +21,7 @@ extends Player
 ##          (skill_is_free) — então os dois juntos continuam contando como uma única ação
 ##          de habilidade, igual ao Draconic Header do Shidou (ver player.gd). Funciona como
 ##          o Rabona Cross do Charles: Hiori escolhe um LOCAL do campo (alcance 550) em vez
-##          de um aliado; a bola sobe a Voando e pousa lá, Suspensa. QTE fácil: errar
+##          de um aliado; a bola sobe a Voando e pousa lá, Suspensa, NA MESMA RODADA. QTE fácil: errar
 ##          encurta e desvia o local. Se o turno de Hiori terminar sem usá-lo, a chance
 ##          se perde.
 ##
@@ -242,6 +242,7 @@ func _use_chilling_pass(m: MatchManager) -> bool:
 	if get_pass_variant() != PassVariant.CHILLING:
 		return false
 
+	PassFX.arm(ball, PassFX.Style.CHILLING)   # fita gelada e floquinhos: começa quando a bola sai
 	await m.run_skill_high_pass(self, target, ball, chilling_pass_range, &"chilling_pass", kick_fx)
 	start_cooldown(CD_PASS, pass_cooldown)
 	return true
@@ -329,7 +330,7 @@ func _use_ultrasadist() -> bool:
 	ball.register_touch(self)   # o passe alto não usa kick(), então registra o toque aqui
 
 	# One More Time (Hiori + Isagi): se este Ultrasadist cumpre as condições da reação, ele brilha e
-	# congela o chão por onde a bola passa (inclusive quando ela chega ao local, no próximo turno)
+	# congela o chão por onde a bola passa (até ela chegar ao local)
 	var charged: bool = ReactionOneMoreTime.is_ultrasadist_charged(self)
 	last_ultrasadist = {}
 	if charged:
@@ -338,11 +339,17 @@ func _use_ultrasadist() -> bool:
 		OneMoreTimeFX.ice_burst(self, ball.sprite.global_position, 40)
 	elif kick_fx:
 		ball.play_fx(kick_fx)
+	if not charged:
+		PassFX.attach(ball, PassFX.Style.ULTRASADIST)   # lascas de gelo (o carregado já tem os efeitos da One More Time)
 	var midpoint: Vector2 = (ball.global_position + landing) * 0.5
 	var tween: Tween = ball.hover_to(midpoint, Heights.FLYING_HEIGHT, 0.9)
 	await tween.finished
 
-	m.begin_point_pass(team, landing)
+	# Chega NA MESMA RODADA: a bola desce até o local (Suspensa) agora, sem esperar o próximo turno.
+	# O register_skill_pass deixa ela pairando lá até alguém tocar ou o turno acabar (aí ela cai).
+	var arrive: Tween = ball.hover_to(landing, Heights.SUSPENDED_HEIGHT, m.high_pass_arrive_time)
+	await arrive.finished
+	m.register_skill_pass(team, null)
 
 	# Avisa as Reações Químicas (a One More Time lê isto): o Ultrasadist saiu e a bola é dele
 	last_ultrasadist = {"landing": landing, "touches": ball.interaction_count}
@@ -375,10 +382,12 @@ func shot_bonus_for_ally(shooter: Player, _ball: Ball) -> float:
 	return 0.0
 
 
-## Lado do campo em que Hiori está AGORA. Time 0 defende a ESQUERDA e ataca a DIREITA;
-## time 1 é o contrário (ver o comentário de cabeçalho do field.gd).
+## Lado do campo em que Hiori está AGORA (metade do próprio gol). Considera a troca de lado
+## do 2º tempo (ver o comentário de cabeçalho do field.gd).
 func _is_on_defense_side() -> bool:
-	return (global_position.x < 0.0) == (team == 0)
+	var field := get_tree().get_first_node_in_group("field") as Field
+	var x: float = global_position.x if field == null else field.to_local(global_position).x
+	return x * get_attack_dir() < 0.0
 
 
 ## Soma o bônus de tempo na PRÓXIMA corrida (gasto na hora: start_run() some com o
@@ -554,7 +563,7 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 			text = "Corrida curta e rápida. Se alcançar a bola, libera o Ultrasadist de graça.\nRecarga: %d rodadas." % glacial_cooldown
 		SKILL_ULTRASADIST:
 			title = "Ultrasadist"
-			text = "Complemento grátis do Glacial Cut: passe alto para o local do campo que você escolher."
+			text = "Complemento grátis do Glacial Cut: passe alto para o local do campo que você escolher. A bola chega na mesma rodada."
 		SKILL_METAVISION:
 			title = "Coldest Metavision (ativa)" if is_metavision_active() else "Coldest Metavision"
 			text = ("Por %d rodadas: +%.1f s no próximo Correr e +%d%% de chance de gol nos chutes do Hiori e nos chutes depois de um passe dele. Libera uma habilidade nova, conforme o lado do campo.\n"

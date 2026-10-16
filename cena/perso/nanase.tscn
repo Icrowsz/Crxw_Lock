@@ -1,0 +1,35 @@
+[gd_scene format=3 uid="uid://dqe31fefxmud0"]
+
+[ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_5i72c"]
+[ext_resource type="Script" uid="uid://cy5q1jmlmlf2a" path="res://scr/perso/nanase.gd" id="2_vxip8"]
+[ext_resource type="Texture2D" uid="uid://chine1ba65wkc" path="res://img/testes/nanase.png" id="3_8bj12"]
+[ext_resource type="Texture2D" uid="uid://djbhq6jrylnv8" path="res://img/mvps/nanasse.jpg" id="3_nj3ba"]
+
+[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_5i72c")]
+script = ExtResource("2_vxip8")
+window_range = 475.0
+window_cooldown = 2
+near_range = 90.0
+lfs_dash_distance = 260.0
+lfs_dash_time = 0.35
+lfs_chance = 0.4
+contact_margin = 12.0
+survival_cooldown = 2
+slide_length_mult = 1.3
+ambi_dive_distance = 240.0
+ambi_dive_time = 0.3
+deflect_distance = 260.0
+deflect_time = 0.3
+mark_rounds = 4
+mark_cooldown = 3
+mark_window_bonus = 0.06
+mark_lfs_bonus = 0.06
+kick_fx = null
+skill_icons = {}
+display_name = "Nijiro Nanase"
+mvp_image = ExtResource("3_nj3ba")
+visual_root = NodePath("SprPlayer")
+
+[node name="SprPlayer" parent="." index="1" unique_id=395354675]
+scale = Vector2(0.2, 0.2)
+texture = ExtResource("3_8bj12")

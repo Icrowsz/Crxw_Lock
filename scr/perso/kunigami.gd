@@ -3,8 +3,8 @@ extends Player
 ## Rensuke Kunigami. Herda tudo do Player (ações gerais) e adiciona as habilidades próprias:
 ##
 ## 1. Lefty Shot (ação de habilidade; recarga de 3 rodadas, chance de 35%):
-##      chute forte em direção ao gol adversário. Funciona com o Kunigami no chão ou suspenso
-##      e a bola no chão ou suspensa. Não usa QTE.
+##      chute comum (mira livre, QTE conforme a altura da bola, igual ao Chutar) porém mais forte.
+##      Funciona com o Kunigami no chão ou suspenso e a bola no chão ou suspensa.
 ## 2. Heroic Clash (ação de habilidade; recarga de 3 rodadas, compartilhada com o Justice Header):
 ##      disputa física com um inimigo (70% para o Kunigami). Se ganhar, joga o inimigo longe,
 ##      derruba e o deixa travado (stun). Se perder, só os dois se chocam e nada mais acontece.
@@ -193,7 +193,7 @@ func kick_ball(ball: Ball, direction: Vector2, kind: KickType, qte_success: bool
 	if not _in_skill and _spend_bulk_charge():
 		var base_chance: float = chance_override if chance_override >= 0.0 else get_shot_chance(kind)
 		chance_override = base_chance + bulk_shot_bonus
-	await super(ball, direction, kind, qte_success, chance_override, ignore_self_collision, fx, anim)
+	await super(ball, direction, kind, qte_success, chance_override, ignore_self_collision, fx, anim, on_kick)
 
 
 # ---------- LEFTY SHOT ----------
@@ -206,26 +206,38 @@ func _lefty_possible(ball: Ball) -> bool:
 	return kind == KickType.GROUND or kind == KickType.HIGH_BALL or kind == KickType.VOLLEY
 
 
-## Direção do gol adversário a partir da bola (o Lefty Shot não usa mira)
-func _goal_direction(ball: Ball) -> Vector2:
-	var field := get_tree().get_first_node_in_group("field") as Field
-	if field:
-		return field.get_attack_goal_center(team) - ball.global_position
-	return Vector2.RIGHT if team == 0 else Vector2.LEFT
-
-
+## Lefty Shot: chute comum (igual ao Chutar), mas com a força e a chance da habilidade.
+## Mira livre; bola no chão = sem QTE; bola suspensa (voleio / bola alta) = QTE.
 func _use_lefty() -> bool:
+	var m: MatchManager = _get_manager()
+	if m == null or not _lefty_possible(_get_ball()):
+		return false
+
+	# 1) Mira (clique direito / Esc = cancelou: não gasta a ação, nem o Bulk Up, nem entra em recarga)
+	var aim: Vector2 = await m.aim_for_skill(self, kick_aim_range)
+	if aim == Vector2.ZERO:
+		return false
+
+	# 2) A bola pode ter rolado enquanto ele mirava: confere de novo
 	var ball: Ball = _get_ball()
 	if not _lefty_possible(ball):
 		return false
-
 	var kind: KickType = get_kick_type(ball)
-	var boosted: bool = _spend_bulk_charge()   # Bulk Up: gasta a ação afetada antes do chute
+
+	# 3) Só agora gasta o Bulk Up (a ação foi confirmada)
+	var boosted: bool = _spend_bulk_charge()
 	var chance: float = lefty_shot_chance + (bulk_shot_bonus if boosted else 0.0)
 	# O multiplicador vale só para este chute (kick_ball consome next_kick_force_mult)
 	next_kick_force_mult *= lefty_force_mult * (bulk_lefty_force_mult if boosted else 1.0)
 
-	await kick_ball(ball, _goal_direction(ball), kind, true, chance, false, kick_fx, &"lefty_shot")
+	# 4) QTE igual ao chute comum: chão não tem; voleio / bola alta têm
+	var qte_ok: bool = true
+	if kind != KickType.GROUND and not skips_qte():
+		qte_ok = await m.run_qte(kind)
+
+	# Errou o QTE = chute fraco, desviado e sem aura (o kick_ball cuida disso)
+	await kick_ball(ball, aim, kind, qte_ok, chance, false,
+		kick_fx if qte_ok else null, &"lefty_shot")
 	start_cooldown(CD_LEFTY, lefty_cooldown)
 	return true
 
@@ -447,7 +459,7 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	match skill_id:
 		SKILL_LEFTY:
 			title = "Lefty Shot"
-			text = ("Chute forte (%d%% mais força) em direção ao gol adversário, sem mira e sem QTE. %d%% de chance de gol.\n"
+			text = ("Chute comum com mira, %d%% mais forte. Bola no chão não tem QTE; bola suspensa tem. %d%% de chance de gol.\n"
 				+ "Recarga: %d rodadas.") % [
 				_pct(lefty_force_mult - 1.0), _pct(lefty_shot_chance), lefty_cooldown]
 		SKILL_CLASH:

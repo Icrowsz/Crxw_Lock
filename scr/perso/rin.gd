@@ -18,6 +18,10 @@ extends Player
 ##      Libera Parabolic Curve, Mangle You e a habilidade Opposite Direction (minigame de
 ##      digitação; se acertar, ganha uma ação de Correr de graça).
 ##
+## Reação Química CRUEL (com o Charles, veja reaction_cruel.gd): com o Destroyer Mode ativo e o Rabona
+## Cross do Charles como dono da bola, o Crash Shot vira o Self Destruction: força muito maior, a
+## mesma curva, 90% de chance, sombra gigante com olhos e uma mão sobre o Rin e espinhos.
+##
 ## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
 ## -> renomeie o nó raiz para "Rin" (o nome aparece no placar de gols).
 
@@ -40,12 +44,21 @@ enum GravityVariant { NONE, GRAVITY, PUPPETS, MANGLE }
 @export_range(0.0, 1.0) var chance_crash: float = 0.55
 @export var curve_force: float = 60.0               # força do chute (x kick_force_to_speed = px/s)
 @export var curve_aim_range: float = 200          # tamanho da seta de mira
-@export var curve_turn_degrees: float = 70.0        # quanto a trajetória curva (Curve / Parabolic)
-@export var trivela_turn_degrees: float = 75.0      # Trivela e Crash: bem mais curvo
+@export var curve_turn_degrees: float = 50.0        # quanto a trajetória curva (Curve / Parabolic)
+@export var parabolic_turn_degrees: float = 65.0    # Parabolic Curve: mais curvado, sobe até Voando
+@export var trivela_turn_degrees: float = 90.0      # Trivela / Crash / Self Destruction: bem mais curvo
 @export var curve_duration: float = 1             # por quanto tempo a bola vai fazendo a curva (s)
 @export var curve_preview_length: float = 600.0     # tamanho da linha tracejada da mira
 @export var crash_enemy_radius: float = 90.0        # inimigo "muito próximo" do Rin
 @export var curve_cooldown: int = 2
+
+@export_group("Self Destruction (reação Cruel)")
+@export_range(0.0, 1.0) var chance_self_destruction: float = 0.93   # chance de gol (já é o valor final)
+@export var self_destruction_force_mult: float = 2.2                # força do chute (o Crash Shot normal é 1.0)
+## true = o QTE fácil do Crash Shot continua. false = o Self Destruction nunca tem QTE
+@export var self_destruction_needs_qte: bool = true
+## Aura do chute. Vazio = usa o estilo padrão (veja _make_self_destruction_fx)
+@export var self_destruction_fx: KickFX
 
 @export_group("Center of Gravity")
 @export var gravity_range: float = 70.0            # alcance para achar o "inimigo mais próximo"
@@ -69,6 +82,12 @@ enum GravityVariant { NONE, GRAVITY, PUPPETS, MANGLE }
 ## Aura + partículas do Curve Shot. Vazio = usa o estilo padrão do Rin (veja _make_kick_fx)
 @export var kick_fx: KickFX
 
+@export_group("Destroyer Mode (visual)")
+## Espinhos e olhos compactos nas costas do Rin enquanto o Destroyer Mode está ativo (veja destroyer_aura.gd)
+@export var destroyer_fx_enabled: bool = true
+@export var destroyer_fx_scale: float = 1.0                    # aumenta/diminui tudo (sprite grande: suba isto)
+@export var destroyer_fx_offset: Vector2 = Vector2.ZERO        # empurra o conjunto (ex: (0, -10) = mais para cima)
+
 @export_group("Descrição (hover)")
 ## Imagem de cada habilidade no balão do menu. Chaves: curve_shot, center_of_gravity, destroyer_mode, opposite_direction.
 ## Sem imagem, o balão aparece só com o texto.
@@ -76,6 +95,8 @@ enum GravityVariant { NONE, GRAVITY, PUPPETS, MANGLE }
 
 ## Destroyer Mode vale até o fim desta rodada (-1 = inativo)
 var _destroyer_until_round: int = -1
+## Espinhos e olhos nas costas enquanto o Destroyer Mode está ativo
+var _destroyer_aura: DestroyerAura
 ## Mirando um chute curvo: o desenho mostra a trajetória aproximada
 var _aiming_curve: bool = false
 ## Pulso visual do Center of Gravity (1 -> 0) e o ponto do inimigo atingido
@@ -92,7 +113,16 @@ func _ready() -> void:
 	super()
 	if kick_fx == null:
 		kick_fx = _make_kick_fx()
+	if self_destruction_fx == null:
+		self_destruction_fx = _make_self_destruction_fx()
 	_hook_manager.call_deferred()
+
+	# Espinhos e olhos nas costas (só aparecem com o Destroyer Mode ativo). z_index -1: atrás do Rin
+	_destroyer_aura = DestroyerAura.new()
+	_destroyer_aura.unit = placeholder_radius
+	_destroyer_aura.z_index = -1
+	add_child(_destroyer_aura)
+	_refresh_destroyer_aura()
 
 
 ## Verde-azulado do Rin; as partículas giram em espiral (a curva / "gravidade")
@@ -117,6 +147,25 @@ func _make_kick_fx() -> KickFX:
 	return fx
 
 
+## Self Destruction: rastro escuro com partículas azul-esverdeadas, bem mais largo e cheio
+func _make_self_destruction_fx() -> KickFX:
+	var fx := _make_kick_fx()
+	fx.color = Color(0.03, 0.12, 0.12)
+	fx.additive = false
+	fx.trail_width = 34.0
+	fx.particle_color = Color(0.2, 1.0, 0.85)
+	fx.amount = 40
+	fx.lifetime = 0.8
+	fx.speed_min = 20.0
+	fx.speed_max = 110.0
+	fx.swirl = 200.0
+	fx.scale_min = 0.25
+	fx.scale_max = 0.55
+	fx.burst_amount = 24
+	fx.burst_speed = 380.0
+	return fx
+
+
 func _hook_manager() -> void:
 	var m: MatchManager = _get_manager()
 	if m and not m.round_started.is_connected(_on_round_started):
@@ -125,6 +174,7 @@ func _hook_manager() -> void:
 
 func _on_round_started(_round_number: int) -> void:
 	queue_redraw()   # a aura do Destroyer Mode some quando as rodadas acabam
+	_refresh_destroyer_aura()
 
 
 # ---------- DESTROYER MODE ----------
@@ -144,6 +194,16 @@ func is_destroyer_active() -> bool:
 	return m != null and _destroyer_until_round >= 0 and m.round_number <= _destroyer_until_round
 
 
+## Liga/desliga os espinhos e olhos das costas conforme o Destroyer Mode (e atualiza o tamanho/posição
+## que estão no Inspector). Chamado quando o modo começa, quando uma rodada nova abre e na partida nova.
+func _refresh_destroyer_aura() -> void:
+	if _destroyer_aura == null:
+		return
+	_destroyer_aura.fx_scale = destroyer_fx_scale
+	_destroyer_aura.fx_offset = destroyer_fx_offset
+	_destroyer_aura.set_active(destroyer_fx_enabled and is_destroyer_active())
+
+
 func _use_destroyer() -> bool:
 	var m: MatchManager = _get_manager()
 	if m == null:
@@ -152,6 +212,7 @@ func _use_destroyer() -> bool:
 	# A recarga começa a contar na rodada seguinte ao fim do efeito
 	start_cooldown(CD_DESTROYER, destroyer_cooldown, _destroyer_until_round + 1)
 	_play_pulse(global_position)
+	_refresh_destroyer_aura()
 	queue_redraw()
 	return true
 
@@ -241,7 +302,8 @@ func _curve_skill_name() -> String:
 		CurveVariant.TRIVELA:
 			return "Trivela Shot"
 		CurveVariant.CRASH:
-			return "Crash Shot"
+			# Reação Química disponível: o botão muda de nome
+			return "Self Destruction" if _find_reaction() != null else "Crash Shot"
 		CurveVariant.NONE:
 			return "Parabolic Curve" if is_destroyer_active() else "Curve Shot"
 	return "Curve Shot"
@@ -260,6 +322,33 @@ func _gravity_skill_name() -> String:
 
 # ---------- CURVE SHOT (e variantes) ----------
 
+## Reação Química que o Rin pode usar agora (Cruel). null = nenhuma. Procura direto a Cruel (não
+## usa find_available) para outra reação do Rin não esconder esta.
+func _find_reaction() -> ChemicalReaction:
+	var rm: ReactionManager = ReactionManager.get_for(self)
+	if rm == null:
+		return null
+	for reaction in rm.reactions:
+		if reaction is ReactionCruel and rm.is_ready(reaction, team) \
+				and reaction.find_partner(self) != null:
+			return reaction
+	return null
+
+
+## Animação do Self Destruction: usa a "self_destruction" se o personagem tiver; senão, a do Crash Shot
+func _self_destruction_anim() -> StringName:
+	if animated_sprite and animated_sprite.sprite_frames \
+			and animated_sprite.sprite_frames.has_animation(&"self_destruction"):
+		return &"self_destruction"
+	return &"crash_shot"
+
+
+## Self Destruction: chamado pelo _curve_kick() logo depois que a bola sai (on_kick). Clarão,
+## tremida forte, mais espinhos e a trilha de espinhos nascendo ao longo da trajetória da bola.
+func _launch_self_destruction(ball: Ball, _dir: Vector2, _speed: float) -> void:
+	CruelFX.self_destruction_launch(self, global_position, height, ball)
+
+
 ## Para que lado a bola curva: para o gol que o time ataca. SHIFT inverte.
 func _curve_side(from_pos: Vector2, aim: Vector2) -> float:
 	var field := get_tree().get_first_node_in_group("field") as Field
@@ -270,6 +359,14 @@ func _curve_side(from_pos: Vector2, aim: Vector2) -> float:
 	if Input.is_key_pressed(KEY_SHIFT):
 		side = -side
 	return side
+	
+func _turn_for_variant(variant: CurveVariant) -> float:
+	match variant:
+		CurveVariant.PARABOLIC:
+			return parabolic_turn_degrees
+		CurveVariant.TRIVELA, CurveVariant.CRASH:
+			return trivela_turn_degrees
+	return curve_turn_degrees
 
 
 func _use_curve_skill() -> bool:
@@ -291,47 +388,81 @@ func _use_curve_skill() -> bool:
 	if variant == CurveVariant.NONE:
 		return false
 
+	# Reação Química (Cruel): só vale para o Crash Shot. A partida congela, roda a cutscene e SÓ
+	# DEPOIS DO DIÁLOGO o chute acontece (antes do QTE e do chute).
+	var reaction: ChemicalReaction = null
+	if variant == CurveVariant.CRASH:
+		reaction = _find_reaction()
+		if reaction != null:
+			var partner: Player = reaction.find_partner(self)
+			var rm: ReactionManager = ReactionManager.get_for(self)
+			if partner == null or rm == null:
+				reaction = null
+			else:
+				await rm.play(reaction, self, partner)
+				if m.match_over:
+					return false
+
 	var chance: float = chance_curve
 	var anim: StringName = &"curve_shot"
-	var turn: float = curve_turn_degrees
+	var turn: float = _turn_for_variant(variant)
 	var peak: Heights.Level = Heights.Level.SUSPENDED
 	var needs_qte: bool = false
 	var qte_kind: KickType = KickType.VOLLEY
+	var force_mult: float = 1.0
+	var on_kick: Callable = Callable()
 
 	match variant:
 		CurveVariant.PARABOLIC:
 			anim = &"parabolic_curve"
-			peak = Heights.Level.FLYING        # sobe ao nível No Ar antes de cair
+			peak = Heights.Level.FLYING
 		CurveVariant.TRIVELA:
 			anim = &"trivela_shot"
 			chance = chance_trivela
-			turn = trivela_turn_degrees
 			needs_qte = true
-			qte_kind = KickType.FLYING         # QTE difícil
+			qte_kind = KickType.FLYING
 		CurveVariant.CRASH:
 			anim = &"crash_shot"
 			chance = chance_crash
-			turn = trivela_turn_degrees
 			needs_qte = true
-			qte_kind = KickType.VOLLEY         # QTE fácil
+			qte_kind = KickType.VOLLEY
+			if reaction != null:
+				anim = _self_destruction_anim()
+				chance = chance_self_destruction
+				needs_qte = self_destruction_needs_qte
+				force_mult = self_destruction_force_mult
+				on_kick = _launch_self_destruction
 
 	var qte_ok: bool = true
 	if needs_qte and not skips_qte():
 		qte_ok = await m.run_qte(qte_kind)
 
+	# Self Destruction: errou o QTE = chute fraquinho comum do Crash Shot (sem força extra, sem
+	# efeitos, e a chance volta a ser a do Crash Shot)
+	var self_destruct: bool = reaction != null and qte_ok
+	if reaction != null and not qte_ok:
+		chance = chance_crash
+	if self_destruct:
+		# A sombra gigante, o círculo mágico e a roda de espinhos surgem durante a preparação do chute
+		CruelFX.self_destruction_aura(self, global_position, height)
+
 	var side: float = _curve_side(ball.global_position, aim)
-	await _curve_kick(ball, aim, side, turn, peak, chance, qte_ok, anim)
+	await _curve_kick(ball, aim, side, turn, peak, chance, qte_ok, anim,
+		force_mult if self_destruct else 1.0,
+		on_kick if self_destruct else Callable(),
+		self_destruction_fx if self_destruct else null)
 	start_cooldown(CD_CURVE, curve_cooldown)
 	return true
 
 
 ## Chuta a bola e vai girando a velocidade dela durante a trajetória (a curva)
 func _curve_kick(ball: Ball, dir: Vector2, side: float, turn_deg: float,
-		peak: Heights.Level, chance: float, qte_ok: bool, anim: StringName = &"curve_shot") -> void:
+		peak: Heights.Level, chance: float, qte_ok: bool, anim: StringName = &"curve_shot",
+		force_mult: float = 1.0, on_kick: Callable = Callable(), fx: KickFX = null) -> void:
 	# A bola só sai no frame de impacto da animação (hit_frames); sem arte, sai direto
 	if not await play_action(anim, ANIM_KICK):
 		return
-	var speed: float = curve_force * kick_force_to_speed
+	var speed: float = curve_force * kick_force_to_speed * force_mult
 	var d: Vector2 = dir.normalized()
 	if not qte_ok:
 		speed *= qte_fail_power_mult
@@ -341,7 +472,9 @@ func _curve_kick(ball: Ball, dir: Vector2, side: float, turn_deg: float,
 	var rise: float = maxf(0.0, Heights.to_height(peak) - ball.height)
 	ball.kick(d, speed, Heights.lift_for_peak(rise, ball.gravity), self, chance)
 	if qte_ok:
-		ball.play_fx(kick_fx)   # errou o QTE = chute fraquinho, sem aura
+		ball.play_fx(fx if fx != null else kick_fx)   # errou o QTE = chute fraquinho, sem aura
+		if on_kick.is_valid():
+			on_kick.call(ball, d, speed)
 
 	var touches: int = ball.interaction_count
 	var elapsed: float = 0.0
@@ -563,7 +696,12 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 				CurveVariant.TRIVELA:
 					text = "Chute ainda mais curvo. %d%% de chance de gol." % _pct(chance_trivela)
 				CurveVariant.CRASH:
-					text = "Chute curvo com um inimigo colado nele. %d%% de chance de gol." % _pct(chance_crash)
+					var reaction: ChemicalReaction = _find_reaction()
+					if reaction != null:
+						text = "Reação Química Cruel com o Charles: chute curvo com MUITO mais força, sombra gigante e espinhos. %d%% de chance de gol.\nA reação recarrega em %d rodadas." % [
+							_pct(chance_self_destruction), reaction.cooldown_rounds]
+					else:
+						text = "Chute curvo com um inimigo colado nele. %d%% de chance de gol." % _pct(chance_crash)
 				_:
 					text = "Chute curvo que muda conforme a situação. De %d%% a %d%% de chance de gol." % [
 						_pct(minf(chance_curve, minf(chance_trivela, chance_crash))),
@@ -597,6 +735,7 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 func reset_for_new_match() -> void:
 	super()   # também zera as recargas
 	_destroyer_until_round = -1
+	_refresh_destroyer_aura()
 	_aiming_curve = false
 	_pulse = 0.0
 	queue_redraw()
@@ -624,23 +763,47 @@ func _draw() -> void:
 		_draw_curve_preview()
 
 
+## Mira do chute curvo: simula a MESMA física que o _curve_kick() vai aplicar (velocidade
+## inicial, decaimento por air_drag, taxa de rotação e duração da curva), então o desenho
+## bate com o voo real. Cada variante usa o próprio turn (ver _turn_for_variant), então
+## Curve, Parabolic, Trivela e Crash ficam visivelmente diferentes entre si.
 func _draw_curve_preview() -> void:
 	var ball: Ball = _get_ball()
-	var from_pos: Vector2 = ball.global_position if ball else global_position
-	var side: float = _curve_side(from_pos, aim_direction)
+	if ball == null:
+		return
+	# O preview sai da posição da BOLA (em coordenadas locais do Rin), não do pé do Rin
+	var start: Vector2 = to_local(ball.global_position)
 	var variant: CurveVariant = get_curve_variant()
-	var turn: float = curve_turn_degrees
-	if variant == CurveVariant.TRIVELA or variant == CurveVariant.CRASH:
-		turn = trivela_turn_degrees
+	var turn: float = _turn_for_variant(variant)
+	var side: float = _curve_side(ball.global_position, aim_direction)
 
-	var steps: int = 24
-	var step_len: float = curve_preview_length / float(steps)
-	var per_step: float = side * deg_to_rad(turn) / float(steps)
-	var pos: Vector2 = Vector2.ZERO
+	# Self Destruction (Crash + reação Cruel): usa a força cheia no preview também
+	var force_mult: float = 1.0
+	if variant == CurveVariant.CRASH and _find_reaction() != null:
+		force_mult = self_destruction_force_mult
+
+	var dt: float = 1.0 / 60.0
+	var pos: Vector2 = start
 	var dir: Vector2 = aim_direction
-	for i in steps:
-		var next: Vector2 = pos + dir * step_len
-		if i % 2 == 0:
-			draw_line(pos, next, Color(0.314, 0.909, 0.625, 0.961), 3.0)
-		pos = next
-		dir = dir.rotated(per_step)
+	var speed: float = curve_force * kick_force_to_speed * force_mult
+	var rot_per_sec: float = side * deg_to_rad(turn) / maxf(curve_duration, 0.05)
+	var air_factor: float = maxf(0.0, 1.0 - ball.air_drag * dt)   # mesmo decay do Ball
+
+	var elapsed: float = 0.0
+	var travelled: float = 0.0
+	var steps: int = 0
+	var max_steps: int = 240
+	var max_length: float = curve_preview_length
+	var color := Color(0.314, 0.909, 0.625, 0.961)
+	while steps < max_steps and travelled < max_length and speed > 20.0:
+		var seg: Vector2 = dir * speed * dt
+		if steps % 2 == 0:
+			draw_line(pos, pos + seg, color, 3.0)
+		pos += seg
+		travelled += seg.length()
+		steps += 1
+		# Só gira enquanto a curva está valendo (igual ao _curve_kick)
+		if elapsed < curve_duration:
+			dir = dir.rotated(rot_per_sec * dt)
+		speed *= air_factor
+		elapsed += dt

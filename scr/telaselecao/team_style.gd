@@ -13,7 +13,7 @@ extends RefCounted
 ## Os valores escolhidos ficam guardados enquanto o jogo está aberto (inclusive se a cena
 ## for recarregada); ao fechar e abrir o jogo, volta tudo ao padrão.
 
-const MAX_NAME_LENGTH: int = 14
+const MAX_NAME_LENGTH: int = 16
 
 ## Cor padrão de cada time (índice = número do time)
 const DEFAULT_COLORS: Array[Color] = [

@@ -44,6 +44,9 @@ const YELLOW := Color(1.0, 0.92, 0.1)
 @export_range(0.0, 1.0) var stalk_penalty_sexy: float = 0.15   # -10% com Sexy Mode
 @export var stalk_rounds: int = 2                 # duração (contando a atual)
 @export var stalker_cooldown: int = 3
+## Se o inimigo preso ficar mais longe que isto do Raichi (empurrão, reset, etc.), a
+## corrente arrebenta sozinha — sem isso ela ficava ligando dois pontos distantes.
+@export var stalk_break_distance: float = 300.0
 
 @export_group("Dog Trick")
 @export var dog_cooldown: int = 2
@@ -179,22 +182,26 @@ func _drag_stalked() -> void:
 	if pull != Vector2.ZERO:
 		global_position += pull
 
-
-## Tira as correntes que já expiraram pelo tempo
 func _prune_stalks() -> void:
-	var round_now: int = _get_manager().round_number if _get_manager() else 0
+	var m: MatchManager = _get_manager()
+	var round_now: int = m.round_number if m else 0
 	for key in _stalks.keys():
 		var p: Player = key as Player
-		if not is_instance_valid(p) or round_now > int(_stalks[key]):
+		var break_it: bool = false
+		if not is_instance_valid(p):
+			break_it = true
+		elif round_now > int(_stalks[key]):
+			break_it = true
+		elif global_position.distance_to(p.global_position) > stalk_break_distance:
+			break_it = true
+		if break_it:
 			if is_instance_valid(p):
-				p.apply_shot_debuff(0.0, -1, self)
+				p.apply_shot_debuff(0.0, -1, self)   # zera a penalidade do Raichi
 			_stalks.erase(key)
 			_stalk_last_pos.erase(key)
 
-
 func _not_stalked(p: Player) -> bool:
 	return not _stalks.has(p)
-
 
 ## Inimigo próximo que ainda não está preso
 func _stalk_target_in_range() -> bool:

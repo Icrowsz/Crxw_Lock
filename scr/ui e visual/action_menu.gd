@@ -163,14 +163,14 @@ func _refresh() -> void:
 			if p.is_confused():
 				status += " | CONFUSO (habilidades embaralhadas)"
 			if p.is_generals_suppressed():
-				status += " | AÇÕES GERAIS BLOQUEADAS (Body Core)"
+				status += " | AÇÕES GERAIS BLOQUEADAS"
 			if p.is_skills_suppressed():
-				status += " | HABILIDADES BLOQUEADAS (Watchtower)"
+				status += " | HABILIDADES BLOQUEADAS"
 			for blocked in MatchManager.GENERAL_ACTION_NAMES:
 				if p.is_general_action_blocked(blocked):
-					status += " | SEM %s (Obsessive Hater)" % MatchManager.GENERAL_ACTION_NAMES[blocked]
+					status += " | SEM %s" % MatchManager.GENERAL_ACTION_NAMES[blocked]
 			if p.extra_skill_left > 0:
-				status += " | +%d habilidade extra (Obsessive Lover)" % p.extra_skill_left
+				status += " | +%d habilidade extra" % p.extra_skill_left
 			status += " | Correr %d/%d | Carrinho %d/%d" % [
 				p.runs_this_turn, p.max_runs_per_turn, p.slides_this_turn, p.max_slides_per_turn]
 			info_label.text = "Agindo: %s (%s) — %s\nProtagonista — gerais: %d | habilidade: %d\nSecundários — gerais: %d | habilidade: %d\nClique em um companheiro de time para trocar quem age" % [

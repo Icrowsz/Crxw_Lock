@@ -2,8 +2,8 @@
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_1csnf"]
 [ext_resource type="Script" uid="uid://deetw1nhru6r5" path="res://scr/perso/loki.gd" id="2_0dl0w"]
-[ext_resource type="Texture2D" uid="uid://dkwesr8156aif" path="res://img/icons/lokiicon.png" id="3_0dl0w"]
 [ext_resource type="Texture2D" uid="uid://cdvlfwflocoyn" path="res://img/mvps/loki.jpg" id="3_ejyid"]
+[ext_resource type="Texture2D" uid="uid://bkctul2plmjrk" path="res://img/testes/loki.png" id="4_ejyid"]
 
 [node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_1csnf")]
 script = ExtResource("2_0dl0w")
@@ -15,7 +15,7 @@ vitesse_distance = 480.0
 vitesse_time = 0.28
 vitesse_cooldown = 2
 vitesse_meet_radius = 58.0
-genie_force = 150.0
+genie_force = 60.0
 genie_chance = 0.5
 assault_cooldown = 3
 assault_range = 300.0
@@ -41,4 +41,4 @@ visual_root = NodePath("SprPlayer")
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)
-texture = ExtResource("3_0dl0w")
+texture = ExtResource("4_ejyid")

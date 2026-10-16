@@ -2,8 +2,8 @@
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_eajul"]
 [ext_resource type="Script" uid="uid://btaemgnf2l0e3" path="res://scr/perso/kurona.gd" id="2_ksyc4"]
-[ext_resource type="Texture2D" uid="uid://dhwlkatiahw5" path="res://img/icons/kuronaicon.png" id="3_hhmrk"]
 [ext_resource type="Texture2D" uid="uid://ce1w8tpl34xgs" path="res://img/mvps/kurona.jpg" id="3_wsdcl"]
+[ext_resource type="Texture2D" uid="uid://bfshdn6n3c5yj" path="res://img/testes/kurona.png" id="4_wsdcl"]
 
 [node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_eajul")]
 script = ExtResource("2_ksyc4")
@@ -11,6 +11,10 @@ sharp_range = 450.0
 sharp_bonus_per_round = 0.03
 sharp_touch_range = 80.0
 sharp_cooldown = 3
+sharp_duration = 3
+sharp_ally_access_rounds = 3
+sharp_return_mult = 2.0
+sharp_outside_ratio = 0.5
 lie_pass_range = 300.0
 lie_bonus_ratio = 0.5
 orbital_range = 300.0
@@ -31,4 +35,4 @@ visual_root = NodePath("SprPlayer")
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)
-texture = ExtResource("3_hhmrk")
+texture = ExtResource("4_wsdcl")

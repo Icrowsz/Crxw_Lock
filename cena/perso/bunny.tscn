@@ -1,0 +1,43 @@
+[gd_scene format=3 uid="uid://cr35bd0bmlvfe"]
+
+[ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_hlu3s"]
+[ext_resource type="Texture2D" uid="uid://cbo7yf5pqae8i" path="res://img/mvps/bunny.jpg" id="2_8skxl"]
+[ext_resource type="Script" uid="uid://dpcg3wvx2lxag" path="res://scr/perso/bunny.gd" id="2_gccaw"]
+[ext_resource type="Texture2D" uid="uid://caumecy3n5mcc" path="res://img/testes/bunny.png" id="4_gccaw"]
+
+[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_hlu3s")]
+script = ExtResource("2_gccaw")
+chance_bun_kick = 0.45
+chance_hare_leap = 0.5
+kick_cooldown = 2
+bun_kick_curve_deg = 12.0
+hare_leap_curve_deg = 12.0
+curve_time = 0.2
+leap_range = 160.0
+leap_time = 0.3
+apathic_range = 450.0
+apathic_return_range = 550.0
+apathic_run_time = 0.8
+apathic_bonus_skills = 1
+apathic_cooldown = 2
+scars_range = 175.0
+scars_rounds = 2
+scars_break_distance = 160.0
+scars_stand_distance = 50.0
+scars_dash_time = 0.3
+scars_cooldown = 2
+planar_run_time = 0.5
+planar_carry_radius = 130.0
+planar_extra_rounds = 0
+planar_uses_per_turn = 1
+fun_goal_step = 0.04
+fun_qte_step = 0.01
+kick_fx = null
+skill_icons = {}
+display_name = "Bunny Iglesias"
+mvp_image = ExtResource("2_8skxl")
+visual_root = NodePath("SprPlayer")
+
+[node name="SprPlayer" parent="." index="1" unique_id=395354675]
+scale = Vector2(0.2, 0.2)
+texture = ExtResource("4_gccaw")

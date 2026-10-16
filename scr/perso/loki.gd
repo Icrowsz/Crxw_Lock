@@ -63,16 +63,16 @@ enum AssaultVariant { NONE, ASSAULT, TOO_SLOW }
 
 @export_group("Passivas")
 @export var run_speed_passive: float = 1.5               # multiplicador de velocidade do Correr
-@export var charge_distance_per_step: float = 180.0      # px de movimento para cada +3% de força
+@export var charge_distance_per_step: float = 260.0      # px de movimento para cada +3% de força
 @export_range(0.0, 1.0) var charge_step_bonus: float = 0.03
 @export_range(0.0, 1.0) var charge_max_bonus: float = 0.30
 
 @export_group("Vitesse de la Lumière / Nouveau Génie")
-@export var vitesse_distance: float = 390.0              # alcance do avanço
+@export var vitesse_distance: float = 340.0              # alcance do avanço
 @export var vitesse_time: float = 0.28
 @export var vitesse_cooldown: int = 2                    # compartilhada com o Nouveau Génie
 @export var vitesse_meet_radius: float = 58.0            # a que distância da bola ele "encontra" ela
-@export var genie_force: float = 50.0                   # força do chute (x10 = px/s)
+@export var genie_force: float = 40.0                   # força do chute (x10 = px/s)
 @export_range(0.0, 1.0) var genie_chance: float = 0.50   # chance de o chute vencer o goleiro
 
 @export_group("Char d'Assaut / Renversé / Too Slow")

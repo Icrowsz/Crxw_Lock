@@ -29,6 +29,13 @@ extends Player
 ##          habilidade — já podendo usar o 44 Pant na sequência, por exemplo. Se não
 ##          alcançar, continua Suspenso. Recarga de 3 rodadas, mesmo se não alcançar a bola.
 ##
+##      - Mach Cut-in: a OUTRA variante do Once More, escolhida sozinha pelo estado (como o Miau!/
+##          Red Princess): Chigiri NO CHÃO com a bola próxima também no chão. Ele mira, segura a
+##          bola, dá um dash curto para o lado (para longe do inimigo mais próximo) e um dash
+##          para frente (na direção da mira), ainda segurando a bola, e dá um chute médio.
+##          Chance de gol 45%; 55% se ele estiver DENTRO da Golden Zone na hora do chute (dá para
+##          dashar para dentro dela). Compartilha a recarga do Once More (3 rodadas).
+##
 ## 3. Miau! / Red Princess (ação de habilidade, com 2 variantes automáticas pela distância da
 ##      bola; recarga de 3 rodadas — NÃO informada no pedido original, usei 3 por padrão,
 ##      ajuste em miau_cooldown se quiser outra):
@@ -43,7 +50,7 @@ extends Player
 ## script ao nó raiz -> renomeie o nó raiz para "Chigiri".
 ##
 ## Animações opcionais (se faltar alguma, o jogo só pula): golden_zone, pant_44, once_more,
-## miau, red_princess.
+## mach_cut_in, miau, red_princess.
 ##
 ## PEÇAS NO RESTO DO PROJETO (já aplicadas nos arquivos devolvidos nas rodadas anteriores):
 ## - field.gd: get_goal_area_rect(team), irmã do get_penalty_area_rect() que já existia —
@@ -64,6 +71,9 @@ const CD_MIAU: StringName = &"cd_miau"
 enum ZoneVariant { NONE, CREATE, SHOT }
 ## Variante da habilidade 3, pela distância da bola
 enum MiauVariant { NONE, MIAU, RED_PRINCESS }
+## Variante do Once More, pelo estado do Chigiri e da bola (suspenso = Once More; no chão com a
+## bola no chão ao alcance = Mach Cut-in)
+enum OnceMoreVariant { NONE, ONCE_MORE, MACH_CUT_IN }
 
 @export_group("Golden Zone / 44 Pant")
 @export var golden_zone_rounds: int = 2
@@ -85,6 +95,17 @@ enum MiauVariant { NONE, MIAU, RED_PRINCESS }
 @export var once_more_dash_time: float = 0.3
 @export var once_more_cooldown: int = 3
 @export var once_more_extra_skills: int = 1
+
+@export_group("Mach Cut-in (variante do Once More)")
+@export_range(0.0, 1.0) var chance_mach_cut_in: float = 0.45          # chance de gol
+@export_range(0.0, 1.0) var chance_mach_cut_in_golden: float = 0.55   # com o Chigiri DENTRO da Golden Zone na hora do chute
+@export var mach_side_dash_distance: float = 150.0     # dash curto para o lado
+@export var mach_side_dash_time: float = 0.18
+@export var mach_forward_dash_distance: float = 150.0 # dash para frente (na direção da mira)
+@export var mach_forward_dash_time: float = 0.2
+@export var mach_ball_offset: float = 24.0            # a bola fica à frente dele enquanto ele a segura
+@export var mach_force_mult: float = 1.1             # chute médio (1.0 = chute comum de chão)
+@export var mach_cut_in_cooldown: int = 3             # compartilha a recarga do Once More
 
 @export_group("Miau! / Red Princess")
 @export var miau_slide_distance: float = 230.0      # o Carrinho comum (slide_distance) é mais curto
@@ -110,6 +131,9 @@ var _zone_center: Vector2 = Vector2.ZERO
 
 ## Carrinho mais longo (Miau!) em andamento: não usa o Carrinho geral do turno
 var _miau_active: bool = false
+
+## Mach Cut-in em andamento (a pantera aparece e a bola acompanha o Chigiri)
+var _mach_active: bool = false
 
 
 func _init() -> void:
@@ -146,6 +170,14 @@ func _hook_manager() -> void:
 	var m: MatchManager = _get_manager()
 	if m:
 		m.round_started.connect(_on_round_started)
+		m.sides_swapped.connect(_on_sides_swapped)
+
+
+## Virou o lado no 2º tempo: a zona ativa vai para o canto equivalente do gol que ele ataca agora
+func _on_sides_swapped() -> void:
+	if _zone_until_round >= 0:
+		_zone_center = _golden_zone_corner()
+		queue_redraw()
 
 
 func _on_round_started(new_round: int) -> void:
@@ -200,14 +232,15 @@ func _golden_zone_corner() -> Vector2:
 	var enemy_team: int = 1 - team
 	var rect: Rect2 = field.get_goal_area_rect(enemy_team)
 
-	var forward: Vector2 = Vector2(1.0, 0.0) * (1.0 if team == 0 else -1.0)   # para onde Chigiri ataca
+	var forward: Vector2 = Vector2(get_attack_dir(), 0.0)   # para onde Chigiri ataca (muda na virada)
 	var right: Vector2 = forward.rotated(deg_to_rad(90.0))                     # "direita" de quem ataca
 	if golden_zone_flip_side:
 		right = -right
 
 	# external_x: a borda da área MAIS LONGE da linha de gol (o "fundo" da caixa, para o
 	# lado do campo); corner_y: o lado direito dela
-	var external_x: float = rect.end.x if enemy_team == 0 else rect.position.x
+	# o gol atacado fica na ponta +x se ele ataca para a direita: o "fundo" da caixa é o lado -x dela
+	var external_x: float = rect.position.x if forward.x > 0.0 else rect.end.x
 	var corner_y: float = rect.end.y if right.y > 0.0 else rect.position.y
 	var corner := Vector2(external_x, corner_y)
 
@@ -218,7 +251,11 @@ func _golden_zone_corner() -> Vector2:
 	# parte da caixa e visualmente parece estar "por dentro" dela.
 	var safe_margin: float = maxf(golden_zone_outside_margin, golden_zone_radius + 20.0)
 	var push: Vector2 = Vector2(-forward.x, signf(corner_y - rect.get_center().y)) * safe_margin
-	return field.to_global(corner + push)
+	# Rede de segurança: nunca deixa a zona sair do campo
+	var spot: Vector2 = corner + push
+	var half: Vector2 = field.pitch_size * 0.5
+	spot = Vector2(clampf(spot.x, -half.x, half.x), clampf(spot.y, -half.y, half.y))
+	return field.to_global(spot)
 
 
 func _create_golden_zone() -> bool:
@@ -319,6 +356,137 @@ func _run_once_more_dash() -> void:
 		ball.height = Heights.to_height(height_level)   # a bola vem para o nível dele (agora Chão), sob controle
 		ball.register_touch(self)
 		extra_skill_left += once_more_extra_skills
+
+
+# ---------- ONCE MORE: VARIANTE MACH CUT-IN ----------
+
+## Que variante do Once More cabe agora? Suspenso = Once More (como sempre). No chão com a bola
+## no chão ao alcance = Mach Cut-in. Qualquer outro estado = nenhuma (o botão fica apagado).
+func get_once_more_variant() -> OnceMoreVariant:
+	if is_down:
+		return OnceMoreVariant.NONE
+	if height_level == Heights.Level.SUSPENDED:
+		return OnceMoreVariant.ONCE_MORE
+	if height_level == Heights.Level.GROUND:
+		var ball: Ball = _get_ball()
+		if ball != null and not ball.is_held() and not ball.is_locked_for(team) \
+				and ball.get_level() == Heights.Level.GROUND \
+				and global_position.distance_to(ball.global_position) <= kick_range:
+			return OnceMoreVariant.MACH_CUT_IN
+	return OnceMoreVariant.NONE
+
+
+func _once_more_skill_name() -> String:
+	return "Mach Cut-in" if get_once_more_variant() == OnceMoreVariant.MACH_CUT_IN else "Once More"
+
+
+func _use_once_more_skill() -> bool:
+	match get_once_more_variant():
+		OnceMoreVariant.ONCE_MORE:
+			return await _use_once_more()
+		OnceMoreVariant.MACH_CUT_IN:
+			return await _use_mach_cut_in()
+	return false
+
+
+## Mach Cut-in: mira, segura a bola, dash curto para o lado, dash para frente (ainda segurando) e
+## chute médio. A chance sobe na Golden Zone (conferida na hora do chute, depois dos dashes).
+func _use_mach_cut_in() -> bool:
+	var m: MatchManager = _get_manager()
+	var ball: Ball = _get_ball()
+	if m == null or ball == null:
+		return false
+
+	# 1) Mira do chute (cancelar não gasta a ação)
+	var aim: Vector2 = await m.aim_for_skill(self, kick_aim_range)
+	if aim == Vector2.ZERO:
+		return false
+	if get_once_more_variant() != OnceMoreVariant.MACH_CUT_IN:
+		return false   # a bola saiu do alcance enquanto ele mirava
+	aim = aim.normalized()
+	var side: Vector2 = _mach_side_direction(aim)
+
+	# 2) Domina e segura a bola (ela fica pairando à frente dele, acompanhando)
+	m.clear_pending_pass()    # se a bola era um passe alto em andamento, ele deixa de valer
+	face_towards(aim)
+	ball.register_touch(self)
+	ball.hover_to(_mach_hold_point(), height, 0.08)
+	ball.fx_during_hover = true
+	if kick_fx:
+		ball.play_fx(kick_fx)
+	_mach_active = true
+	await get_tree().create_timer(0.1).timeout   # a bola chega nos pés
+
+	# 3) Dash curto para o lado e dash para frente, sempre segurando a bola
+	await _mach_dash(ball, side * mach_side_dash_distance, mach_side_dash_time)
+	await _mach_dash(ball, aim * mach_forward_dash_distance, mach_forward_dash_time)
+
+	# 4) Chute médio. Dentro da Golden Zone (na hora do chute) a chance é maior
+	var chance: float = chance_mach_cut_in_golden if _in_golden_zone() else chance_mach_cut_in
+	face_towards(aim)
+	ball.fx_during_hover = false
+	next_kick_force_mult *= mach_force_mult
+	await kick_ball(ball, aim, KickType.GROUND, true, chance, false, kick_fx, &"mach_cut_in")
+
+	# Se o chute foi cancelado (ex: a partida reiniciou), a bola não fica presa
+	if is_instance_valid(ball) and ball.hovering and not ball.is_held():
+		ball.release_hover()
+	_mach_active = false
+	start_cooldown(CD_ONCE_MORE, mach_cut_in_cooldown)   # compartilhada com o Once More
+	queue_redraw()
+	return true
+
+
+## O dash vai até um ponto (dentro do campo) e a bola acompanha no mesmo quadro
+func _mach_dash(ball: Ball, offset: Vector2, duration: float) -> void:
+	var start: Vector2 = global_position
+	var dest: Vector2 = _clamp_to_pitch(start + offset)
+	if dest.distance_to(start) > 1.0:
+		face_towards(dest - start)
+	var tw: Tween = create_tween()
+	tw.tween_method(_mach_dash_step.bind(ball, start, dest), 0.0, 1.0, duration) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	await tw.finished
+
+
+func _mach_dash_step(t: float, ball: Ball, start: Vector2, dest: Vector2) -> void:
+	global_position = start.lerp(dest, t)
+	if is_instance_valid(ball):
+		ball.global_position = _mach_hold_point()
+		ball.height = height
+
+
+func _mach_hold_point() -> Vector2:
+	return global_position + Vector2(facing * mach_ball_offset, 0.0)
+
+
+## Lado do dash curto: perpendicular à mira, para longe do inimigo mais próximo
+func _mach_side_direction(aim: Vector2) -> Vector2:
+	var perp: Vector2 = aim.orthogonal()
+	var nearest: Player = null
+	var best: float = INF
+	for p: Player in get_tree().get_nodes_in_group("players"):
+		if p.team == team or p.is_down:
+			continue
+		var d: float = global_position.distance_to(p.global_position)
+		if d < best:
+			best = d
+			nearest = p
+	if nearest != null and (nearest.global_position - global_position).dot(perp) > 0.0:
+		return -perp
+	return perp
+
+
+## Mantém uma posição (global) dentro do campo
+func _clamp_to_pitch(global_p: Vector2) -> Vector2:
+	var field := get_tree().get_first_node_in_group("field") as Field
+	if field == null:
+		return global_p
+	var half: Vector2 = field.pitch_size * 0.5 - Vector2(20.0, 20.0)
+	var l: Vector2 = field.to_local(global_p)
+	l.x = clampf(l.x, -half.x, half.x)
+	l.y = clampf(l.y, -half.y, half.y)
+	return field.to_global(l)
 
 
 # ---------- HABILIDADE 3: MIAU! / RED PRINCESS ----------
@@ -441,7 +609,7 @@ func _check_slide_hits() -> void:
 func get_skills() -> Array[Dictionary]:
 	var list: Array[Dictionary] = []
 	list.append({"id": SKILL_ZONE, "name": skill_label(_zone_skill_name(), CD_ZONE)})
-	list.append({"id": SKILL_ONCE_MORE, "name": skill_label("Once More", CD_ONCE_MORE)})
+	list.append({"id": SKILL_ONCE_MORE, "name": skill_label(_once_more_skill_name(), CD_ONCE_MORE)})
 	list.append({"id": SKILL_MIAU, "name": skill_label(_miau_skill_name(), CD_MIAU)})
 	return list
 
@@ -458,7 +626,7 @@ func can_use_skill(skill_id: StringName = &"default") -> bool:
 					return true   # sem recarga própria
 			return false
 		SKILL_ONCE_MORE:
-			return not is_on_cooldown(CD_ONCE_MORE) and not is_down and height_level == Heights.Level.SUSPENDED
+			return not is_on_cooldown(CD_ONCE_MORE) and get_once_more_variant() != OnceMoreVariant.NONE
 		SKILL_MIAU:
 			return not is_on_cooldown(CD_MIAU) and get_miau_variant() != MiauVariant.NONE
 	return false
@@ -469,7 +637,7 @@ func use_skill(skill_id: StringName = &"default") -> bool:
 		SKILL_ZONE:
 			return await _use_zone_skill()
 		SKILL_ONCE_MORE:
-			return await _use_once_more()
+			return await _use_once_more_skill()
 		SKILL_MIAU:
 			return await _use_miau_skill()
 	return false
@@ -503,10 +671,22 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 					text = create_text + "\n" + pant_text
 			text += cd_text
 		SKILL_ONCE_MORE:
-			title = "Once More"
-			text = ("Chigiri avança reto em direção à bola. Se alcançar, domina a bola, desce ao chão e ganha +%d ação de habilidade extra.\n"
-				+ "Recarga: %d rodadas.") % [
-				once_more_extra_skills, once_more_cooldown]
+			var once_text: String = "Chigiri avança reto em direção à bola. Se alcançar, domina a bola, desce ao chão e ganha +%d ação de habilidade extra." % once_more_extra_skills
+			var mach_text: String = "Com a bola próxima no chão, Chigiri a segura, dá um dash curto para o lado e outro para frente e chuta. %d%% de chance de gol (%d%% dentro da Golden Zone)." % [
+				_pct(chance_mach_cut_in), _pct(chance_mach_cut_in_golden)]
+			var cooldown_shown: int = once_more_cooldown
+			match get_once_more_variant():
+				OnceMoreVariant.MACH_CUT_IN:
+					title = "Mach Cut-in"
+					text = mach_text
+					cooldown_shown = mach_cut_in_cooldown
+				OnceMoreVariant.ONCE_MORE:
+					title = "Once More"
+					text = once_text
+				_:
+					title = "Once More / Mach Cut-in"
+					text = once_text + "\n" + mach_text
+			text += "\nRecarga: %d rodadas." % cooldown_shown
 		SKILL_MIAU:
 			var miau_text: String = "Um carrinho mais longo."
 			var princess_text: String = "Cruzamento alto para um aliado entre %d e %d px de distância." % [
@@ -534,6 +714,7 @@ func reset_for_new_match() -> void:
 	super()
 	_zone_until_round = -1
 	_miau_active = false
+	_mach_active = false
 	queue_redraw()
 
 
@@ -541,8 +722,8 @@ func reset_for_new_match() -> void:
 
 func _process(delta: float) -> void:
 	super(delta)
-	if is_zone_active():
-		queue_redraw()   # a varredura do círculo dourado gira o tempo todo
+	if is_zone_active() or _mach_active:
+		queue_redraw()   # a varredura do círculo dourado gira o tempo todo (e a pantera se mexe)
 
 
 func _draw() -> void:
@@ -557,7 +738,7 @@ func _draw() -> void:
 		draw_line(local_center, local_center + Vector2(cos(sweep), sin(sweep)) * golden_zone_radius,
 			Color(0.718, 0.706, 0.0, 0.7), 2.0)
 
-	if state == State.RUNNING:
+	if state == State.RUNNING or _mach_active:
 		_draw_panther(Vector2(0.0, -height))
 
 

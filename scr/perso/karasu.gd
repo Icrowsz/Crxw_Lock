@@ -83,7 +83,9 @@ enum FeintState { NONE, HOLDING }
 @export var wings_rounds: int = 2                      # duração do bloqueio (contando a rodada atual)
 @export var wings_range: float = 130.0                 # alcance para agarrar; se o inimigo ficar mais longe que isso, solta
 @export var wings_max_targets: int = 2
-@export var steal_range: float = 180.0                 # Silent Steal: o quanto longe ele alcança a bola
+## Multiplicador da velocidade de Correr dos inimigos agarrados (0.5 = metade da velocidade)
+@export_range(0.1, 1.0) var wings_run_slow: float = 0.5
+@export var steal_range: float = 180.0
 @export var steal_reach_time: float = 0.2
 @export var steal_descend_time: float = 0.4
 
@@ -124,6 +126,7 @@ func _ready() -> void:
 	if kick_fx == null:
 		kick_fx = _make_kick_fx()
 	_base_run_duration = run_duration
+	add_to_group("control_sources")   # o Wings Block deixa o inimigo lento ao Correr
 	_hook_manager.call_deferred()
 
 
@@ -710,6 +713,13 @@ func _release_grabs() -> void:
 		if is_instance_valid(e) and e.locked_by == self:
 			e.clear_lock()
 	_grabbed.clear()
+	
+## Wings Block: os inimigos agarrados correm bem mais devagar (o Player soma este
+## multiplicador em get_run_speed_mult() durante o Correr)
+func run_speed_mult_on(p: Player) -> float:
+	if not is_instance_valid(p) or p.locked_by != self:
+		return 1.0
+	return wings_run_slow if _grabbed.has(p) else 1.0
 
 
 ## Silent Steal: Karasu (suspenso) alcança a bola suspensa/voando, domina, e os dois descem
@@ -825,8 +835,8 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 					text = "Passe, chute (%d%% de chance de gol) ou carrinho, conforme a situação." % _pct(dive_bomb_chance)
 			text += "\nRecarga: %d rodadas." % assault_cooldown
 		SKILL_WINGS:
-			var block_text: String = "Agarra os %d inimigos mais próximos e os impede de usar habilidades por %d rodadas, ou até Karasu se afastar." % [
-				wings_max_targets, wings_rounds]
+			var block_text: String = "Agarra os %d inimigos mais próximos: eles ficam sem habilidades por %d rodadas (ou até Karasu se afastar) e correm a %d%% da velocidade." % [
+				wings_max_targets, wings_rounds, int(wings_run_slow * 100.0)]
 			var steal_text: String = "Alcança a bola no ar, a domina e desce com ela até o chão."
 			match get_wings_variant():
 				WingsVariant.BLOCK:

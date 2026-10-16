@@ -1,0 +1,38 @@
+[gd_scene format=3 uid="uid://hr4ot6futjpl"]
+
+[ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_lpt0l"]
+[ext_resource type="Texture2D" uid="uid://pjygy5ainuee" path="res://img/testes/agi.png" id="2_g4se8"]
+[ext_resource type="Script" uid="uid://y25kreb3rsmd" path="res://scr/perso/agi.gd" id="2_sphca"]
+[ext_resource type="Texture2D" uid="uid://ciggkrhihp2cd" path="res://img/mvps/agi.jpg" id="3_1t5ef"]
+
+[node name="Player" unique_id=1241627939 instance=ExtResource("1_lpt0l")]
+script = ExtResource("2_sphca")
+doctor_cooldown = 3
+doctor_range = 500.0
+doctor_cooldown_cut = 1
+doctor_shot_bonus = 0.05
+doctor_shot_count = 2
+doctor_run_speed_mult = 1.2
+flick_cooldown = 2
+flick_range = 520.0
+flick_ground_distance = 300.0
+flick_rise_time = 0.45
+flick_fall_time = 0.45
+dominance_reach = 250.0
+dominance_jump_time = 0.3
+reach_cooldown = 2
+reach_range = 200.0
+reach_range_flying = 250.0
+reach_header_chance = 0.45
+reach_pull_time = 0.2
+reach_toss_time = 0.3
+reach_jump_time = 0.3
+reach_qte = true
+kick_fx = null
+skill_icons = {}
+display_name = "Doctor Agi"
+mvp_image = ExtResource("3_1t5ef")
+
+[node name="SprPlayer" parent="." index="1" unique_id=395354675]
+scale = Vector2(0.2, 0.2)
+texture = ExtResource("2_g4se8")

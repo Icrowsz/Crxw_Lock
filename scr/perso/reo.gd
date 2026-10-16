@@ -17,8 +17,8 @@ extends Player
 ##      - terço do meio    -> Chameleon Support: passe rasteiro com alcance de 500
 ##      - terço de ataque  -> Chameleon Offensive: chute direto, em qualquer estado
 ## 3. Our Dream (4º botão; só aparece se o Nagi é do mesmo time): passe alto CURVO de alcance dream_range.
-##      O Reo escolhe o ponto do campo onde a bola vai chegar; ela sobe agora e pousa Suspensa no começo
-##      do próximo turno do time (mesmo fluxo do passe alto comum). É a primeira metade da Reação Química
+##      O Reo escolhe o ponto do campo onde a bola vai chegar; ela sobe fazendo a curva e pousa Suspensa
+##      nesse ponto NA MESMA RODADA (sem esperar o próximo turno). É a primeira metade da Reação Química
 ##      Miracle (reaction_miracle.gd): o Reo guarda o último passe em last_our_dream e a reação lê esse dado.
 ##
 ## COMO A CÓPIA FUNCIONA ("personagem fantasma"):
@@ -77,7 +77,7 @@ signal popup_done(index: int)
 @export_range(0.0, 0.6) var dream_curve: float = 0.25 # o quanto a bola curva (fração da distância; 0.25 = desvio de 25%)
 @export var dream_bend_sign: float = 1.0              # +1 / -1 = para qual lado a bola curva
 @export var dream_flight_time: float = 0.9            # tempo da subida (igual ao passe alto comum)
-@export_range(0.2, 0.9) var dream_flight_fraction: float = 0.6   # até onde da curva a bola vai agora; o resto o MatchManager faz no próximo turno
+@export_range(0.2, 0.9) var dream_flight_fraction: float = 0.6   # até onde da curva a bola voa em curva; dali ela desce em linha reta até o ponto, na mesma rodada
 ## true = só aparece/vale com a reação Miracle fora de recarga. false = sempre pode (aí é só um passe curvo)
 @export var dream_only_when_reaction_ready: bool = true
 ## true = o Our Dream NÃO gasta ação de habilidade ("recebida passivamente"). false = gasta uma, como as outras
@@ -275,6 +275,7 @@ func _make_ghost(src: Player) -> Player:
 	if g == null:
 		return null
 	g.name = "Copia_%s" % src.name
+	g.set_meta("ghost_owner", self)   # a bola enxerga o fantasma como o Reo (ver Ball._resolve_player)
 	get_parent().add_child(g)
 	_hide_ghost(g)
 	# Alguns personagens se registram em grupos num _ready adiado: tira de novo no frame seguinte
@@ -371,6 +372,10 @@ func _end_copy(spent: bool) -> void:
 func _drop_ghost() -> void:
 	_ghost_busy = false
 	if _copy_ghost != null and is_instance_valid(_copy_ghost):
+		# A bola não pode ficar apontando para o fantasma que vai ser apagado (o gol lê o last_toucher)
+		var ball: Ball = _get_ball()
+		if ball != null:
+			ball.replace_player(_copy_ghost, self)
 		_copy_ghost.queue_free()
 	_copy_ghost = null
 	_copy_skill_id = &""
@@ -455,8 +460,10 @@ func _use_copy() -> bool:
 	_show_face(_face_texture_for(target))
 	if _burst:
 		_burst.restart()
+	# A Copy devolve uma ação de habilidade EXTRA: o Reo consegue usar a habilidade
+	# copiada já NESTA rodada (o botão "Cópia" acende na hora, ver SKILL_COPIED)
+	extra_skill_left += 1
 	return true
-
 
 ## Usa a habilidade copiada: o fantasma executa, o Reo acompanha
 func _use_copied() -> bool:
@@ -580,7 +587,7 @@ func _current_zone() -> Zone:
 	var field := get_tree().get_first_node_in_group("field") as Field
 	if field == null:
 		return Zone.SUPPORT
-	var attack_dir: float = 1.0 if team == 0 else -1.0   # time 0 ataca para a direita
+	var attack_dir: float = get_attack_dir()   # já considera a troca de lado
 	var f: float = field.to_local(global_position).x * attack_dir / (field.pitch_size.x * 0.5)
 	if f < -zone_threshold:
 		return Zone.DEFENSE
@@ -800,8 +807,8 @@ func skill_is_free(skill_id: StringName) -> bool:
 
 
 ## Our Dream: passe alto curvo. O Reo escolhe o ponto onde a bola vai chegar. Ela sobe fazendo a
-## curva até o nível Voando e fica pairando; no começo do próximo turno do time o MatchManager a
-## leva até o ponto, no nível Suspenso (igual ao passe alto comum). Se ninguém tocar, ela cai.
+## curva até o nível Voando e, na MESMA RODADA, desce até o ponto no nível Suspenso e fica pairando
+## lá. Se ninguém tocar até o fim do turno, ela cai.
 func _use_dream() -> bool:
 	var m: MatchManager = _get_manager()
 	var ball: Ball = _get_ball()
@@ -823,13 +830,17 @@ func _use_dream() -> bool:
 
 	m.clear_pending_pass()       # se a bola era um passe alto em andamento, ele deixa de valer
 	ball.register_touch(self)    # o passe alto não usa kick(), então registra o toque aqui
+	PassFX.attach(ball, PassFX.Style.OUR_DREAM)   # fita violeta e estrelinhas (efeito pequeno do passe)
 
 	# 3) A bola sobe fazendo a curva e fica pairando
 	await _fly_dream_ball(ball, point)
 
-	# 4) O resto (descer até o ponto no próximo turno, cair se ninguém tocar) é do MatchManager
-	m.begin_point_pass(team, point)
-	m._spawn_pass_marker(team, point, ball)   # a marca no chão mostrando onde a bola vai chegar
+	# 4) A bola desce até o ponto AGORA (mesma rodada) e fica pairando Suspensa lá; se ninguém tocar
+	# até o fim do turno, o MatchManager a solta (cai), igual aos outros passes altos de habilidade
+	var arrive: Tween = ball.hover_to(point, Heights.SUSPENDED_HEIGHT, m.high_pass_arrive_time)
+	await arrive.finished
+	m.register_skill_pass(team, null)
+	MiracleFX.attach(self, 3.0)   # camaleão roxo translúcido em volta do Reo
 	last_our_dream = {
 		"point": point,
 		"round": get_current_round(),
@@ -937,6 +948,7 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 		SKILL_COPY:
 			title = "Copy"
 			text = ("Escolhe um jogador em campo e copia uma habilidade dele por %d rodadas, ou até usá-la. Ela aparece no terceiro botão.\n"
+				+ "A Copy também dá +1 ação de habilidade: dá para usar a habilidade copiada já nesta rodada.\n"
 				+ "Recarga: %d rodadas.") % [copy_rounds, copy_cooldown]
 		SKILL_ROLE:
 			title = _role_skill_name()
@@ -966,7 +978,7 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 				text = "Aqui aparece a habilidade que você copiar com o Copy."
 		SKILL_DREAM:
 			title = "Our Dream"
-			text = ("Passe alto curvo (alcance %d): você escolhe onde a bola vai chegar. Ela pousa Suspensa no começo do próximo turno do time.\n"
+			text = ("Passe alto curvo (alcance %d): você escolhe onde a bola vai chegar. Ela pousa Suspensa nesse ponto na mesma rodada.\n"
 				+ "Se o Nagi pegar a bola e usar o Fake Volley com um inimigo perto, nasce a Reação Química Miracle.") % int(dream_range)
 			if dream_only_when_reaction_ready and _miracle_rounds_left() > 0:
 				text += "\nReação Miracle em recarga: %d rodada(s)." % _miracle_rounds_left()

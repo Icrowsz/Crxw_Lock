@@ -153,6 +153,7 @@ func _hook_manager() -> void:
 	var m: MatchManager = _get_manager()
 	if m:
 		m.round_started.connect(_on_round_started)
+		m.sides_swapped.connect(_place_pieces)   # virou o lado: as peças acompanham o ataque
 
 
 func _on_round_started(_round_number: int) -> void:
@@ -172,15 +173,34 @@ func _build_pieces() -> void:
 		push_warning("Isagi: nenhum Field encontrado; as peças do Pieces não foram criadas.")
 		return
 
-	var attack_dir: float = 1.0 if team == 0 else -1.0   # time 0 ataca para a direita
-	var half_x: float = field.pitch_size.x * 0.5
-
-	_add_piece(field, PieceZone.Kind.ATTACK, attack_dir * attack_piece_x * half_x,
+	_add_piece(field, PieceZone.Kind.ATTACK, _piece_local_x(PieceZone.Kind.ATTACK, field),
 		"ATAQUE", Color(1.0, 0.45, 0.35))
-	_add_piece(field, PieceZone.Kind.MIDFIELD, attack_dir * midfield_piece_x * half_x,
+	_add_piece(field, PieceZone.Kind.MIDFIELD, _piece_local_x(PieceZone.Kind.MIDFIELD, field),
 		"MEIO-CAMPO", Color(0.45, 0.9, 0.5))
-	_add_piece(field, PieceZone.Kind.DEFENSE, attack_dir * defense_piece_x * half_x,
+	_add_piece(field, PieceZone.Kind.DEFENSE, _piece_local_x(PieceZone.Kind.DEFENSE, field),
 		"DEFESA", Color(0.4, 0.65, 1.0))
+
+
+## Posição X (local do campo) de cada peça, de acordo com o lado que o time ataca AGORA
+func _piece_local_x(kind: PieceZone.Kind, field: Field) -> float:
+	var fraction: float = attack_piece_x
+	match kind:
+		PieceZone.Kind.MIDFIELD:
+			fraction = midfield_piece_x
+		PieceZone.Kind.DEFENSE:
+			fraction = defense_piece_x
+	return get_attack_dir() * fraction * field.pitch_size.x * 0.5
+
+
+## Coloca as peças de acordo com o lado atual (ataque sempre no lado do gol inimigo).
+## Chamada na virada de lado do 2º tempo, ao usar o Pieces e ao começar uma partida nova.
+func _place_pieces() -> void:
+	var field := get_tree().get_first_node_in_group("field") as Field
+	if field == null:
+		return
+	for z in _pieces:
+		if is_instance_valid(z):
+			z.global_position = field.to_global(Vector2(_piece_local_x(z.kind, field), 0.0))
 
 
 func _add_piece(field: Field, kind: PieceZone.Kind, local_x: float, text: String,
@@ -238,6 +258,7 @@ func _use_pieces() -> bool:
 	_pieces_until_round = m.round_number + pieces_rounds - 1   # a rodada atual conta
 	start_cooldown(CD_PIECES, pieces_cooldown, _pieces_until_round + 1)
 	_pieces_shown = true
+	_place_pieces()   # garante o lado certo antes de aparecerem
 	for z in _pieces:
 		z.appear()
 	return true
@@ -511,6 +532,7 @@ func reset_for_new_match() -> void:
 	_pieces_shown = false
 	for z in _pieces:
 		z.hide_now()
+	_place_pieces()   # a partida nova volta ao lado de origem
 	run_duration = _base_run_duration
 	queue_redraw()
 

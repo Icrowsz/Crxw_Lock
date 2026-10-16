@@ -2,8 +2,8 @@
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_uayoi"]
 [ext_resource type="Script" uid="uid://ceyy1j1jswi3s" path="res://scr/perso/nagi.gd" id="2_hdk36"]
-[ext_resource type="Texture2D" uid="uid://d3vvj1s4xqat0" path="res://img/icons/nagiicon.png" id="2_wgyk0"]
 [ext_resource type="Texture2D" uid="uid://dtmaipte0k8i3" path="res://img/mvps/nagi.jpg" id="3_hdk36"]
+[ext_resource type="Texture2D" uid="uid://xcvnhj5eh2r8" path="res://img/testes/nagi.png" id="4_hdk36"]
 
 [node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_uayoi")]
 script = ExtResource("2_hdk36")
@@ -28,6 +28,19 @@ fake_travel = 70.0
 fake_lift = 18.0
 fake_out_time = 0.18
 fake_back_time = 0.22
+five_chance = 0.8
+five_force_mult = 1.6
+five_uses_qte = true
+five_stages = 6
+five_stage_time = 0.65
+five_orbit_radius = 95.0
+five_spin_turns = 2.0
+five_return_time = 0.22
+five_travel_growth = 0.6
+five_skull_start = 1.5
+five_skull_end = 6.5
+five_shake = 8.0
+five_fx = null
 lift_cooldown = 1
 lift_time = 0.3
 control_cooldown = 1
@@ -43,4 +56,4 @@ visual_root = NodePath("SprPlayer")
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)
-texture = ExtResource("2_wgyk0")
+texture = ExtResource("4_hdk36")

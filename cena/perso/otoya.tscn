@@ -2,8 +2,8 @@
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_qay1r"]
 [ext_resource type="Script" uid="uid://dscbqmr3i6rbi" path="res://scr/perso/otoya.gd" id="2_ar4jx"]
-[ext_resource type="Texture2D" uid="uid://bn1rni54xr8vt" path="res://img/icons/otoyaicon.png" id="2_ni82n"]
 [ext_resource type="Texture2D" uid="uid://dmw48ifwu56cb" path="res://img/mvps/otoya.jpg" id="3_yoaqd"]
+[ext_resource type="Texture2D" uid="uid://ydq62g5i4163" path="res://img/testes/otoya.png" id="4_yoaqd"]
 
 [node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_qay1r")]
 script = ExtResource("2_ar4jx")
@@ -38,4 +38,4 @@ visual_root = NodePath("SprPlayer")
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)
-texture = ExtResource("2_ni82n")
+texture = ExtResource("4_yoaqd")

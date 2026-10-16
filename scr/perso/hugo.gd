@@ -66,7 +66,7 @@ const _TOOTH_OFFSETS := [-0.32, -0.16, 0.16, 0.32]
 @export var coord_cooldown: int = 2                       # igual para as 3 variantes
 @export var hold_grab_time: float = 0.15                  # tempo que a bola leva até ele (Coordination)
 @export var adequation_range: float = 600.0
-@export var adequation_targets: int = 2                   # quantos inimigos ele escolhe
+@export var adequation_targets: int = 1                   # quantos inimigos ele escolhe
 @export var adequation_turns: int = 2                     # quantos turnos do time inimigo dura
 @export_range(0.1, 1.0) var adequation_run_mult: float = 0.6   # velocidade do Correr dos alvos
 @export var unsuitable_leap_time: float = 0.3
@@ -101,9 +101,9 @@ const _TOOTH_OFFSETS := [-0.32, -0.16, 0.16, 0.32]
 @export var mecanicien_break_distance: float = 130.0      # a distância do inimigo passando disso, o efeito acaba
 @export var brille_range: float = 520.0
 @export var brille_extra_skills: int = 1                  # ações de habilidade extras para os Secundários
-@export var reve_dash_distance: float = 300.0             # o quanto ele avança em direção à bola
+@export var reve_dash_distance: float = 200.0             # o quanto ele avança em direção à bola
 @export var reve_dash_time: float = 0.3
-@export var reve_power: float = 1300.0                    # velocidade do chute (px/s)
+@export var reve_power: float = 800.0                    # velocidade do chute (px/s)
 @export_range(0.0, 1.0) var reve_chance: float = 0.40     # chance de o chute vencer o goleiro
 
 @export_group("Visual do chute")
@@ -839,7 +839,7 @@ func get_gears_form() -> GearsForm:
 	var field: Field = _get_field()
 	if field == null:
 		return GearsForm.NONE
-	var attack_dir: float = 1.0 if team == 0 else -1.0   # o time 0 ataca para a direita
+	var attack_dir: float = get_attack_dir()   # já considera a troca de lado do 2º tempo
 	var x: float = field.to_local(global_position).x * attack_dir   # positivo = lado inimigo
 	if absf(x) <= field.pitch_size.x * 0.5 * midfield_band:
 		return GearsForm.BRILLE

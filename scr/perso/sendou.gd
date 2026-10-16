@@ -44,9 +44,9 @@ enum ShotVariant { NONE, ACE, STAR, SNIPER }
 @export_range(0.0, 1.0) var chance_star: float = 0.45
 @export_range(0.0, 1.0) var chance_sniper: float = 0.50
 @export var shot_cooldown: int = 2                   # recarga (rodadas), igual para as 3 variantes
-@export var ace_force_mult: float = 1.25             # "um pouco mais forte que o normal"
-@export var star_force_mult: float = 1.4             # "mais forte"
-@export var sniper_force_mult: float = 1.0
+@export var ace_force_mult: float = 1.2              # "um pouco mais forte que o normal"
+@export var star_force_mult: float = 0.6             # "mais forte"
+@export var sniper_force_mult: float = 0.5
 @export_range(0.0, 1.0) var sniper_pierce_chance: float = 0.35   # chance de atravessar CADA inimigo na trajetória
 @export var sniper_watch_time: float = 2.5           # por quanto tempo a bola do Sniper "procura" inimigos
 
@@ -126,9 +126,9 @@ func _field() -> Field:
 	return get_tree().get_first_node_in_group("field") as Field
 
 
-## O time 0 ataca para a direita (+x) e o time 1 para a esquerda
+## Para onde o time ataca (+1 = direita, -1 = esquerda). Muda na troca de lado do 2º tempo
 func _attack_dir() -> float:
-	return 1.0 if team == 0 else -1.0
+	return get_attack_dir()
 
 
 ## Está na metade (ou no pedaço, veja sector_split) do campo do próprio gol?

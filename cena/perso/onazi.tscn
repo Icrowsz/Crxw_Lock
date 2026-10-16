@@ -1,0 +1,42 @@
+[gd_scene format=3 uid="uid://d5g2wwuaineq"]
+
+[ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_xlrc0"]
+[ext_resource type="Script" uid="uid://c002xddvpd1cv" path="res://scr/perso/onazi.gd" id="2_0r1g2"]
+[ext_resource type="Texture2D" uid="uid://4p6pj6e77gkl" path="res://img/mvps/onazi.jpg" id="3_loa2d"]
+[ext_resource type="Texture2D" uid="uid://dcxkcvc34vqgy" path="res://img/testes/onazi.png" id="3_us3c7"]
+
+[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_xlrc0")]
+script = ExtResource("2_0r1g2")
+strike_chance = 0.45
+strike_cooldown = 2
+near_range = 90.0
+mobility_cooldown = 3
+um_duration = 0.8
+um_speed_mult = 1.6
+um_contact_margin = 14.0
+um_touch_distance = 70.0
+um_touch_time = 0.35
+um_extra_skills = 1
+hunter_grab_time = 0.15
+hunter_ball_offset = 24.0
+gaze_bonus = 0.08
+gaze_shots = 2
+here_range = 180.0
+here_dash_time = 0.25
+here_cleanse_count = 2
+here_bonus_generals = 1
+guidance_range = 400.0
+guidance_flight_time = 0.45
+guidance_arrive_time = 0.3
+guidance_dash_distance = 200.0
+guidance_dash_time = 0.3
+here_cooldown = 2
+kick_fx = null
+skill_icons = {}
+display_name = "Innocent Onazi"
+mvp_image = ExtResource("3_loa2d")
+visual_root = NodePath("SprPlayer")
+
+[node name="SprPlayer" parent="." index="1" unique_id=395354675]
+scale = Vector2(0.2, 0.2)
+texture = ExtResource("3_us3c7")

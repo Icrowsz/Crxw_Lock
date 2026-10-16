@@ -13,6 +13,8 @@ extends Player
 ##      - Se um adversário chegar perto, Aryu e a bola desviam (a bola fica protegida) e libera o
 ##        Mirror Glam: um passe rasteiro simples, que NÃO gasta ação de habilidade, usável até o
 ##        fim do próximo turno do time da Aryu.
+##      - Depois desse primeiro desvio ele ainda pode desviar glam_extra_dodges (3) vezes: se um
+##        adversário tentar tomar a bola de novo, Aryu e a bola desviam outra vez (4 desvios no total).
 ## 3. Shooting Star (recarga de 3 rodadas, dura 2 rodadas):
 ##      - Aryu perto da grande área que defende E suspenso/voando: ele vai até o gol (no ar) e fecha
 ##        uma parte com o corpo. Chutes do adversário perdem 12% de chance de gol.
@@ -54,6 +56,7 @@ enum GlamState { NONE, HOLDING, MIRROR }
 @export var glam_trigger_radius: float = 75.0    # adversário a esta distância da bola = tentou interagir
 @export var glam_dodge_distance: float = 160.0
 @export var glam_dodge_time: float = 0.25
+@export var glam_extra_dodges: int = 4          # desvios A MAIS depois do primeiro (o que libera o Mirror Glam)
 @export var glam_cooldown: int = 2
 
 @export_group("Shooting Star")
@@ -77,6 +80,7 @@ enum GlamState { NONE, HOLDING, MIRROR }
 var _glam_state: GlamState = GlamState.NONE
 var _glam_touches: int = 0
 var _dodging: bool = false
+var _extra_dodges_left: int = 0   # desvios extras que ainda restam neste Glam
 
 var _star_until_round: int = -1
 var _star_penalty: float = 0.0
@@ -330,6 +334,7 @@ func _use_glam(m: MatchManager) -> bool:
 	_glam_touches = ball.interaction_count   # qualquer toque depois disto solta a bola
 	ball.spell_owner = self                  # adversários não conseguem tocar na bola enquanto ela está com a Aryu
 	_glam_state = GlamState.HOLDING
+	_extra_dodges_left = glam_extra_dodges
 	start_cooldown(CD_GLAM, glam_cooldown)
 	_star_burst()
 	queue_redraw()
@@ -356,7 +361,10 @@ func _physics_process(delta: float) -> void:
 	ball.global_position = _hold_point()
 	ball.height = height
 
-	if _glam_state == GlamState.HOLDING and not _dodging:
+	# Segurando = o primeiro desvio ainda não aconteceu; Mirror = já desviou, mas ainda pode desviar
+	# mais glam_extra_dodges vezes
+	if not _dodging and (_glam_state == GlamState.HOLDING \
+			or (_glam_state == GlamState.MIRROR and _extra_dodges_left > 0)):
 		_check_glam_trigger(ball)
 
 
@@ -376,6 +384,8 @@ func _check_glam_trigger(ball: Ball) -> void:
 
 ## Aryu e a bola saem de perto de quem tentou interagir; o Mirror Glam é liberado
 func _glam_dodge(from: Vector2) -> void:
+	if _glam_state == GlamState.MIRROR:
+		_extra_dodges_left -= 1   # um desvio extra gasto (o primeiro é o que libera o Mirror Glam)
 	_dodging = true
 	var away: Vector2 = global_position - from
 	if away.length() < 1.0:
@@ -399,6 +409,7 @@ func _end_glam(release: bool) -> void:
 		return
 	_glam_state = GlamState.NONE
 	_dodging = false
+	_extra_dodges_left = 0
 	var ball: Ball = _get_ball()
 	if release and ball != null and ball.hovering and not ball.is_held():
 		ball.release_hover()
@@ -470,7 +481,7 @@ func _star_skill_name() -> String:
 ## Ponto de bloqueio: na frente do gol, do lado em que está a bola
 func _star_block_point(field: Field) -> Vector2:
 	var half_x: float = field.pitch_size.x * 0.5
-	var dir: float = -1.0 if team == 0 else 1.0   # time 0 defende o gol da esquerda
+	var dir: float = float(field.defend_dir(team))   # lado do gol que o time defende (muda na virada)
 	var limit: float = field.goal_width * 0.5 - body_radius - 6.0
 	var y: float = 0.0
 	var ball: Ball = _get_ball()
@@ -578,8 +589,8 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 			text += "\nRecarga: %d rodadas." % header_cooldown
 		SKILL_GLAM:
 			title = "Glam!"
-			text = "Com a bola próxima, Aryu a segura. Se alguém chegar perto, Aryu desvia e libera o Mirror Glam.\nRecarga: %d rodadas." % [
-				glam_cooldown]
+			text = "Com a bola próxima, Aryu a segura. Se alguém chegar perto, Aryu desvia e libera o Mirror Glam, e ainda pode desviar mais %d vezes se tentarem tomar a bola de novo.\nRecarga: %d rodadas." % [
+				glam_extra_dodges, glam_cooldown]
 		SKILL_MIRROR:
 			title = "Mirror Glam"
 			text = "Passe rasteiro simples. Recarga compartilhada com o Glam!"

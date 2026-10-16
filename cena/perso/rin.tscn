@@ -2,9 +2,9 @@
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_ba5ft"]
 [ext_resource type="Script" uid="uid://5q04nfk8km4n" path="res://scr/perso/rin.gd" id="2_1uojg"]
-[ext_resource type="Texture2D" uid="uid://dyeyq7om3cv7x" path="res://img/icons/rinicon.png" id="2_urxsj"]
 [ext_resource type="Script" uid="uid://ilb76etk0iey" path="res://scr/ui e visual/kick_fx.gd" id="3_lwpik"]
 [ext_resource type="Texture2D" uid="uid://ckqr7atg4np8o" path="res://img/mvps/rin.jpg" id="4_f5bs0"]
+[ext_resource type="Texture2D" uid="uid://dpdu7281vdkf5" path="res://img/testes/rin.png" id="5_f5bs0"]
 
 [sub_resource type="Resource" id="Resource_hkwn6"]
 script = ExtResource("3_lwpik")
@@ -21,11 +21,16 @@ chance_crash = 0.5
 curve_force = 70.0
 curve_aim_range = 200.0
 curve_turn_degrees = 70.0
+parabolic_turn_degrees = 65.0
 trivela_turn_degrees = 75.0
 curve_duration = 1.0
 curve_preview_length = 600.0
 crash_enemy_radius = 90.0
 curve_cooldown = 2
+chance_self_destruction = 0.93
+self_destruction_force_mult = 2.2
+self_destruction_needs_qte = true
+self_destruction_fx = null
 gravity_range = 70.0
 pull_ball_radius = 90.0
 pull_ball_time = 0.25
@@ -41,6 +46,9 @@ destroyer_cooldown = 2
 typing_time = 3.0
 typing_words = Array[String](["DEVORAR", "DESTRUIR", "ANIRAP", "MATAR", "EGOISTA"])
 kick_fx = SubResource("Resource_hkwn6")
+destroyer_fx_enabled = true
+destroyer_fx_scale = 0.8
+destroyer_fx_offset = Vector2(0, 28)
 skill_icons = {}
 display_name = "Itoshi Rin"
 mvp_image = ExtResource("4_f5bs0")
@@ -48,4 +56,4 @@ visual_root = NodePath("SprPlayer")
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)
-texture = ExtResource("2_urxsj")
+texture = ExtResource("5_f5bs0")

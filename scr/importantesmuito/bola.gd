@@ -410,6 +410,7 @@ func reset(global_pos: Vector2) -> void:
 
 ## Registra que um jogador interagiu com a bola (repetir o mesmo jogador não muda nada)
 func register_touch(p: Player) -> void:
+	p = _resolve_player(p) as Player   # fantasma do Reo conta como o próprio Reo
 	interaction_count += 1
 	if p != _sticky_ignore_player:
 		_sticky_ignore_player = null   # outro jogador tocou na bola: acabou a exceção
@@ -417,6 +418,28 @@ func register_touch(p: Player) -> void:
 		return
 	previous_toucher = last_toucher
 	last_toucher = p
+
+
+## O fantasma da cópia do Reo (meta "ghost_owner") conta como o próprio Reo para a bola:
+## é ele quem toca, quem é ignorado na colisão e quem aparece como autor do gol.
+func _resolve_player(p: Node2D) -> Node2D:
+	if p != null and is_instance_valid(p) and p.has_meta("ghost_owner"):
+		var owner_player: Node2D = p.get_meta("ghost_owner") as Node2D
+		if owner_player != null and is_instance_valid(owner_player):
+			return owner_player
+	return p
+
+
+## Rede de segurança: troca todas as referências a "old" (ex: um fantasma que vai ser apagado) por "fresh"
+func replace_player(old: Player, fresh: Player) -> void:
+	if last_toucher == old:
+		last_toucher = fresh
+	if previous_toucher == old:
+		previous_toucher = fresh
+	if _ignore_player == old:
+		_ignore_player = fresh
+	if _sticky_ignore_player == old:
+		_sticky_ignore_player = fresh
 
 
 func clear_touches() -> void:
@@ -464,7 +487,7 @@ func _set_shot(by: Node2D, chance: float) -> void:
 ## A bola atravessa este jogador (sem colidir) até parar ou outro jogador tocar nela.
 ## Chame DEPOIS do kick()/kick_ground(), que limpam essa exceção.
 func ignore_player_until_stopped(p: Node2D) -> void:
-	_sticky_ignore_player = p
+	_sticky_ignore_player = _resolve_player(p)
 
 
 ## Passe/chute rasteiro (by = quem chutou: não colide com a bola até ela se afastar).
@@ -472,7 +495,7 @@ func ignore_player_until_stopped(p: Node2D) -> void:
 func kick_ground(direction: Vector2, power: float, by: Node2D = null,
 		shot_chance: float = DEFAULT_SHOT_CHANCE) -> void:
 	release_hover()
-	_ignore_player = by
+	_ignore_player = _resolve_player(by)
 	_sticky_ignore_player = null
 	register_touch(by as Player)
 	_set_shot(by, shot_chance)
@@ -485,7 +508,7 @@ func kick_ground(direction: Vector2, power: float, by: Node2D = null,
 func kick(direction: Vector2, power: float, lift: float, by: Node2D = null,
 		shot_chance: float = DEFAULT_SHOT_CHANCE) -> void:
 	release_hover()
-	_ignore_player = by
+	_ignore_player = _resolve_player(by)
 	_sticky_ignore_player = null
 	register_touch(by as Player)
 	_set_shot(by, shot_chance)

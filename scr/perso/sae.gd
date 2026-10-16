@@ -1102,7 +1102,7 @@ func _in_lead_zone() -> bool:
 	if field == null or ball == null:
 		return false
 	var p: Vector2 = field.to_local(ball.global_position)
-	var attack_dir: float = 1.0 if team == 0 else -1.0
+	var attack_dir: float = get_attack_dir()   # já considera a troca de lado
 	var from_goal_line: float = field.pitch_size.x * 0.5 - p.x * attack_dir
 	return from_goal_line >= 0.0 and from_goal_line <= lead_zone_depth and absf(p.y) >= lead_zone_min_y
 
@@ -1173,7 +1173,7 @@ func _curve_side(aim: Vector2) -> float:
 	var field := get_tree().get_first_node_in_group("field") as Field
 	if field == null:
 		return 1.0
-	var attack_dir: float = 1.0 if team == 0 else -1.0
+	var attack_dir: float = get_attack_dir()   # já considera a troca de lado
 	var goal: Vector2 = field.to_global(Vector2(attack_dir * field.pitch_size.x * 0.5, 0.0))
 	var side: float = signf(aim.cross(goal - global_position))
 	return side if side != 0.0 else 1.0

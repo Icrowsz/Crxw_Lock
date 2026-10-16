@@ -16,6 +16,7 @@ enum Phase { ARMED, ACTIVE, FADING }
 
 const PURPLE := Color(0.62, 0.25, 0.95)
 const PURPLE_LIGHT := Color(0.82, 0.62, 1.0)
+const PURPLE_DARK := Color(0.269, 0.036, 0.445, 1.0)
 const LION_RED := Color(0.85, 0.06, 0.06)
 const LION_BLACK := Color(0.05, 0.0, 0.0)
 
@@ -155,135 +156,248 @@ func _draw_pass() -> void:
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
-## Silhueta de um zumbi "ganancioso": corcunda, cabeça jogada para a frente e os dois braços
-## esticados com garras, atrás da bola. Uma cor só (roxo), sem rosto nem detalhes.
+## Silhueta corcunda com coluna visível, braços musculosos, garras e órbitas brilhando.
 ## A origem é a bola; ele olha para +x (o transform acima espelha se precisar).
+## Zumbi magrinho: coluna saliente, costelas aparecendo, feridas com carne exposta,
+## cabeça jogada para frente com maxilar caído e braços ossudos.
 func _draw_zombie(a: float) -> void:
 	var sway: float = sin(_t * 6.0)
 	var bob: float = sin(_t * 4.0) * 4.0
-	var fill := Color(PURPLE.r, PURPLE.g, PURPLE.b, 0.40 * a)
-	var edge := Color(PURPLE_LIGHT.r, PURPLE_LIGHT.g, PURPLE_LIGHT.b, 0.70 * a)
+	var fill := Color(PURPLE.r, PURPLE.g, PURPLE.b, 0.42 * a)
+	var fill_deep := Color(PURPLE.darkened(0.3).r, PURPLE.darkened(0.3).g, PURPLE.darkened(0.3).b, 0.55 * a)
+	var wound := Color(0.85, 0.15, 0.35, 0.55 * a)   # carne exposta
+	var bone := Color(0.92, 0.88, 0.95, 0.65 * a)
+	var edge := Color(PURPLE_LIGHT.r, PURPLE_LIGHT.g, PURPLE_LIGHT.b, 0.78 * a)
 
-	# Tronco curvado (a barra de baixo é rasgada)
+	# --- Coluna saliente (curvada) ---
+	var spine := PackedVector2Array()
+	for k in 8:
+		var u: float = float(k) / 7.0
+		var sx: float = -20.0 + 14.0 * u * u + sway * 2.0 * u
+		var sy: float = -20.0 - 92.0 * u + bob
+		spine.append(Vector2(sx, sy))
+	draw_polyline(spine, edge, 2.5)
+
+	# --- Torso magro e anguloso ---
 	var torso := PackedVector2Array([
-		Vector2(-30.0, -84.0 + bob), Vector2(-10.0, -104.0 + bob), Vector2(18.0, -100.0 + bob),
-		Vector2(30.0, -80.0 + bob), Vector2(22.0, -40.0 + bob), Vector2(12.0, -26.0 + bob),
-		Vector2(4.0, -42.0 + bob), Vector2(-4.0, -24.0 + bob), Vector2(-12.0, -42.0 + bob),
-		Vector2(-24.0, -34.0 + bob)])
+		Vector2(-24.0, -86.0 + bob), Vector2(-14.0, -106.0 + bob), Vector2(12.0, -104.0 + bob),
+		Vector2(22.0, -84.0 + bob), Vector2(18.0, -60.0 + bob),
+		Vector2(16.0, -44.0 + bob), Vector2(12.0, -24.0 + bob), Vector2(4.0, -36.0 + bob),
+		Vector2(-2.0, -22.0 + bob), Vector2(-8.0, -38.0 + bob),
+		Vector2(-16.0, -28.0 + bob), Vector2(-22.0, -46.0 + bob)])
 	draw_colored_polygon(torso, fill)
 	var torso_line := torso.duplicate()
 	torso_line.append(torso[0])
 	draw_polyline(torso_line, edge, 2.0)
 
-	# Cabeça jogada para a frente (faminta)
-	var head := Vector2(32.0, -112.0 + bob)
-	draw_circle(head, 20.0, fill)
-	draw_arc(head, 20.0, 0.0, TAU, 28, edge, 2.0)
+	# --- Costelas aparecendo (arcos finos) ---
+	for i in 3:
+		var y: float = -84.0 + float(i) * 10.0 + bob
+		draw_arc(Vector2(-2.0, y), 14.0 - float(i) * 2.0, PI * 1.05, PI * 1.85, 12,
+			Color(edge.r, edge.g, edge.b, 0.55 * a), 1.5)
 
-	# Dois braços longos esticados para a bola, com garras
-	var arm_a := PackedVector2Array([Vector2(14.0, -98.0 + bob), Vector2(60.0, -90.0 + bob + sway * 6.0),
-		Vector2(104.0, -96.0 + bob - sway * 6.0)])
-	var arm_b := PackedVector2Array([Vector2(10.0, -90.0 + bob), Vector2(52.0, -72.0 + bob - sway * 5.0),
-		Vector2(92.0, -80.0 + bob + sway * 5.0)])
-	for arm in [arm_a, arm_b]:
-		draw_polyline(arm, fill, 11.0)
-		draw_polyline(arm, edge, 2.0)
-		var hand: Vector2 = arm[2]
-		for c in 3:
-			var ang: float = deg_to_rad(-25.0 + float(c) * 25.0)
-			draw_line(hand, hand + Vector2.from_angle(ang) * 16.0, edge, 3.0)
+	# --- Feridas com carne exposta ---
+	# Ferida no ombro esquerdo
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(-22.0, -80.0 + bob), Vector2(-16.0, -78.0 + bob),
+		Vector2(-14.0, -72.0 + bob), Vector2(-20.0, -74.0 + bob)]), wound)
+	# Ferida no abdômen (rasgo vertical)
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(-6.0, -60.0 + bob), Vector2(0.0, -58.0 + bob),
+		Vector2(2.0, -44.0 + bob), Vector2(-2.0, -40.0 + bob),
+		Vector2(-6.0, -46.0 + bob), Vector2(-8.0, -54.0 + bob)]), wound)
+	# Ossinho aparecendo pela ferida do abdômen
+	draw_line(Vector2(-4.0, -54.0 + bob), Vector2(-2.0, -44.0 + bob),
+		Color(bone.r, bone.g, bone.b, 0.85 * a), 1.5)
 
+	# --- Cabeça (sunken cheeks, maxilar caído) ---
+	var head := Vector2(28.0, -110.0 + bob)
+	draw_circle(head, 18.0, fill)
+	draw_arc(head, 18.0, 0.0, TAU, 28, edge, 2.0)
+	# Bochecha afundada (sombra interna)
+	draw_circle(head + Vector2(6.0, 6.0), 4.0, Color(fill_deep.r, fill_deep.g, fill_deep.b, 0.7 * a))
+	# Maxilar aberto (boca pendurada)
+	var jaw := PackedVector2Array([
+		head + Vector2(-4.0, 12.0), head + Vector2(12.0, 8.0),
+		head + Vector2(10.0, 22.0), head + Vector2(-4.0, 22.0)])
+	draw_colored_polygon(jaw, fill)
+	draw_polyline(PackedVector2Array([jaw[0], jaw[1], jaw[2], jaw[3], jaw[0]]), edge, 1.5)
+	# Dentes tortos visíveis na boca aberta
+	draw_line(head + Vector2(-2.0, 14.0), head + Vector2(6.0, 13.0), bone, 1.5)
+	draw_line(head + Vector2(0.0, 18.0), head + Vector2(8.0, 17.0), bone, 1.5)
+	# Órbitas brilhando (pontinhos)
+	draw_circle(head + Vector2(2.0, -5.0), 3.0,
+		Color(PURPLE_LIGHT.r, PURPLE_LIGHT.g, PURPLE_LIGHT.b, 0.95 * a))
+	draw_circle(head + Vector2(11.0, -4.0), 2.4,
+		Color(PURPLE_LIGHT.r, PURPLE_LIGHT.g, PURPLE_LIGHT.b, 0.95 * a))
+	# Ferida na testa
+	draw_line(head + Vector2(-8.0, -12.0), head + Vector2(-2.0, -8.0), wound, 2.0)
 
-# ---------- LION: LEÃO SIMPLES, VERMELHO COM CONTORNO PRETO ----------
+	# --- Braços ossudos com garras ---
+	_draw_zombie_arm(Vector2(12.0, -100.0 + bob), Vector2(56.0, -92.0 + bob + sway * 6.0),
+		Vector2(102.0, -98.0 + bob - sway * 6.0), fill, edge, wound)
+	_draw_zombie_arm(Vector2(6.0, -90.0 + bob), Vector2(48.0, -74.0 + bob - sway * 5.0),
+		Vector2(92.0, -82.0 + bob + sway * 5.0), fill, edge, wound)
 
+## Braço do zumbi: cotovelo marcado, antebraço afunilando, mão com 4 garras
+func _draw_zombie_arm(start: Vector2, mid: Vector2, hand: Vector2,
+		fill: Color, edge: Color, wound: Color) -> void:
+	# Braço afunilado (ombro mais grosso, pulso fino) - desenha em segmentos
+	draw_polyline(PackedVector2Array([start, mid, hand]), fill, 9.0)
+	draw_polyline(PackedVector2Array([start, mid, hand]), edge, 2.0)
+	# Cotovelo marcado
+	draw_arc(mid, 5.0, 0.0, PI, 8, edge, 1.5)
+	# Marca de ferida no antebraço
+	draw_line(mid.lerp(hand, 0.5) + Vector2(-3.0, -3.0),
+		mid.lerp(hand, 0.5) + Vector2(3.0, 3.0), wound, 2.0)
+	# Mão com 4 dedos longos e garras
+	draw_circle(hand, 5.0, fill)
+	draw_arc(hand, 5.0, 0.0, TAU, 12, edge, 1.5)
+	for c in 4:
+		var ang: float = deg_to_rad(-45.0 + float(c) * 28.0)
+		var knuckle: Vector2 = hand + Vector2.from_angle(ang) * 8.0
+		var tip: Vector2 = knuckle + Vector2.from_angle(ang) * 10.0
+		draw_line(hand, knuckle, fill, 3.5)
+		draw_line(knuckle, tip, fill, 2.5)
+		draw_line(hand, knuckle, edge, 1.0)
+		draw_line(knuckle, tip, edge, 1.0)
+		draw_circle(tip, 1.3, edge)
+
+## Leão: juba em CAMADAS (raios longos por fora + pelagem curta por dentro), orelhas, focinho
+## com caninos visíveis, olhos com sobrancelha. Tudo continua vermelho/preto.
 func _draw_lion() -> void:
 	var p: float = clampf(_t / duration, 0.0, 1.0)
 	var appear: float = clampf(_t / 0.2, 0.0, 1.0)
-	var a: float = 1.0 - clampf((p - 0.75) / 0.25, 0.0, 1.0)      # some no fim
-	var r: float = lion_radius * lerpf(0.4, 1.0, _back_out(appear))   # "estoura" ao aparecer
+	var a: float = 1.0 - clampf((p - 0.75) / 0.25, 0.0, 1.0)
+	var r: float = lion_radius * lerpf(0.4, 1.0, _back_out(appear))
 	var line_w: float = maxf(2.0, r * 0.06)
 	var red: Color = _with_a(LION_RED, a * lion_opacity)
-	var black: Color = _with_a(LION_BLACK, a * minf(1.0, lion_opacity + 0.2))   # contorno um pouco mais forte
+	var black: Color = _with_a(LION_BLACK, a * minf(1.0, lion_opacity + 0.2))
 
-	# Tudo fica centrado na bola; um tremorzinho deixa o rugido mais forte
 	var shake := Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * 3.0 * (1.0 - p)
 	draw_set_transform(_ball_center() + shake, 0.0, Vector2.ONE)
 
-	# Raios vermelhos com contorno preto saindo da bola (mudam de forma todo frame, como os do Predator Eye).
-	# São desenhados primeiro: ficam atrás do leão e aparecem além da juba.
+	# Raios vermelhos/preto saindo da bola (por trás da juba)
 	var bolt_alpha: float = a * minf(1.0, lion_opacity + 0.2)
 	for i in bolt_count:
 		var bolt_ang: float = TAU * float(i) / float(bolt_count) + randf() * 0.4
 		_draw_bolt(bolt_ang, r * (1.6 + randf() * 0.7), line_w, bolt_alpha)
 
-	# Juba: espetos vermelhos com contorno preto
-	var spikes: int = 18
-	var step: float = TAU / float(spikes)
-	for i in spikes:
-		var ang: float = step * float(i)
-		var wob: float = 1.0 + 0.07 * sin(_t * 18.0 + float(i) * 1.7)
-		var half: float = step * 0.6
-		var pts := PackedVector2Array([
-			Vector2.from_angle(ang - half) * 0.6 * r,
-			Vector2.from_angle(ang) * 1.25 * r * wob,
-			Vector2.from_angle(ang + half) * 0.6 * r])
-		draw_colored_polygon(pts, red)
-		var outline := pts.duplicate()
-		outline.append(pts[0])
-		draw_polyline(outline, black, line_w)
+	# ---------- JUBA (2 camadas) ----------
+	_draw_lion_mane(r, red, black, line_w, 0.60, 22, 1.25, 0.10)   # camada externa longa
+	_draw_lion_mane(r, red, black, line_w, 0.42, 18, 1.15, 0.16)   # camada interna curta
 
-	# Orelhas
+	# ---------- ORELHAS ----------
 	for sx in [-1.0, 1.0]:
-		var ear := Vector2(sx * 0.5 * r, -0.55 * r)
+		var ear := Vector2(sx * 0.52 * r, -0.55 * r)
 		draw_circle(ear, 0.18 * r, red)
 		draw_arc(ear, 0.18 * r, 0.0, TAU, 16, black, line_w)
+		# Interior da orelha
+		draw_circle(ear + Vector2(0.0, -0.02 * r), 0.08 * r, black)
+		draw_circle(ear + Vector2(0.0, -0.02 * r), 0.05 * r, red)
 
-	# Rosto
+	# ---------- ROSTO ----------
+	# Cabeça
 	draw_circle(Vector2.ZERO, 0.62 * r, red)
 	draw_arc(Vector2.ZERO, 0.62 * r, 0.0, TAU, 40, black, line_w * 1.4)
+	# Testa: marca leve no meio
+	draw_line(Vector2(0.0, -0.55 * r), Vector2(0.0, -0.35 * r), black, line_w * 0.6)
 
-	# Olhos: vermelhos com contorno preto + sobrancelha brava (preto)
+	# ---------- OLHOS (com sobrancelha brava) ----------
+	var pulse: float = 0.6 + 0.4 * sin(_t * 12.0)
 	for sx in [-1.0, 1.0]:
-		var ec := Vector2(sx * 0.25 * r, -0.12 * r)
+		var ec := Vector2(sx * 0.25 * r, -0.13 * r)
+		# Sobrancelha (linha grossa preta em diagonal)
+		draw_line(ec + Vector2(-sx * 0.22 * r, -0.10 * r), ec + Vector2(sx * 0.18 * r, -0.18 * r),
+			black, line_w * 1.8)
+		# Olho: amêndoa vermelha com contorno preto
 		var eye := PackedVector2Array([
-			ec + Vector2(-sx * 0.12 * r, 0.05 * r), ec + Vector2(0.0, -0.08 * r),
-			ec + Vector2(sx * 0.14 * r, -0.04 * r), ec + Vector2(0.0, 0.06 * r)])
+			ec + Vector2(-sx * 0.13 * r, 0.05 * r), ec + Vector2(0.0, -0.09 * r),
+			ec + Vector2(sx * 0.15 * r, -0.04 * r), ec + Vector2(0.0, 0.07 * r)])
 		draw_colored_polygon(eye, red)
 		var eye_line := eye.duplicate()
 		eye_line.append(eye[0])
 		draw_polyline(eye_line, black, line_w)
-		draw_line(ec + Vector2(-sx * 0.18 * r, -0.07 * r), ec + Vector2(sx * 0.2 * r, -0.2 * r), black, line_w * 1.6)
+		# Pupila brilhando (mesmo em paleta restrita, o glow dá vida)
+		draw_circle(ec, 0.035 * r * (0.9 + 0.2 * pulse), Color(1.0, 0.5, 0.4, 0.9 * a))
+		draw_circle(ec, 0.015 * r, black)
 
-	# Nariz e focinho (preto)
-	draw_colored_polygon(PackedVector2Array([Vector2(-0.09 * r, 0.03 * r), Vector2(0.09 * r, 0.03 * r),
-		Vector2(0.0, 0.12 * r)]), black)
-	draw_line(Vector2(0.0, 0.12 * r), Vector2(0.0, 0.2 * r), black, line_w)
+	# ---------- FOCINHO ----------
+	# Ponte do nariz (leve sombra)
+	draw_line(Vector2(0.0, -0.05 * r), Vector2(0.0, 0.10 * r), black, line_w * 0.8)
+	# Nariz (triângulo arredondado)
+	var nose := PackedVector2Array([
+		Vector2(-0.11 * r, 0.06 * r), Vector2(0.11 * r, 0.06 * r),
+		Vector2(0.09 * r, 0.14 * r), Vector2(0.0, 0.17 * r), Vector2(-0.09 * r, 0.14 * r)])
+	draw_colored_polygon(nose, black)
+	# Narinas
+	draw_circle(Vector2(-0.045 * r, 0.11 * r), 0.015 * r, red)
+	draw_circle(Vector2(0.045 * r, 0.11 * r), 0.015 * r, red)
+	# Linha do focinho até a boca
+	draw_line(Vector2(0.0, 0.17 * r), Vector2(0.0, 0.22 * r), black, line_w * 1.2)
 
-	# Boca rugindo (abre e fecha): cavidade preta com presas vermelhas
+	# ---------- BOCA RUGINDO ----------
 	var open: float = clampf(0.55 + 0.45 * sin(_t * 16.0), 0.2, 1.0)
-	var m_top: float = 0.2 * r
-	var m_w: float = 0.3 * r
-	var depth: float = (0.1 + 0.28 * open) * r
+	var m_top: float = 0.22 * r
+	var m_w: float = 0.30 * r
+	var depth: float = (0.10 + 0.28 * open) * r
 	var mouth := PackedVector2Array()
-	var n: int = 12
+	var n: int = 14
 	for i in range(n + 1):
 		var ang2: float = PI * float(i) / float(n)
 		mouth.append(Vector2(cos(ang2) * m_w, m_top + sin(ang2) * depth))
 	draw_colored_polygon(mouth, black)
+	draw_polyline(mouth, black, line_w * 0.5)
+	# Caninos grandes + dentes pequenos
 	for sx in [-1.0, 1.0]:
-		var fx_x: float = sx * 0.18 * r
-		draw_colored_polygon(PackedVector2Array([Vector2(fx_x - 0.045 * r, m_top), Vector2(fx_x + 0.045 * r, m_top),
-			Vector2(fx_x, m_top + 0.13 * r)]), red)
+		var fang_x: float = sx * 0.20 * r
+		# Canino superior (para baixo)
+		var upper := PackedVector2Array([
+			Vector2(fang_x - 0.05 * r, m_top), Vector2(fang_x + 0.05 * r, m_top),
+			Vector2(fang_x, m_top + 0.16 * r)])
+		draw_colored_polygon(upper, red)
+		draw_polyline(PackedVector2Array([upper[0], upper[1], upper[2], upper[0]]), black, line_w * 0.5)
+		# Canino inferior (para cima)
+		var lower := PackedVector2Array([
+			Vector2(fang_x - 0.045 * r, m_top + depth), Vector2(fang_x + 0.045 * r, m_top + depth),
+			Vector2(fang_x, m_top + depth - 0.13 * r)])
+		draw_colored_polygon(lower, red)
+		draw_polyline(PackedVector2Array([lower[0], lower[1], lower[2], lower[0]]), black, line_w * 0.5)
+	# Dentes pequenos no meio
+	for k in 4:
+		var tx: float = -0.08 * r + 0.053 * r * float(k)
+		draw_colored_polygon(PackedVector2Array([Vector2(tx - 0.018 * r, m_top),
+			Vector2(tx + 0.018 * r, m_top), Vector2(tx, m_top + 0.06 * r)]), red)
 
-	# Ondas do rugido (pretas, finas)
-	for k in 2:
-		var f: float = fposmod(_t * 1.6 + float(k) * 0.5, 1.0)
-		var wave_r: float = (0.5 + f * 0.8) * r
-		draw_arc(Vector2(0.0, m_top + depth * 0.4), wave_r, deg_to_rad(40.0), deg_to_rad(140.0), 20,
-			Color(LION_BLACK.r, LION_BLACK.g, LION_BLACK.b, (1.0 - f) * 0.8 * a), line_w)
+	# ---------- ONDAS DO RUGIDO ----------
+	for k in 3:
+		var f: float = fposmod(_t * 1.6 + float(k) * 0.33, 1.0)
+		var wave_r: float = (0.5 + f * 0.9) * r
+		draw_arc(Vector2(0.0, m_top + depth * 0.4), wave_r, deg_to_rad(35.0), deg_to_rad(145.0), 22,
+			Color(LION_BLACK.r, LION_BLACK.g, LION_BLACK.b, (1.0 - f) * 0.7 * a), line_w * 0.9)
 
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
+
+## Uma camada de juba: "espetos" de alturas variadas na circunferência. base_frac = raio base,
+## spikes = quantos espetos, len = comprimento relativo do espeto, wobble = variação aleatória.
+func _draw_lion_mane(r: float, fill: Color, edge: Color, line_w: float,
+		base_frac: float, spikes: int, len: float, wobble: float) -> void:
+	var step: float = TAU / float(spikes)
+	for i in spikes:
+		var ang: float = step * float(i) + _t * 0.4   # rotação lenta pra dar "movimento"
+		var wob: float = 1.0 + wobble * sin(_t * 18.0 + float(i) * 1.7)
+		var half: float = step * 0.58
+		var base: float = base_frac * r
+		var tip: float = len * r * wob
+		var pts := PackedVector2Array([
+			Vector2.from_angle(ang - half) * base,
+			Vector2.from_angle(ang) * tip,
+			Vector2.from_angle(ang + half) * base])
+		draw_colored_polygon(pts, fill)
+		var outline := pts.duplicate()
+		outline.append(pts[0])
+		draw_polyline(outline, edge, line_w)
 
 ## Um raio em zig-zag saindo do centro (a bola): contorno preto grosso por baixo, vermelho por cima
 func _draw_bolt(angle: float, length: float, width: float, alpha: float) -> void:

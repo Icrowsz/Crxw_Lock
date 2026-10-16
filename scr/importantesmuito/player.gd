@@ -85,10 +85,10 @@ const ACTION_TIMEOUT: float = 3.0
 @export_group("Chutar")
 @export var kick_range: float = 70.0            # distância (no chão) máxima até a bola
 @export var kick_aim_range: float = 120.0       # tamanho da seta de mira
-@export var kick_force_ground: float = 100.0     # chute fraco (jogador e bola no chão)
-@export var kick_force_volley: float = 120.0     # voleio (jogador suspenso, bola no chão/suspensa)
-@export var kick_force_flying: float = 140.0     # bola voando (QTE mais difícil)
-@export var kick_force_high_ball: float = 100.0  # jogador no chão, bola suspensa (QTE)
+@export var kick_force_ground: float = 75.0     # chute fraco (jogador e bola no chão)
+@export var kick_force_volley: float = 55.0     # voleio (jogador suspenso, bola no chão/suspensa)
+@export var kick_force_flying: float = 50.0     # bola voando (QTE mais difícil)
+@export var kick_force_high_ball: float = 55.0  # jogador no chão, bola suspensa (QTE)
 @export var kick_force_to_speed: float = 10.0   # força 50 -> 500 px/s na bola
 @export var volley_peak_level: Heights.Level = Heights.Level.SUSPENDED   # até onde a bola sobe no voleio
 @export var flying_peak_level: Heights.Level = Heights.Level.SUSPENDED   # idem, quando a bola estava voando
@@ -97,9 +97,9 @@ const ACTION_TIMEOUT: float = 3.0
 
 @export_group("Chance de gol (disputa com o goleiro)")
 ## Chance de o chute vencer o goleiro. Se perder o sorteio, o goleiro fica com a bola.
-@export_range(0.0, 1.0) var shot_chance_default: float = 0.30   # chute no chão e bola alta
-@export_range(0.0, 1.0) var shot_chance_volley: float = 0.35    # voleio
-@export_range(0.0, 1.0) var shot_chance_flying: float = 0.40    # bola voando
+@export_range(0.0, 1.0) var shot_chance_default: float = 0.25   # chute no chão e bola alta
+@export_range(0.0, 1.0) var shot_chance_volley: float = 0.30    # voleio
+@export_range(0.0, 1.0) var shot_chance_flying: float = 0.35    # bola voando
 
 @export_group("Colisão com a bola")
 @export var body_radius: float = 18.0           # raio do corpo para a bola bater/ser empurrada
@@ -110,6 +110,7 @@ const ACTION_TIMEOUT: float = 3.0
 @export var draw_placeholder: bool = true      # círculo colorido enquanto não há sprite
 @export var draw_shadow: bool = true
 @export var placeholder_radius: float = 18.0
+@export_range(0.0, 1.0) var team_tint_strength: float = 0.55
 
 @export_group("Animação")
 ## AnimatedSprite2D do personagem. Vazio = procura um filho chamado "AnimatedSprite2D".
@@ -246,7 +247,7 @@ func _ready() -> void:
 	input_event.connect(_on_input_event)
 
 	if tint_sprite:
-		tint_sprite.modulate = get_team_color()
+		tint_sprite.modulate = get_team_tint()   # ← era get_team_color()
 		draw_placeholder = false
 
 	facing = _default_facing()
@@ -287,11 +288,13 @@ func get_mvp_image() -> Texture2D:
 func get_team_color() -> Color:
 	return TeamStyle.color_of(team)
 
+func get_team_tint() -> Color:
+	return Color.WHITE.lerp(get_team_color(), team_tint_strength)
 
 ## Chame depois que a cor do time mudar (o sprite pintado e o desenho se atualizam)
 func refresh_team_color() -> void:
 	if tint_sprite:
-		tint_sprite.modulate = get_team_color()
+		tint_sprite.modulate = get_team_tint()   # ← era get_team_color()
 	queue_redraw()
 
 
@@ -714,6 +717,7 @@ func return_home(duration: float = 0.0) -> void:
 ## Personagens com estado próprio (recargas de habilidade, bônus...) podem sobrescrever
 ## esta função, chamando super() no começo.
 func reset_for_new_match() -> void:
+	lent_skills.clear()   # habilidades emprestadas acabam com a partida
 	_stop_current_action()
 	facing = _default_facing()
 	if _home_tween and _home_tween.is_valid():
@@ -886,6 +890,61 @@ func can_use_skill(_skill_id: StringName = &"default") -> bool:
 func use_skill(_skill_id: StringName = &"default") -> bool:
 	print("%s não tem habilidade implementada." % name)
 	return false
+
+
+# ---------- HABILIDADES EMPRESTADAS ----------
+## Um personagem pode dar acesso a uma habilidade sua a um aliado por um tempo (ex: o Sharp Sharp
+## do Kurona e o Manipulable Array do Teddy, que o aliado usa para devolver a bola).
+## "provider" é quem sabe executar a habilidade e precisa ter estas funções:
+##   lent_skill_name(player) -> String, lent_can_use(player) -> bool,
+##   lent_use(player) -> bool (pode usar await) e lent_info(player) -> Dictionary.
+## Funciona em qualquer personagem, sem mexer no script dele.
+var lent_skills: Dictionary = {}   # id (StringName) -> provider
+
+
+func lend_skill(id: StringName, provider: Object) -> void:
+	lent_skills[id] = provider
+
+
+func revoke_lent_skill(id: StringName) -> void:
+	lent_skills.erase(id)
+
+
+func has_lent_skill(id: StringName) -> bool:
+	return lent_skills.has(id) and is_instance_valid(lent_skills[id])
+
+
+## Lista para o MENU: as habilidades do personagem + as emprestadas (o menu deve usar esta)
+func get_menu_skills() -> Array[Dictionary]:
+	var list: Array[Dictionary] = get_skills()
+	for id: StringName in lent_skills.keys():
+		var provider: Object = lent_skills[id]
+		if is_instance_valid(provider):
+			list.append({"id": id, "name": provider.lent_skill_name(self)})
+	return list
+
+
+## Texto do balão: o da habilidade emprestada ou o get_skill_info do próprio personagem
+func get_menu_skill_info(id: StringName) -> Dictionary:
+	if has_lent_skill(id):
+		return lent_skills[id].lent_info(self)
+	if has_method("get_skill_info"):
+		return call("get_skill_info", id)
+	return {}
+
+
+## O MatchManager usa estas duas no lugar de can_use_skill / use_skill
+func can_run_skill(id: StringName) -> bool:
+	if has_lent_skill(id):
+		return not is_down and not is_skill_locked() and not is_skills_suppressed() \
+			and lent_skills[id].lent_can_use(self)
+	return can_use_skill(id)
+
+
+func run_skill(id: StringName) -> bool:
+	if has_lent_skill(id):
+		return await lent_skills[id].lent_use(self)
+	return await use_skill(id)
 
 
 ## ---------- EFEITOS DE CONTROLE E BÔNUS DE OUTROS JOGADORES (ex: Niko) ----------
@@ -1204,8 +1263,18 @@ func face_towards(dir: Vector2) -> void:
 		facing = signf(dir.x)
 
 
+## Direção em que o time ataca no eixo X: +1 = para a direita, -1 = para a esquerda.
+## Leva em conta a troca de lado do 2º tempo (Field.sides_swapped). Use ESTA função em vez de
+## supor "time 0 ataca para a direita" — assim a habilidade continua certa depois da virada.
+func get_attack_dir() -> float:
+	var field: Field = get_tree().get_first_node_in_group("field") as Field
+	if field == null:
+		return 1.0 if team == 0 else -1.0   # sem campo na cena: padrão (time 0 ataca para a direita)
+	return -float(field.defend_dir(team))
+
+
 func _default_facing() -> float:
-	return 1.0 if team == 0 else -1.0   # o time 0 ataca para a direita
+	return get_attack_dir()
 
 
 func _start_action(a: StringName) -> void:

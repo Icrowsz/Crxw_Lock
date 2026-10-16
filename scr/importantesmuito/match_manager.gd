@@ -18,6 +18,14 @@ extends Node
 ##   time, inclusive contra) decide a partida na hora.
 ## - Se a prorrogação acabar sem ninguém marcar, a partida termina empatada
 ##   (match_ended é emitido com winner = -1).
+##
+## TROCA DE LADO, BANCO E PAUSAS
+## - Quando o 1º tempo acaba, a troca de lado fica "pendente" e só acontece no próximo reset depois
+##   de um gol (formação girada, goleiros e gols trocam de lado), para não atrapalhar uma jogada.
+##   Se o goleiro estiver com a bola, ou agarrar a bola depois do fim do tempo, o reset é forçado.
+##   A prorrogação não troca de lado de novo.
+## - Banco de reservas, substituições e pausas ficam no BenchManager (bench_manager.gd).
+##   Veja pause_window() para os momentos em que dá para pausar.
 
 signal state_changed
 signal turn_started(team: int)
@@ -50,6 +58,11 @@ signal pass_completed(passer: Player, target: Player)
 signal formation_started
 ## Formações confirmadas: a partida vai começar
 signal match_started
+## Os times trocaram de lado (2º tempo)
+signal sides_swapped
+## A tela de pausa (substituições / formação) abriu / fechou
+signal pause_started(team: int)
+signal pause_finished(team: int)
 
 enum Phase {
 	CHOOSING_PROTAGONIST,
@@ -141,6 +154,10 @@ var turns_played: int = 0
 var current_team: int = 0
 var phase: Phase = Phase.CHOOSING_PROTAGONIST
 var effects: MatchEffects
+## Banco de reservas, substituições e pausas (criado no _setup)
+var bench: BenchManager
+## true enquanto a tela de pausa está aberta: ninguém age
+var paused: bool = false
 
 ## 1 = primeiro tempo, 2 = segundo tempo. Fica parado em 2 durante a prorrogação.
 var current_half: int = 1
@@ -160,6 +177,9 @@ var player_stats: Dictionary = {}
 ## O MVP da partida (vazio = ninguém pontuou). Preenchido ANTES do match_ended ser emitido.
 ## Mesmas chaves de uma entrada de player_stats.
 var mvp: Dictionary = {}
+## Estatísticas por TIME para a tela final (chave = número do time). Cada entrada:
+## {passes, shots_on_target, catches, saves, keeper}. Criada na primeira vez que o time aparece.
+var team_stats: Dictionary = {}
 
 ## Passe em escolha (lido pelo menu) e passe alto em andamento
 var pass_variant: PassVariant = PassVariant.GROUND
@@ -193,6 +213,15 @@ var _skill_point_marker: PassMarker = null
 ## Os jogadores estão voltando às posições depois de um gol (ninguém age nesse intervalo)
 var _repositioning: bool = false
 
+## O tempo virou e os times ainda não trocaram de lado (a troca acontece no próximo reset)
+var _swap_pending: bool = false
+## Janela de pausa aberta (depois de um gol ou no fim do tempo); fecha quando a próxima ação começa
+var _stoppage_open: bool = false
+## O gol saiu e a bola ainda não voltou ao centro (pausa pedida agora fica agendada para o reset)
+var _awaiting_goal_reset: bool = false
+## Times que pediram pausa durante o gol: a tela abre quando a bola volta ao centro
+var _queued_pauses: Array[int] = []
+
 var protagonist_general_left: int = 0
 var protagonist_skill_left: int = 0
 var secondary_general_left: int = 0
@@ -216,6 +245,7 @@ func _setup() -> void:
 
 	scores.resize(team_count)
 	scores.fill(0)
+	pass_completed.connect(_on_pass_completed_stats)
 
 	var field := get_tree().get_first_node_in_group("field") as Field
 	if field:
@@ -223,6 +253,10 @@ func _setup() -> void:
 		field.ball_reset_after_goal.connect(_on_ball_reset_after_goal)
 	else:
 		push_warning("MatchManager: nenhum Field encontrado; os gols não serão contados.")
+
+	bench = BenchManager.new()
+	bench.manager = self
+	add_child(bench)
 
 	if show_score_hud:
 		var hud := ScoreHud.new()
@@ -276,9 +310,18 @@ func _start_match() -> void:
 
 ## O Field avisa quando a bola volta ao centro depois de um gol
 func _on_ball_reset_after_goal() -> void:
-	if match_over or phase == Phase.FORMATION or not reset_positions_after_goal:
+	if match_over or phase == Phase.FORMATION:
 		return
-	return_players_home(reposition_time)
+	_awaiting_goal_reset = false
+	# Pausas pedidas durante o gol: a tela abre agora, ANTES de os jogadores voltarem, então a
+	# formação editada já vale neste reset
+	await _run_queued_pauses()
+	if match_over or phase == Phase.FORMATION:
+		return
+	# Se o tempo virou, é aqui que os times trocam de lado
+	var swapped: bool = _apply_pending_swap()
+	if reset_positions_after_goal or swapped:
+		return_players_home(reposition_time)
 
 
 ## Todos os jogadores voltam à posição da formação (e ninguém age enquanto isso)
@@ -303,6 +346,7 @@ func return_to_formation() -> void:
 	scores.fill(0)
 	goal_log.clear()
 	player_stats.clear()
+	team_stats.clear()
 	mvp = {}
 	round_number = 0
 	turns_played = 0
@@ -321,12 +365,26 @@ func return_to_formation() -> void:
 	_bonus_team = -1
 	_resume_team = -1
 	_repositioning = false
+	paused = false
+	_swap_pending = false
+	_stoppage_open = false
+	_awaiting_goal_reset = false
+	_queued_pauses.clear()
+	if bench != null:
+		bench.reset_match()
 	_picking_skill_target = false
 	_clear_pending_pass()
 	_hide_pass_preview()
 	_clear_roles()
 
 	var field := get_tree().get_first_node_in_group("field") as Field
+	if field and field.sides_swapped:
+		# Volta ao lado de origem (as "casas" dos jogadores giram junto)
+		field.sides_swapped = false
+		for p: Player in get_tree().get_nodes_in_group("players"):
+			p.home_position = Formations.flip_position(p.home_position, field)
+		for k: Goalkeeper in get_tree().get_nodes_in_group("goalkeepers"):
+			k.refresh_side()
 	if field:
 		field.reset_ball()  # também manda os goleiros para casa (eles ouvem o reset da bola)
 	for p: Player in get_tree().get_nodes_in_group("players"):
@@ -359,7 +417,13 @@ func _update_half() -> void:
 	var new_half: int = 2 if round_number > rounds_per_half else 1
 	if new_half != current_half:
 		current_half = new_half
+		_swap_pending = true     # a troca de lado acontece no próximo reset
+		_stoppage_open = true    # fim de tempo: dá para pausar até a próxima ação
 		half_started.emit(current_half)
+		# Goleiro já está com a bola quando o tempo vira: reset forçado agora
+		var ball: Ball = _get_ball()
+		if ball != null and ball.held_by is Goalkeeper:
+			_force_halftime_reset()
 
 
 func _begin_turn() -> void:
@@ -525,6 +589,8 @@ func _start_extra_time() -> void:
 
 ## Chamado pelo botão "Encerrar turno"
 func request_end_turn() -> void:
+	if paused:
+		return
 	if phase == Phase.CHOOSING_ACTION:
 		_end_turn()
 
@@ -532,6 +598,8 @@ func request_end_turn() -> void:
 # ---------- SELEÇÃO ----------
 
 func _on_player_clicked(player: Player) -> void:
+	if paused:
+		return   # tela de pausa aberta
 	# Habilidade esperando um PONTO do campo (ex: Rabona Cross): clicar num jogador
 	# conta como escolher o local onde ele está
 	if _picking_skill_point:
@@ -614,7 +682,7 @@ func set_active_player(player: Player) -> void:
 # ---------- AÇÕES ----------
 
 func can_act() -> bool:
-	return phase == Phase.CHOOSING_ACTION and active_player != null and not _repositioning
+	return phase == Phase.CHOOSING_ACTION and active_player != null and not _repositioning and not paused
 
 
 ## action = -1: total de ações gerais sobrando (menu/contadores). Com uma ação (GeneralAction),
@@ -1152,7 +1220,7 @@ func can_use_skill(skill_id: StringName = &"default") -> bool:
 	# Sem ação de habilidade sobrando só passa quem é "gratuito" (ex: Draconic Header)
 	if skill_left_for(active_player) <= 0 and not active_player.skill_is_free(skill_id):
 		return false
-	return active_player.can_use_skill(skill_id)
+	return active_player.can_run_skill(skill_id)   # inclui habilidades emprestadas
 
 
 ## A última mira / escolha de alvo / escolha de ponto de uma habilidade foi CANCELADA (Esc ou
@@ -1178,7 +1246,7 @@ func do_skill_action(skill_id: StringName = &"default") -> void:
 	var payment: Dictionary = _pay_skill_cost(actor, skill_id)
 	_skill_pick_cancelled = false
 	_set_phase(Phase.EXECUTING)
-	var used: bool = await actor.use_skill(skill_id)
+	var used: bool = await actor.run_skill(skill_id)   # inclui habilidades emprestadas
 
 	# Rede de segurança: se o jogador cancelou a mira/escolha, a habilidade NÃO foi usada, mesmo que
 	# o script do personagem tenha devolvido true (ou já tenha iniciado a recarga) por engano
@@ -1593,6 +1661,9 @@ func _on_goal_scored(scoring_team: int) -> void:
 		_end_match(scoring_team)
 	elif scores[scoring_team] >= goals_to_win:
 		_end_match(scoring_team)
+	else:
+		_awaiting_goal_reset = true   # até a bola voltar ao centro, pausas ficam agendadas
+		_stoppage_open = true
 
 
 ## winning_team = -1 para empate (prorrogação esgotada sem gols)
@@ -1611,6 +1682,44 @@ func _end_match(winning_team: int) -> void:
 	_clear_roles()
 	_set_phase(Phase.MATCH_OVER)
 	match_ended.emit(winner)
+
+
+# ---------- ESTATÍSTICAS DOS TIMES (tela final) ----------
+
+## Ficha de estatísticas do time (cria na primeira vez)
+func team_stat(team: int) -> Dictionary:
+	if not team_stats.has(team):
+		team_stats[team] = {
+			"passes": 0,            # passes completos (rasteiros, altos e de habilidade)
+			"shots_on_target": 0,   # chutes que chegaram ao goleiro adversário
+			"catches": 0,           # vezes que o goleiro do time agarrou a bola (total)
+			"saves": 0,             # ...das quais em chutes ao gol
+			"keeper": "",           # nome do goleiro, para a tela final
+		}
+	return team_stats[team]
+
+
+func _on_pass_completed_stats(passer: Player, _target: Player) -> void:
+	if passer != null:
+		team_stat(passer.team)["passes"] += 1
+
+
+## O goleiro agarrou a bola. forced = foi um chute ao gol que ele defendeu.
+func record_keeper_catch(keeper_team: int, forced: bool, keeper_name: String) -> void:
+	var s: Dictionary = team_stat(keeper_team)
+	s["catches"] += 1
+	if forced:
+		s["saves"] += 1
+	s["keeper"] = keeper_name
+	# O tempo acabou e o goleiro agarrou a bola: faz o reset agora (troca de lado)
+	if _swap_pending and not match_over:
+		_force_halftime_reset.call_deferred()
+
+
+## Um chute chegou ao goleiro (a disputa foi sorteada). shooting_team = time de quem chutou.
+func record_shot_on_target(shooting_team: int) -> void:
+	if shooting_team >= 0:
+		team_stat(shooting_team)["shots_on_target"] += 1
 
 
 # ---------- MVP ----------
@@ -1676,6 +1785,113 @@ func _is_better_mvp(a: Dictionary, b: Dictionary) -> bool:
 	return a["team"] == winner and b["team"] != winner
 
 
+# ---------- TROCA DE LADO, PAUSAS E SUBSTITUIÇÕES ----------
+
+## Em que momento dá para pedir pausa:
+## - &"goal": o gol acabou de sair; a pausa fica agendada e abre quando a bola volta ao centro
+## - &"stoppage": depois de um gol ou no fim do tempo, até a próxima ação começar
+## - &"keeper": o goleiro está segurando a bola
+## - &"": fechado
+func pause_window() -> StringName:
+	if match_over or paused or phase == Phase.FORMATION or phase == Phase.MATCH_OVER:
+		return &""
+	if _awaiting_goal_reset:
+		return &"goal"
+	if _repositioning:
+		return &""
+	if phase != Phase.CHOOSING_PROTAGONIST and phase != Phase.CHOOSING_ACTION:
+		return &""
+	if _stoppage_open:
+		return &"stoppage"
+	var ball: Ball = _get_ball()
+	if ball != null and ball.held_by is Goalkeeper:
+		return &"keeper"
+	return &""
+
+
+## Este time já pediu pausa durante o gol (e ela ainda vai abrir)?
+func is_pause_queued(team: int) -> bool:
+	return _queued_pauses.has(team)
+
+
+## Botão de pausa de um time. Abre a tela na hora, ou agenda para o reset se o gol acabou de sair.
+func request_pause(team: int) -> void:
+	if bench == null or not bench.can_pause(team):
+		return
+	if _awaiting_goal_reset:
+		if not _queued_pauses.has(team):
+			_queued_pauses.append(team)
+			state_changed.emit()
+		return
+	await _run_pause(team)
+
+
+func _run_queued_pauses() -> void:
+	while not _queued_pauses.is_empty():
+		var team: int = _queued_pauses.pop_front()
+		await _run_pause(team)
+
+
+func _run_pause(team: int) -> void:
+	paused = true
+	state_changed.emit()
+	pause_started.emit(team)
+	await bench.run_pause_screen(team)
+	paused = false
+	pause_finished.emit(team)
+	state_changed.emit()
+
+
+## O BenchManager trocou um jogador por outro: quem guardava o antigo passa a guardar o novo
+func on_player_replaced(old: Player, fresh: Player) -> void:
+	register_player(fresh)
+	fresh.role = old.role
+	if protagonist == old:
+		protagonist = fresh
+	if active_player == old:
+		active_player = fresh
+		fresh.is_active = true
+	var ball: Ball = _get_ball()
+	if ball != null:
+		if ball.last_toucher == old:
+			ball.last_toucher = fresh
+		if ball.previous_toucher == old:
+			ball.previous_toucher = fresh
+	state_changed.emit()
+
+
+## Troca os times de lado se o tempo virou e a troca ainda estava pendente. Devolve true se trocou.
+## Gira as "casas" dos jogadores em 180° (a formação vira), manda os goleiros para o gol novo e
+## os jogadores passam a olhar para o outro lado quando voltarem para casa.
+func _apply_pending_swap() -> bool:
+	if not _swap_pending:
+		return false
+	_swap_pending = false
+	var field := get_tree().get_first_node_in_group("field") as Field
+	if field == null:
+		return false
+	field.sides_swapped = not field.sides_swapped
+	for p: Player in get_tree().get_nodes_in_group("players"):
+		p.home_position = Formations.flip_position(p.home_position, field)
+	for k: Goalkeeper in get_tree().get_nodes_in_group("goalkeepers"):
+		k.refresh_side()
+	announce_keeper("Começou o 2º tempo: os times trocaram de lado!", -1)
+	sides_swapped.emit()
+	state_changed.emit()
+	return true
+
+
+## Reset forçado do fim de tempo (goleiro com a bola): troca de lado, bola ao centro, todos para casa
+func _force_halftime_reset() -> void:
+	if match_over or not _swap_pending or phase == Phase.FORMATION:
+		return
+	_apply_pending_swap()
+	var field := get_tree().get_first_node_in_group("field") as Field
+	if field:
+		field.reset_ball()   # também manda os goleiros para casa (e solta a bola)
+	return_players_home(reposition_time)
+
+
 # ---------- UTIL ----------
 
 func get_team_players(team: int) -> Array[Player]:
@@ -1728,5 +1944,7 @@ func _set_phase(new_phase: Phase) -> void:
 	# Depois do fim de jogo, nenhuma ação em andamento pode mudar a fase
 	if match_over and new_phase != Phase.MATCH_OVER:
 		return
+	if new_phase == Phase.EXECUTING:
+		_stoppage_open = false   # uma ação começou: a janela de pausa fecha
 	phase = new_phase
 	state_changed.emit()

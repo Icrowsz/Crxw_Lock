@@ -15,24 +15,26 @@ extends Player
 ##      eles ficam sem poder usar as ações gerais Carrinho e Correr no PRÓXIMO turno do time
 ##      deles (step_stun_turns).
 ##
-## 3. Unleash Instinct (ação de habilidade; recarga de 3 rodadas): com a bola, Bachira arma um
-##      counter. Se um inimigo acertar um Carrinho nele (os dois no chão, bola ao alcance), o
-##      counter dispara sozinho, fora do turno dele: ele desvia (salta por cima do carrinho) e
-##      ganha UMA ação geral extra, que vale para tudo MENOS o Correr (extra_general_no_run_left).
-##      Por padrão a bola também fica grudada nele até o fim da rodada, como no Gremlin Taunt
-##      do Charles (instinct_sticks_ball).
+## 3. Unleash Instinct (ação de habilidade; recarga de 2 rodadas): parecido com o Glam! da Aryu.
+##      Com a bola próxima, Bachira a SEGURA (ela fica à frente dele; adversários não conseguem
+##      tocar nela). Dura até o fim do próximo turno do adversário.
+##      - Se um adversário chegar perto, Bachira e a bola DESVIAM e ele ganha UMA ação geral
+##        extra (vale para tudo, inclusive o Correr), guardada para o turno dele.
+##      - Depois desse primeiro desvio ele ainda pode desviar instinct_extra_dodges (2) vezes:
+##        se um adversário tentar tomar a bola de novo, ele e a bola desviam outra vez.
+##      - Depois do primeiro desvio, a bola continua com ele até o fim do próximo turno do time
+##        do Bachira (para ele usar a ação extra). Chutar/passar/qualquer toque solta a bola.
 ##
 ## Como montar a cena: igual aos outros — Nova Cena Herdada de player.tscn -> anexe este
 ## script ao nó raiz -> renomeie o nó raiz para "Bachira".
 ##
+## PEÇAS NO RESTO DO PROJETO:
+## - player.gd: usa extra_general_left (já existia) para a ação extra do Unleash Instinct.
+##   O campo extra_general_no_run_left (e o tratamento dele no match_manager.gd) continua lá,
+##   mas o Bachira não usa mais.
+##
 ## Animações opcionais (se faltar alguma, o jogo só pula): bon, bee_shot, step_overs,
 ## unleash_instinct.
-##
-## PEÇAS NO RESTO DO PROJETO (já aplicadas nos arquivos devolvidos junto com este):
-## - player.gd: o campo extra_general_no_run_left.
-## - match_manager.gd: general_left_for()/_consume_general() passam a conhecer a ação, para a
-##   ação extra "sem Correr" não valer no Correr.
-## - player.gd (da conversa anterior): o carrinho inimigo respeita a trava da bola.
 
 const SKILL_SHOT: StringName = &"bon"
 const SKILL_STEP: StringName = &"step_overs"
@@ -46,13 +48,16 @@ const CD_INSTINCT: StringName = &"cd_instinct"
 ## Variante da habilidade 1, pela altura do Bachira x altura da bola
 enum ShotVariant { NONE, BON, BEE }
 
+## NONE = sem Unleash Instinct; HOLDING = segurando a bola; DODGED = já desviou (ação extra ganha)
+enum InstinctState { NONE, HOLDING, DODGED }
+
 @export_group("Bon! / Bee Shot")
-@export_range(0.0, 1.0) var chance_bon: float = 0.4
+@export_range(0.0, 1.0) var chance_bon: float = 0.45
 @export_range(0.0, 1.0) var chance_bee: float = 0.5
 @export var bon_peak_level: Heights.Level = Heights.Level.FLYING   # até onde a bola sobe no Bon!
 @export var bon_max_bounces: int = 1                                # quantas vezes a bola quica depois do Bon! (-1 = sem limite)
 ## Multiplicador da força do chute no Bon! (1.0 = força normal do voleio). Não vale para o Bee Shot.
-@export_range(0.5, 3.0, 0.05) var bon_force_mult: float = 0.55
+@export_range(0.5, 3.0, 0.05) var bon_force_mult: float = 0.60
 @export var shot_cooldown: int = 2                                  # igual para as 2 variantes
 
 @export_group("Step Overs")
@@ -63,10 +68,15 @@ enum ShotVariant { NONE, BON, BEE }
 @export var step_cooldown: int = 2
 
 @export_group("Unleash Instinct")
+@export var instinct_range: float = 90.0               # "bola próxima"
+@export var instinct_grab_time: float = 0.15
+@export var instinct_ball_offset: float = 22.0         # a bola fica à frente dele
+@export var instinct_trigger_radius: float = 75.0      # adversário a esta distância da bola = tentou interagir
+@export var instinct_dodge_distance: float = 160.0
+@export var instinct_dodge_time: float = 0.25
+@export var instinct_extra_dodges: int = 6             # desvios A MAIS depois do primeiro (o que dá a ação extra)
+@export var instinct_extra_generals: int = 1           # ações gerais extras (valem para tudo, inclusive Correr)
 @export var instinct_cooldown: int = 2
-@export var instinct_extra_generals: int = 1           # ações gerais extras (menos Correr)
-@export var instinct_sticks_ball: bool = true          # a bola fica grudada nele até o fim da rodada
-@export var instinct_stick_extra_rounds: int = 0       # rodadas que a bola continua grudada DEPOIS da rodada do counter
 
 @export_group("Visual do chute")
 ## Aura + partículas dos chutes de habilidade. Vazio = usa o estilo padrão (veja _make_kick_fx)
@@ -77,10 +87,12 @@ enum ShotVariant { NONE, BON, BEE }
 ## Sem imagem, o balão aparece só com o texto.
 @export var skill_icons: Dictionary = {}
 
-## Unleash Instinct está armado, esperando um Carrinho inimigo disparar o counter
-var _instinct_armed: bool = false
-## A bola está grudada no Bachira até o fim desta rodada (-1 = não está)
-var _stuck_until_round: int = -1
+## Estado do Unleash Instinct (segurando a bola / já desviou)
+var _instinct_state: InstinctState = InstinctState.NONE
+## Contagem de toques na bola quando ele a segurou: qualquer toque depois disto solta a bola
+var _instinct_touches: int = 0
+var _dodging: bool = false
+var _dodges_left: int = 0   # desvios extras que ainda restam neste Unleash Instinct
 ## Inimigos atordoados pelo Step Overs: jogador -> quantos turnos do time dele ainda faltam
 var _stunned: Dictionary = {}
 
@@ -125,18 +137,31 @@ func _hook_manager() -> void:
 	if m:
 		m.round_started.connect(_on_round_started)
 		m.turn_ended.connect(_on_turn_ended)
+	var ball: Ball = _get_ball()
+	if ball:
+		ball.was_reset.connect(_on_ball_reset)
 
 
-func _on_round_started(new_round: int) -> void:
-	# A rodada do counter acabou: a bola desgruda e volta ao jogo normal
-	if _stuck_until_round >= 0 and new_round > _stuck_until_round:
-		_release_stuck_ball()
+func _on_round_started(_round_number: int) -> void:
 	queue_redraw()
+
+
+func _on_ball_reset() -> void:
+	_end_instinct(false)   # gol / reposição: a bola já foi solta pelo próprio Ball
 
 
 ## O atordoamento dura os turnos do time INIMIGO: cada vez que o turno de um time acaba, os
 ## atordoados daquele time perdem um turno de atordoamento
 func _on_turn_ended(ended_team: int) -> void:
+	# Unleash Instinct: sem desvio, solta a bola no fim do turno adversário. Depois do primeiro
+	# desvio ele vale até o fim do próximo turno do time do Bachira.
+	match _instinct_state:
+		InstinctState.HOLDING:
+			if ended_team != team and not _dodging:
+				_end_instinct(true)
+		InstinctState.DODGED:
+			if ended_team == team:
+				_end_instinct(true)
 	if _stunned.is_empty():
 		return
 	for p in _stunned.keys():
@@ -148,14 +173,6 @@ func _on_turn_ended(ended_team: int) -> void:
 		_stunned[p] = int(_stunned[p]) - 1
 		if int(_stunned[p]) <= 0:
 			_stunned.erase(p)
-	queue_redraw()
-
-
-# ---------- DERRUBADO: desarma o counter ----------
-
-func knock_down() -> void:
-	super()
-	_instinct_armed = false
 	queue_redraw()
 
 
@@ -277,103 +294,137 @@ func blocks_general_action(p: Player, action: int) -> bool:
 
 # ---------- HABILIDADE 3: UNLEASH INSTINCT ----------
 
-## "Com a bola": bola no chão e ao alcance, Bachira no chão (o carrinho só acerta quem está no chão)
-func _can_arm_instinct() -> bool:
-	return _step_overs_ready()   # mesma condição: os dois no chão, bola ao alcance
+## Mantém uma posição (global) dentro do campo
+func _clamp_to_pitch(global_p: Vector2) -> Vector2:
+	var field := get_tree().get_first_node_in_group("field") as Field
+	if field == null:
+		return global_p
+	var half: Vector2 = field.pitch_size * 0.5 - Vector2(20.0, 20.0)
+	var l: Vector2 = field.to_local(global_p)
+	l.x = clampf(l.x, -half.x, half.x)
+	l.y = clampf(l.y, -half.y, half.y)
+	return field.to_global(l)
+
+
+## Bola próxima e alcançável (mesma regra do Glam! da Aryu)
+func _can_hold_ball() -> bool:
+	var ball: Ball = _get_ball()
+	if ball == null or is_down or ball.is_held() or ball.is_locked_for(team):
+		return false
+	if not can_reach_level(ball.get_level()):
+		return false
+	return global_position.distance_to(ball.global_position) <= instinct_range
+
+
+func _hold_point() -> Vector2:
+	return global_position + Vector2(facing * instinct_ball_offset, 0.0)
 
 
 func _instinct_skill_name() -> String:
-	return "Unleash Instinct (armado)" if _instinct_armed else "Unleash Instinct"
+	return "Unleash Instinct (segurando)" if _instinct_state != InstinctState.NONE else "Unleash Instinct"
 
 
 func _use_instinct() -> bool:
-	if not _can_arm_instinct():
+	var m: MatchManager = _get_manager()
+	if m == null or not _can_hold_ball():
 		return false
-	await play_action(&"unleash_instinct")
-	_instinct_armed = true
+	face_towards(_get_ball().global_position - global_position)
+	if not await play_action(&"unleash_instinct"):
+		return false
+
+	var ball: Ball = _get_ball()
+	if not _can_hold_ball():   # a bola pode ter saído do alcance durante a animação
+		return false
+
+	m.clear_pending_pass()                 # passe alto em andamento: a bola agora é do Bachira
+	ball.register_touch(self)
+	ball.hover_to(_hold_point(), height, instinct_grab_time)
+	await get_tree().create_timer(instinct_grab_time).timeout
+
+	_instinct_touches = ball.interaction_count   # qualquer toque depois disto solta a bola
+	ball.spell_owner = self                      # adversários não conseguem tocar na bola enquanto ela está com ele
+	_instinct_state = InstinctState.HOLDING
+	_dodges_left = instinct_extra_dodges
 	start_cooldown(CD_INSTINCT, instinct_cooldown)
 	queue_redraw()
 	return true
 
 
-## Counter: chamado pelo ATACANTE (dentro de _check_slide_hits do player.gd) quando o
-## Carrinho dele ia acertar o Bachira.
-func try_counter_slide(attacker: Player) -> bool:
-	if not _instinct_armed or is_down:
-		return false
-	var m: MatchManager = _get_manager()
-	var ball: Ball = _get_ball()
-	if m == null or ball == null:
-		return false
-	# Se a situação mudou (ele pulou, a bola subiu, rolou para longe...) o counter não existe
-	# mais, mas continua armado até ele realmente disparar uma vez com a bola nos pés.
-	if height_level != Heights.Level.GROUND or ball.is_held() \
-			or ball.get_level() != Heights.Level.GROUND \
-			or global_position.distance_to(ball.global_position) > kick_range:
-		return false
-
-	_instinct_armed = false
-	_run_instinct_dodge(attacker, m)
-	return true
-
-
-## Dispara fora da vez do Bachira: ele desvia (pulinho visual por cima do carrinho, sem mudar
-## o nível de altura) e ganha uma ação geral extra que NÃO vale para o Correr, guardada para a
-## próxima vez que ele agir (não dá para abrir um menu no meio do turno do adversário).
-func _run_instinct_dodge(attacker: Player, m: MatchManager) -> void:
-	hop_over()
-	extra_general_no_run_left += instinct_extra_generals
-	if instinct_sticks_ball:
-		_stick_ball(attacker, m)
-	queue_redraw()
-
-
-## A bola gruda no Bachira durante o counter e FICA grudada até o fim da rodada (ou até
-## alguém do time dele tocar nela de novo). Mesma mecânica do Gremlin Taunt do Charles:
-## - hovering = true desliga a física da bola, então ninguém empurra ela correndo;
-## - spell_owner = self é a trava que o projeto já tem (a do Arresto Momentum do Ness):
-##   is_locked_for() faz o chute dos adversários devolver NONE e o carrinho também respeita;
-## - o _process() mantém a bola nos pés dele (se ele andar, ela vai junto).
-func _stick_ball(attacker: Player, m: MatchManager) -> void:
+## Enquanto segura a bola: ela acompanha o Bachira; no turno adversário, quem chegar perto o faz desviar
+func _physics_process(delta: float) -> void:
+	super(delta)
+	if _instinct_state == InstinctState.NONE:
+		return
 	var ball: Ball = _get_ball()
 	if ball == null:
+		_end_instinct(false)
 		return
-	m.clear_pending_pass()   # a bola não pode ficar presa a um passe alto em andamento
-	ball.release_hover()     # limpa qualquer trava/pairo anterior
-	ball.velocity = Vector2.ZERO
-	ball.vel_z = 0.0
-	ball.height = 0.0
-	ball.pending_shot_chance = Ball.NO_SHOT
-	ball.hovering = true
-	ball.spell_owner = self
-	_place_stuck_ball(ball)
-	ball.register_touch(self)
-	attacker._slide_hit_ball = true   # o resto do carrinho dele não tenta chutar a bola
-	_stuck_until_round = m.round_number + instinct_stick_extra_rounds
-
-
-func _place_stuck_ball(ball: Ball) -> void:
-	var offset: Vector2 = Vector2(facing, 0.0) * (body_radius + ball.collision_radius + 2.0)
-	ball.global_position = global_position + offset
-
-
-## Mantém a bola grudada enquanto o efeito durar. Se alguém do time dele chutou/passou (o
-## kick() da bola chama release_hover(), que limpa o spell_owner), o efeito acaba.
-func _update_stuck_ball() -> void:
-	if _stuck_until_round < 0:
+	# Alguém tocou/chutou a bola, ou ela foi solta por fora: o Unleash Instinct acabou
+	if ball.interaction_count != _instinct_touches or not ball.hovering or ball.is_held():
+		_end_instinct(false)
 		return
+	if is_down:   # derrubado: perde a bola
+		_end_instinct(true)
+		return
+
+	ball.global_position = _hold_point()
+	ball.height = height
+
+	# Segurando = o primeiro desvio ainda não aconteceu; Dodged = já desviou, mas ainda pode
+	# desviar mais instinct_extra_dodges vezes
+	if not _dodging and (_instinct_state == InstinctState.HOLDING \
+			or (_instinct_state == InstinctState.DODGED and _dodges_left > 0)):
+		_check_instinct_trigger(ball)
+
+
+func _check_instinct_trigger(ball: Ball) -> void:
+	var m: MatchManager = _get_manager()
+	# Só o turno do adversário conta (no turno do próprio Bachira ninguém "tenta" nada)
+	if m == null or m.match_over or m.current_team == team:
+		return
+	for p: Player in get_tree().get_nodes_in_group("players"):
+		if p.team == team or p.is_down or not p.can_reach_level(ball.get_level()):
+			continue
+		var radius: float = maxf(instinct_trigger_radius, p.kick_range + 5.0)
+		if p.global_position.distance_to(ball.global_position) <= radius:
+			_instinct_dodge(p.global_position)
+			return
+
+
+## Bachira e a bola saem de perto de quem tentou interagir. O primeiro desvio dá a ação geral extra.
+func _instinct_dodge(from: Vector2) -> void:
+	if _instinct_state == InstinctState.DODGED:
+		_dodges_left -= 1   # um desvio extra gasto (o primeiro é o que dá a ação extra)
+	_dodging = true
+	var away: Vector2 = global_position - from
+	if away.length() < 1.0:
+		away = Vector2(-facing, 0.0)
+	var dest: Vector2 = _clamp_to_pitch(global_position + away.normalized() * instinct_dodge_distance)
+	face_towards(-away)
+	var tw := create_tween()
+	tw.tween_property(self, "global_position", dest, instinct_dodge_time) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	await get_tree().create_timer(instinct_dodge_time).timeout
+	_dodging = false
+	if _instinct_state == InstinctState.HOLDING:
+		_instinct_state = InstinctState.DODGED
+		# Ação geral extra (vale para tudo, inclusive o Correr), guardada para quando ele agir:
+		# não dá para abrir um menu no meio do turno do adversário
+		extra_general_left += instinct_extra_generals
+		queue_redraw()
+
+
+## release = true solta a bola (cai e rola); false = a bola já foi tocada/solta por outro
+func _end_instinct(release: bool) -> void:
+	if _instinct_state == InstinctState.NONE:
+		return
+	_instinct_state = InstinctState.NONE
+	_dodging = false
+	_dodges_left = 0
 	var ball: Ball = _get_ball()
-	if ball == null or ball.spell_owner != self or not ball.hovering:
-		_stuck_until_round = -1   # a bola já foi solta por outro meio
-		return
-	_place_stuck_ball(ball)
-
-
-func _release_stuck_ball() -> void:
-	_stuck_until_round = -1
-	var ball: Ball = _get_ball()
-	if ball != null and ball.spell_owner == self:
-		ball.release_hover()   # volta a gravidade e a trava some
+	if release and ball != null and ball.hovering and not ball.is_held():
+		ball.release_hover()
+	queue_redraw()
 
 
 # ---------- SISTEMA DE HABILIDADES (menu) ----------
@@ -396,8 +447,9 @@ func can_use_skill(skill_id: StringName = &"default") -> bool:
 			# precisa de alguém para enganar: sem inimigo perto a habilidade seria desperdiçada
 			return not is_on_cooldown(CD_STEP) and _step_overs_ready() and not _step_targets().is_empty()
 		SKILL_INSTINCT:
-			# sem rearmar enquanto já está armado
-			return not is_on_cooldown(CD_INSTINCT) and not _instinct_armed and _can_arm_instinct()
+			# sem reusar enquanto já está segurando a bola
+			return not is_on_cooldown(CD_INSTINCT) and _instinct_state == InstinctState.NONE \
+				and _can_hold_ball()
 	return false
 
 
@@ -444,7 +496,8 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 				step_cooldown]
 		SKILL_INSTINCT:
 			title = "Unleash Instinct"
-			text = ("Bachira arma um counter. Se um inimigo acertar um carrinho nele, ele desvia sozinho e ganha %d ação geral extra, que vale para tudo menos Correr." % instinct_extra_generals)
+			text = ("Com a bola próxima, Bachira a segura. Se alguém chegar perto, ele desvia e ganha %d ação geral extra (vale para tudo, inclusive Correr), e ainda pode desviar mais %d vezes se tentarem tomar a bola de novo." % [
+				instinct_extra_generals, instinct_extra_dodges])
 			text += "\nRecarga: %d rodadas." % instinct_cooldown
 		_:
 			return {}
@@ -456,9 +509,8 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 
 func reset_for_new_match() -> void:
 	super()
-	_instinct_armed = false
+	_end_instinct(true)
 	_stunned.clear()
-	_release_stuck_ball()
 	queue_redraw()
 
 
@@ -466,9 +518,8 @@ func reset_for_new_match() -> void:
 
 func _process(delta: float) -> void:
 	super(delta)
-	_update_stuck_ball()
-	# Anel armado e "estrelinhas" nos atordoados giram: precisa redesenhar toda hora
-	if _instinct_armed or not _stunned.is_empty():
+	# Anel do Instinct e "estrelinhas" nos atordoados giram: precisa redesenhar toda hora
+	if _instinct_state != InstinctState.NONE or not _stunned.is_empty():
 		queue_redraw()
 
 
@@ -476,8 +527,8 @@ func _draw() -> void:
 	super()
 	var center := Vector2(0.0, -height)
 
-	# Anel amarelo-esverdeado enquanto o Unleash Instinct está armado, esperando o carrinho
-	if _instinct_armed:
+	# Anel amarelo-esverdeado enquanto o Unleash Instinct está valendo (segurando a bola)
+	if _instinct_state != InstinctState.NONE:
 		var pulse: float = 1.0 + 0.1 * sin(Time.get_ticks_msec() / 1000.0 * 6.0)
 		draw_arc(center, (placeholder_radius + 11.0) * pulse, 0.0, TAU, 32,
 			Color(0.8, 1.0, 0.2, 0.9), 2.0)

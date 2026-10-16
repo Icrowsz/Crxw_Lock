@@ -6,9 +6,9 @@ extends Player
 ##      estado da bola; recarga de 3 rodadas, compartilhada entre as variantes):
 ##      - Charles no chão + bola no chão -> Rabona Cross: passe alto (alcance 500) para um
 ##          LOCAL clicado no campo (não um aliado). A bola sobe até o nível Voando, no
-##          meio do caminho, e PAIRA no local escolhido, no nível Suspenso — exatamente
-##          como o Passe Alto comum, só que o "alvo" é um ponto. Se ninguém tocar nela,
-##          cai para o chão sozinha. Tem QTE fácil (errar encurta e desvia o local).
+##          meio do caminho, e CHEGA NA MESMA RODADA ao local escolhido, pairando no nível
+##          Suspenso (não espera o próximo turno). Se ninguém tocar nela até o fim do
+##          turno, cai para o chão sozinha. Tem QTE fácil (errar encurta e desvia o local).
 ##      - Charles no chão ou suspenso + bola Suspensa -> Sky-Arc Pass: passe longo e
 ##          curvo (alcance 550), escolhendo um aliado. Diferente do passe alto comum, a
 ##          bola chega a ele NO CHÃO (reaproveita o passe curvo do MatchManager, que já
@@ -40,6 +40,10 @@ extends Player
 ## - match_manager.gd: begin_point_pass() (Rabona Cross: o passe que pousa num ponto) e
 ##   pick_point_for_skill() (escolher esse ponto clicando no campo, com o mesmo círculo de
 ##   alcance e aviso de "fora do alcance" que o pick_ally_for_skill já usa para aliados).
+##
+## Reação Química CRUEL (com o Rin, veja reaction_cruel.gd): o Rabona Cross anota o último uso em
+## last_rabona (a reação lê isto) e, quando cumpre as condições da reação, sai brilhando mais e com um
+## demônio gigante amarelo/azul cobrindo o Charles (charged_fx + cruel_fx.gd).
 ##
 ## Como montar a cena: igual ao Isagi/Rin — Nova Cena Herdada de player.tscn -> anexe
 ## este script ao nó raiz -> renomeie o nó raiz para "Charles".
@@ -93,6 +97,8 @@ enum TauntState { NONE, HOLDING, STUCK }
 @export_group("Visual do chute")
 ## Aura + partículas dos chutes/passes de habilidade. Vazio = usa o estilo padrão (veja _make_kick_fx)
 @export var kick_fx: KickFX
+## Aura do Rabona Cross quando ele cumpre as condições da reação Cruel. Vazio = estilo padrão
+@export var charged_fx: KickFX
 
 @export_group("Descrição (hover)")
 ## Imagem de cada habilidade no balão do menu. Chaves: rabona_cross, gremlin_taunt, metavision_tricheur.
@@ -108,6 +114,10 @@ var _metavision_until_round: int = -1
 ## No estado STUCK, a bola fica grudada até o fim desta rodada (-1 = não está)
 var _stuck_until_round: int = -1
 
+## Último Rabona Cross usado (as Reações Químicas leem isto, ex: Cruel):
+## {"landing": local escolhido, "touches": toques na bola logo depois do passe}
+var last_rabona: Dictionary = {}
+
 
 func _init() -> void:
 	character_id = "charles"   # o menu de formação usa isto para saber quem é quem
@@ -118,6 +128,8 @@ func _ready() -> void:
 	super()
 	if kick_fx == null:
 		kick_fx = _make_kick_fx()
+	if charged_fx == null:
+		charged_fx = _make_charged_fx()
 	# A Tricheur's Metavision reduz a chance de chute dos INIMIGOS por perto, então Charles
 	# entra no mesmo grupo que os outros efeitos de controle (ver is_skills_suppressed/
 	# is_generals_suppressed no player.gd) e implementa shot_penalty_on(); ela só faz algo
@@ -141,6 +153,25 @@ func _make_kick_fx() -> KickFX:
 	fx.scale_max = 0.32
 	fx.burst_amount = 14
 	fx.burst_speed = 200.0
+	return fx
+
+
+## Rabona Cross "carregado" (Cruel): o mesmo estilo, só que bem mais largo e brilhante, em
+## amarelo e azul
+func _make_charged_fx() -> KickFX:
+	var fx := _make_kick_fx()
+	fx.color = Color(1.0, 0.85, 0.25, 1.0)
+	fx.trail_width = 26.0
+	fx.particle_color = Color(0.4, 0.7, 1.0, 1.0)
+	fx.amount = 40
+	fx.lifetime = 0.8
+	fx.speed_min = 20.0
+	fx.speed_max = 110.0
+	fx.spin = 420.0
+	fx.scale_min = 0.2
+	fx.scale_max = 0.45
+	fx.burst_amount = 24
+	fx.burst_speed = 340.0
 	return fx
 
 
@@ -216,9 +247,9 @@ func _use_pass_skill() -> bool:
 
 
 ## Rabona Cross: o jogador CLICA no local do campo (dentro de rabona_range) para onde
-## a bola vai, em vez de só escolher uma direção. Ela paira lá, igual ao Passe Alto
-## comum (sobe a Voando no meio do caminho, desce ao nível Suspenso no local quando o
-## turno do Charles voltar, e cai ao chão sozinha se ninguém tocar nela a tempo).
+## a bola vai, em vez de só escolher uma direção. Ela sobe a Voando no meio do caminho e
+## desce ao nível Suspenso no local NA MESMA RODADA (sem esperar o turno do Charles voltar);
+## fica pairando lá e cai ao chão sozinha se ninguém tocar nela até o fim do turno.
 func _use_rabona_cross(m: MatchManager) -> bool:
 	var ball: Ball = _get_ball()
 
@@ -233,6 +264,14 @@ func _use_rabona_cross(m: MatchManager) -> bool:
 	var dir: Vector2 = landing - global_position
 	dir = dir.normalized() if dir.length() > 0.01 else Vector2(_default_facing(), 0.0)
 	face_towards(dir)
+
+	# Cruel (Charles + Rin): se este Rabona cumpre as condições da reação, um demônio gigante cobre
+	# o Charles enquanto ele chuta e a bola sai brilhando
+	var charged: bool = ReactionCruel.is_rabona_charged(self)
+	last_rabona = {}
+	if charged:
+		CruelFX.summon_charles_demon(self, global_position, height)
+
 	if not await play_action(&"rabona_cross", ANIM_PASS_HIGH):
 		return false   # ação cancelada (ex: a partida reiniciou)
 
@@ -247,13 +286,26 @@ func _use_rabona_cross(m: MatchManager) -> bool:
 		landing = global_position + bad_dir * dist
 
 	ball.register_touch(self)   # o passe alto não usa kick(), então registra o toque aqui
-	if kick_fx:
+	if charged:
+		ball.play_fx(charged_fx)
+		CruelFX.attach_ball_aura(ball, CruelFX.Style.RABONA)
+		CruelFX.rabona_burst(self, ball.sprite.global_position)
+	elif kick_fx:
 		ball.play_fx(kick_fx)
+	if not charged:
+		PassFX.attach(ball, PassFX.Style.RABONA)   # fitas trançadas e pequenos X (o carregado já tem os efeitos da Cruel)
 	var midpoint: Vector2 = (ball.global_position + landing) * 0.5
 	var tween: Tween = ball.hover_to(midpoint, Heights.FLYING_HEIGHT, 0.9)
 	await tween.finished
 
-	m.begin_point_pass(team, landing)
+	# Chega NA MESMA RODADA: a bola desce até o local (Suspensa) agora, sem esperar o próximo turno.
+	# O register_skill_pass deixa ela pairando lá até alguém tocar ou o turno acabar (aí ela cai).
+	var arrive: Tween = ball.hover_to(landing, Heights.SUSPENDED_HEIGHT, m.high_pass_arrive_time)
+	await arrive.finished
+	m.register_skill_pass(team, null)
+
+	# Avisa as Reações Químicas (a Cruel lê isto): o Rabona saiu e a bola é do Charles
+	last_rabona = {"landing": landing, "touches": ball.interaction_count}
 	start_cooldown(CD_PASS, pass_cooldown)
 	return true
 
@@ -270,6 +322,7 @@ func _use_sky_arc_pass(m: MatchManager) -> bool:
 	if get_pass_variant() != PassVariant.SKY_ARC:
 		return false
 
+	PassFX.arm(ball, PassFX.Style.SKY_ARC)   # arcos e fita azul céu: começa quando a bola sai
 	await m.run_curved_ground_pass(self, target, ball, sky_arc_curve_ratio, sky_arc_bend,
 		&"sky_arc_pass", kick_fx)
 	start_cooldown(CD_PASS, pass_cooldown)
@@ -614,6 +667,7 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 func reset_for_new_match() -> void:
 	super()
 	_metavision_until_round = -1
+	last_rabona = {}
 	_end_taunt(true)
 	queue_redraw()
 

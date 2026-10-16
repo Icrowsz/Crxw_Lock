@@ -2,8 +2,8 @@
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_mshyg"]
 [ext_resource type="Script" uid="uid://btobmnhcic4n7" path="res://scr/perso/raichi.gd" id="2_goh3g"]
-[ext_resource type="Texture2D" uid="uid://cmsdyt2ltx014" path="res://img/icons/raichiicon.png" id="2_pwr3a"]
 [ext_resource type="Texture2D" uid="uid://bvd40w13tuifi" path="res://img/mvps/raichi.jpg" id="3_goh3g"]
+[ext_resource type="Texture2D" uid="uid://cjkpsl7qusdbb" path="res://img/testes/raichi.png" id="4_goh3g"]
 
 [node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_mshyg")]
 script = ExtResource("2_goh3g")
@@ -12,6 +12,7 @@ stalk_penalty = 0.05
 stalk_penalty_sexy = 0.1
 stalk_rounds = 2
 stalker_cooldown = 3
+stalk_break_distance = 300.0
 dog_cooldown = 2
 radius_range = 150.0
 radius_cast_range = 350.0
@@ -32,4 +33,4 @@ visual_root = NodePath("SprPlayer")
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)
-texture = ExtResource("2_pwr3a")
+texture = ExtResource("4_goh3g")

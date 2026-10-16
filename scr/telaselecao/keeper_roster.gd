@@ -19,6 +19,15 @@ const KEEPERS: Array[Dictionary] = [
 ## o goleiro usa o círculo placeholder.
 const ART_DIR: String = "res://img/gks/"
 
+## Pasta dos ROSTOS dos goleiros (quadrado pequeno, aparece no seletor e no campo da tela de formação):
+## um arquivo por goleiro, com o nome do id (base.png, bl_man.png...). Aceita png, webp, jpg, jpeg e svg.
+## Sem o rosto, usa a imagem completa de ART_DIR; sem nenhuma das duas, o círculo placeholder.
+## Ajuste o caminho para o do seu projeto.
+const FACE_DIR: String = "res://img/gks/rostos/"
+const IMAGE_EXTENSIONS: Array[String] = ["png", "webp", "jpg", "jpeg", "svg"]
+
+static var _face_cache: Dictionary = {}   # caminho -> Texture2D (ou null, se não existe)
+
 ## Escolha de cada time (time -> id). Fica guardada entre partidas, como o TeamStyle.
 static var selected: Dictionary = {}
 
@@ -51,6 +60,24 @@ static func art_for(id: String) -> Texture2D:
 	if ResourceLoader.exists(path):
 		return load(path) as Texture2D
 	return null
+
+
+## Rosto do goleiro (FACE_DIR); sem ele, a imagem completa; sem nenhuma, null
+static func face_for(id: String) -> Texture2D:
+	for ext in IMAGE_EXTENSIONS:
+		var path: String = "%s%s.%s" % [FACE_DIR, id, ext]
+		if _face_cache.has(path):
+			if _face_cache[path] != null:
+				return _face_cache[path] as Texture2D
+			continue
+		if ResourceLoader.exists(path):
+			var tex := load(path) as Texture2D
+			_face_cache[path] = tex
+			if tex != null:
+				return tex
+		else:
+			_face_cache[path] = null
+	return art_for(id)
 
 
 static func choice_for(team: int) -> String:

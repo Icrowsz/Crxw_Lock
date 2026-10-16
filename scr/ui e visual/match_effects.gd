@@ -463,7 +463,18 @@ func _build_end_card(winner: int) -> void:
 
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", _panel_style(accent))
-	center.add_child(panel)
+	# Painel principal no meio e as caixinhas de estatísticas nos lados
+	var layout := HBoxContainer.new()
+	layout.alignment = BoxContainer.ALIGNMENT_CENTER
+	layout.add_theme_constant_override("separation", 22)
+	layout.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	center.add_child(layout)
+	var left_col: VBoxContainer = _stat_column()
+	var right_col: VBoxContainer = _stat_column()
+	layout.add_child(left_col)
+	layout.add_child(panel)
+	layout.add_child(right_col)
+	var stat_cards: Array[Control] = _build_stat_cards(left_col, right_col, screen)
 
 	var box := VBoxContainer.new()
 	box.add_theme_constant_override("separation", 22)
@@ -517,12 +528,236 @@ func _build_end_card(winner: int) -> void:
 	if mvp_block != null:
 		mvp_block.modulate.a = 0.0
 		create_tween().tween_property(mvp_block, "modulate:a", 1.0, 0.4).set_delay(0.45)
+	for i in stat_cards.size():   # as caixinhas aparecem uma depois da outra
+		create_tween().tween_property(stat_cards[i], "modulate:a", 1.0, 0.4).set_delay(0.6 + 0.12 * float(i))
 
 	var confetti := _Confetti.new()
 	_full_rect(confetti)
 	_end_root.add_child(confetti)
 	confetti.burst(160, [accent, accent.lightened(0.4), Color.WHITE, Color(1.0, 0.85, 0.25)])
 
+
+
+# ---------- ESTATÍSTICAS (caixinhas ao lado do painel principal) ----------
+
+const STAT_MUTED := Color(1, 1, 1, 0.65)
+
+
+func _stat_column() -> VBoxContainer:
+	var col := VBoxContainer.new()
+	col.alignment = BoxContainer.ALIGNMENT_CENTER
+	col.add_theme_constant_override("separation", 14)
+	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return col
+
+
+## Largura de cada caixinha (acompanha a tela)
+func _stat_width(screen: Vector2) -> float:
+	return clampf(screen.x * 0.19, 210.0, 300.0)
+
+
+func _card_style() -> StyleBoxFlat:
+	var sb := StyleBoxFlat.new()
+	sb.bg_color = Color(0.07, 0.08, 0.11, 0.94)
+	sb.set_corner_radius_all(14)
+	sb.set_border_width_all(2)
+	sb.border_color = Color(1.0, 0.85, 0.3, 0.55)
+	sb.set_content_margin_all(14)
+	sb.shadow_color = Color(0, 0, 0, 0.45)
+	sb.shadow_size = 8
+	return sb
+
+
+## Caixinha com título. O conteúdo vai no VBox devolvido por _card_box().
+func _stat_card(title: String, width: float) -> PanelContainer:
+	var card := PanelContainer.new()
+	card.add_theme_stylebox_override("panel", _card_style())
+	card.custom_minimum_size = Vector2(width, 0.0)
+	card.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.modulate.a = 0.0   # aparece na animação de entrada
+	var vb := VBoxContainer.new()
+	vb.add_theme_constant_override("separation", 6)
+	vb.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	card.add_child(vb)
+	vb.add_child(_label(title, 20, Color(1.0, 0.85, 0.3)))
+	vb.add_child(HSeparator.new())
+	return card
+
+
+func _card_box(card: PanelContainer) -> VBoxContainer:
+	return card.get_child(0) as VBoxContainer
+
+
+func _stat_text(parent: Control, text: String, color: Color, size: int, width: float) -> void:
+	var l: Label = _label(text, size, color)
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	l.custom_minimum_size = Vector2(width - 34.0, 0.0)
+	parent.add_child(l)
+
+
+func _team_text_color(team: int) -> Color:
+	return TeamStyle.color_of(team).lightened(0.35)
+
+
+## Monta as 5 caixinhas (esquerda: gols e destaques; direita: defesas, chutes/passes e resumo)
+## e devolve todas, para a animação de entrada.
+func _build_stat_cards(left: VBoxContainer, right: VBoxContainer, screen: Vector2) -> Array[Control]:
+	var w: float = _stat_width(screen)
+	var cards: Array[Control] = []
+	var goals_card: PanelContainer = _goals_card(w, screen)
+	var top_card: PanelContainer = _top_players_card(w)
+	var keepers_card: PanelContainer = _keepers_card(w)
+	var shots_card: PanelContainer = _shots_passes_card(w)
+	var summary_card: PanelContainer = _summary_card(w)
+	left.add_child(goals_card)
+	left.add_child(top_card)
+	right.add_child(keepers_card)
+	right.add_child(shots_card)
+	right.add_child(summary_card)
+	cards.append(goals_card)
+	cards.append(top_card)
+	cards.append(keepers_card)
+	cards.append(shots_card)
+	cards.append(summary_card)
+	return cards
+
+
+## Quem fez cada gol, a assistência e a rodada (na cor do time que marcou)
+func _goals_card(w: float, screen: Vector2) -> PanelContainer:
+	var card: PanelContainer = _stat_card("Gols", w)
+	var vb: VBoxContainer = _card_box(card)
+	if manager.goal_log.is_empty():
+		_stat_text(vb, "Nenhum gol", STAT_MUTED, 16, w)
+		return card
+
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(w - 30.0,
+		clampf(float(manager.goal_log.size()) * 46.0, 46.0, screen.y * 0.3))
+	vb.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.add_theme_constant_override("separation", 6)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+
+	for goal: Dictionary in manager.goal_log:
+		var goal_team: int = int(goal["team"])
+		var rnd: int = int(goal["round"])
+		var own_goal: bool = bool(goal["own_goal"])
+		var head: String = "Rodada %d · %s" % [rnd, goal["scorer"]]
+		if own_goal:
+			head += " (gol contra)"
+		elif rnd > manager.rounds_per_half * 2:
+			head += " (gol de ouro)"
+		_stat_text(list, head, _team_text_color(goal_team), 17, w)
+		if not own_goal and String(goal["assist"]) != "":
+			_stat_text(list, "assist.: %s" % goal["assist"], STAT_MUTED, 14, w)
+	return card
+
+
+## Os 3 jogadores que mais pontuaram (o primeiro é o MVP)
+func _top_players_card(w: float) -> PanelContainer:
+	var card: PanelContainer = _stat_card("Destaques", w)
+	var vb: VBoxContainer = _card_box(card)
+	var entries: Array = manager.player_stats.values().filter(
+		func(e: Dictionary) -> bool: return int(e["points"]) > 0)
+	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		if a["points"] != b["points"]:
+			return a["points"] > b["points"]
+		if a["goals"] != b["goals"]:
+			return a["goals"] > b["goals"]
+		return a["assists"] > b["assists"])
+	if entries.is_empty():
+		_stat_text(vb, "Ninguém pontuou", STAT_MUTED, 16, w)
+		return card
+
+	for i in mini(3, entries.size()):
+		var e: Dictionary = entries[i]
+		_stat_text(vb, "%d. %s" % [i + 1, e["name"]], _team_text_color(int(e["team"])), 17, w)
+		var parts: PackedStringArray = []
+		var goals: int = int(e["goals"])
+		var assists: int = int(e["assists"])
+		if goals > 0:
+			parts.append("%d gol%s" % [goals, "" if goals == 1 else "s"])
+		if assists > 0:
+			parts.append("%d assist." % assists)
+		if int(e["win"]) > 0:
+			parts.append("vitória")
+		var detail: String = "%d pts" % int(e["points"])
+		if not parts.is_empty():
+			detail += " · " + " · ".join(parts)
+		_stat_text(vb, detail, STAT_MUTED, 14, w)
+	return card
+
+
+## Quantas vezes os goleiros agarraram a bola (total e em chutes ao gol)
+func _keepers_card(w: float) -> PanelContainer:
+	var card: PanelContainer = _stat_card("Defesas dos goleiros", w)
+	var vb: VBoxContainer = _card_box(card)
+	var total: int = 0
+	for t in manager.team_count:
+		var s: Dictionary = manager.team_stat(t)
+		var catches: int = int(s["catches"])
+		total += catches
+		_stat_text(vb, "%s: %d" % [_team_name(t), catches], _team_text_color(t), 18, w)
+		var detail: String = "%d em chutes ao gol" % int(s["saves"])
+		if String(s["keeper"]) != "":
+			detail = "%s · %s" % [s["keeper"], detail]
+		_stat_text(vb, detail, STAT_MUTED, 14, w)
+	_stat_text(vb, "Total: %d" % total, Color(1.0, 0.95, 0.75), 17, w)
+	return card
+
+
+## Chutes que chegaram ao gol, aproveitamento e passes certos de cada time
+func _shots_passes_card(w: float) -> PanelContainer:
+	var card: PanelContainer = _stat_card("Chutes e passes", w)
+	var vb: VBoxContainer = _card_box(card)
+	for t in manager.team_count:
+		var s: Dictionary = manager.team_stat(t)
+		var shots: int = int(s["shots_on_target"])
+		var goals: int = 0
+		for goal: Dictionary in manager.goal_log:
+			if int(goal["team"]) == t and not bool(goal["own_goal"]):
+				goals += 1
+		var rate: String = "—"
+		if shots > 0:
+			rate = "%d%%" % clampi(int(round(float(goals) / float(shots) * 100.0)), 0, 100)
+		_stat_text(vb, _team_name(t), _team_text_color(t), 18, w)
+		_stat_text(vb, "Chutes no gol: %d · Aproveitamento: %s" % [shots, rate], STAT_MUTED, 14, w)
+		_stat_text(vb, "Passes certos: %d" % int(s["passes"]), STAT_MUTED, 14, w)
+	return card
+
+
+## Rodadas jogadas, gols por tempo e quando saíram o primeiro e o último gol
+func _summary_card(w: float) -> PanelContainer:
+	var card: PanelContainer = _stat_card("Resumo da partida", w)
+	var vb: VBoxContainer = _card_box(card)
+	_stat_text(vb, "Rodadas jogadas: %d" % manager.round_number, Color.WHITE, 16, w)
+
+	var first_half: int = 0
+	var second_half: int = 0
+	var extra: int = 0
+	for goal: Dictionary in manager.goal_log:
+		var rnd: int = int(goal["round"])
+		if rnd > manager.rounds_per_half * 2:
+			extra += 1
+		elif rnd > manager.rounds_per_half:
+			second_half += 1
+		else:
+			first_half += 1
+	var by_half: String = "Gols: 1º tempo %d · 2º tempo %d" % [first_half, second_half]
+	if extra > 0:
+		by_half += " · prorrogação %d" % extra
+	_stat_text(vb, by_half, Color.WHITE, 16, w)
+
+	if not manager.goal_log.is_empty():
+		var first_goal: Dictionary = manager.goal_log[0]
+		var last_goal: Dictionary = manager.goal_log[manager.goal_log.size() - 1]
+		_stat_text(vb, "Primeiro gol: rodada %d" % int(first_goal["round"]), STAT_MUTED, 15, w)
+		if manager.goal_log.size() > 1:
+			_stat_text(vb, "Último gol: rodada %d" % int(last_goal["round"]), STAT_MUTED, 15, w)
+	return card
 
 
 func _build_mvp_block(mvp: Dictionary, screen: Vector2) -> Control:

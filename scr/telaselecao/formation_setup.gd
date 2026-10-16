@@ -2,6 +2,15 @@ class_name FormationSetup
 extends CanvasLayer
 ## Tela de montagem das formações, antes da partida.
 ##
+## VISUAL: o campo do jogo some atrás de um fundo escuro (só um rastro dele com opacidade baixa).
+## À esquerda ficam dois cartões grandes: "Personalizar time" (nome, ícone e cor) e "Formações"
+## (abre a lista de formações prontas). À direita fica o CAMPO EM PERSPECTIVA, com a imagem de
+## cada personagem numa bolinha:
+##   - arrastar uma bolinha do time da vez move o jogador de verdade no campo do jogo;
+##   - DUPLO CLIQUE numa bolinha abre o menu de personagens, na esquerda;
+##   - ao confirmar um time, o campo gira e o outro time passa a ficar na frente.
+## A tela inteira balança de leve o tempo todo e "faz gelatina" a cada interação (UiStyle).
+##
 ## Um time por vez: o time da vez arrasta os próprios jogadores (só dentro da sua metade do
 ## campo, que fica destacada) ou escolhe uma formação pronta, e depois confirma.
 ## Quando todos os times confirmaram, emite "finished" e some.
@@ -11,12 +20,19 @@ extends CanvasLayer
 ## Identidade do time: nome, cor (17 cores prontas + seletor livre + aleatória) e ÍCONE (logo),
 ## que aparece num selo ao lado do nome e como marca d'água na metade do campo do time.
 ##
-## Painel lateral (do lado oposto à metade do time, para não cobrir quem está sendo arrastado):
-##  - um MAPA do campo com a formação (bolinhas numeradas = posições) e, ao lado,
-##  - a lista de POSIÇÕES com o rosto e o nome do personagem de cada uma.
-## Clicar numa posição (no mapa ou na lista) abre o SELETOR: uma grade com o rosto e o nome de
-## cada personagem. Ao confirmar, aparece a imagem completa do personagem com um flash de tela.
-## As imagens vêm do CharacterRoster (face_for / full_for) e do KeeperRoster (art_for).
+## O SELETOR (menu da esquerda) é uma grade com o rosto e o nome de cada personagem. Ao
+## confirmar, aparece a imagem completa do personagem com um flash de tela.
+## As imagens vêm do CharacterRoster (face_for / full_for) e do KeeperRoster (face_for / art_for).
+##
+## O seletor tem ABAS de categoria (Atacantes, Laterais, Meio-campistas, Zagueiros; veja
+## CharacterRoster.ROLES): abre na categoria que combina com a posição, mas dá para escolher
+## qualquer personagem (aba "Todos"). Também tem busca por nome, aviso de quem já está em campo,
+## botão Sortear, duplo clique para escolher e Enter para confirmar.
+## Depois de confirmar um time, o botão "Voltar" deixa editar o time anterior de novo.
+## Passar o mouse numa formação pronta mostra os espaços dela no campo antes de aplicar.
+##
+## BANCO: embaixo do campo há 3 vagas de RESERVAS por time (BenchManager.RESERVES).
+## Clicar numa vaga abre o mesmo seletor; o reserva escolhido entra numa substituição durante o jogo.
 
 signal finished
 
@@ -38,14 +54,20 @@ var _overlay: _Overlay
 var _title: Label
 var _title_style: StyleBoxFlat
 var _preset_box: HFlowContainer
-var _side_panel: PanelContainer      # painel lateral: mapa da formação + lista de posições
-var _mini: _MiniPitch
-var _position_list: VBoxContainer
+var _bg: ColorRect                   # fundo escuro que esconde o campo do jogo
+var _pitch: _PerspectivePitch        # campo em perspectiva (direita)
+var _left_col: VBoxContainer         # cartões da esquerda (somem quando o seletor abre)
+var _card_team: Button
+var _card_forms: Button
+var _card_badge: TeamBadge
+var _preset_panel: PanelContainer    # lista de formações (abre embaixo do cartão "Formações")
+var _bench_row: HBoxContainer        # vagas de reservas embaixo do campo
+var _picker_panel: PanelContainer
+var _spin_tween: Tween
+var _spun_once: bool = false
 var _formation_label: Label
 var _formation_name: String = ""     # formação pronta aplicada ("" = montada na mão)
 var _slot_targets: Array[Node2D] = []   # Player/Goalkeeper de cada posição (índice = número - 1)
-var _role_labels: Array[Label] = []     # "Defesa / Meio-campo / Ataque" de cada posição
-var _role_timer: float = 0.0
 
 var _modal_open: bool = false        # seletor ou revelação na tela: o campo não recebe cliques
 var _picker: Control
@@ -59,6 +81,21 @@ var _picker_entries: Array[Dictionary] = []
 var _picker_current_id: String = ""
 var _picker_pending_id: String = ""
 var _pick_buttons: Dictionary = {}   # id -> Button
+var _pick_tags: Dictionary = {}      # id -> Label ("Já no time" / "No adversário")
+var _picker_scroll: ScrollContainer
+var _picker_role_hint: Label         # sugestão de categoria para a posição
+var _picker_tab_box: HFlowContainer  # abas de categoria
+var _picker_tab_buttons: Dictionary = {}   # categoria ("" = Todos) -> Button
+var _picker_tab: String = ""         # aba aberta ("" = Todos)
+var _picker_recommended: String = "" # categoria sugerida para a posição aberta
+var _picker_search: LineEdit
+var _picker_empty: Label             # "nenhum personagem encontrado"
+var _composition_label: Label        # resumo do time por categorias
+var _back_button: Button             # volta para editar o time anterior (já confirmado)
+var _history: Array[int] = []        # times já confirmados, na ordem (o último é o do "Voltar")
+var _formation_by_team: Dictionary = {}   # time -> formação pronta aplicada quando confirmou
+var _preview_active: bool = false    # mostrando os espaços de uma formação (mouse em cima do botão)
+var _slots_before_preview: Array[Vector2] = []
 
 var _reveal: Control
 var _reveal_box: VBoxContainer
@@ -74,12 +111,13 @@ var _reveal_start_msec: int = 0
 const CARD_BG := Color(0.13, 0.15, 0.20)
 const CARD_HOVER := Color(0.19, 0.22, 0.30)
 const UI_SCALE: float = 1.3          # aumenta todos os textos da tela de formação
-const POSITION_FACE_SIZE: int = 64   # rosto na lista de posições
-const PICK_FACE_SIZE: int = 112      # rosto no seletor
-const PICK_COLUMNS: int = 5
+const PICK_FACE_SIZE: int = 108      # rosto no seletor (menu da esquerda)
+const PICK_COLUMNS: int = 4
+const PICK_CARD_W: float = 132.0
+const PICK_PANEL_W: float = 4.0 * (132.0 + 10.0)
+const WIDE_ROLE_THRESHOLD: float = 0.62   # quão aberto (0 = centro, 1 = lateral) para sugerir Lateral
 var _name_edit: LineEdit             # nome do time
 var _top_panel: PanelContainer       # faixa do topo (título + botão "Personalizar time")
-var _bottom_panel: PanelContainer    # formações prontas + confirmar
 var _banner_badge: TeamBadge         # selo do time na faixa do topo
 var _team_modal: Control             # janela "Personalizar time": nome, ícone e cor
 var _swatch_box: HFlowContainer      # bolinhas de cor do time (quebra em linhas)
@@ -88,7 +126,6 @@ var _updating_picker: bool = false      # mudando o seletor por código (não é
 var _color_hint: Label                  # aviso: cor parecida com o outro time / com o gramado
 var _icon_badge: TeamBadge              # selo do time na linha do nome
 var _icon_name_label: Label
-var _side_badge: TeamBadge              # selo no cabeçalho do painel lateral
 var _icon_picker: Control
 var _icon_title: Label
 var _icon_hint: Label
@@ -125,97 +162,403 @@ class _Overlay extends Node2D:
 			draw_arc(to_local(p.global_position), 30.0, 0.0, TAU, 32, Color(1, 1, 1, alpha), width)
 
 
-## Mapa esquemático do campo com a formação do time: bolinhas numeradas = posições (o "G" é o
-## goleiro). Clicar numa bolinha abre a escolha de personagem daquela posição.
-class _MiniPitch extends Control:
-	signal slot_clicked(index: int)
+## Campo em PERSPECTIVA (3D de verdade, projetado à mão): mostra todos os jogadores como bolinhas
+## com a imagem do personagem. O time da vez (editable_team) fica perto da câmera, tem os jogadores
+## arrastáveis (arrastar muda a posição real no campo do jogo) e duplo clique troca o personagem.
+## "yaw" gira o campo em volta do eixo vertical: ao confirmar um time o campo dá meia-volta e o
+## outro time passa a ficar na frente. Molinhas internas dão o balanço natural e a gelatina.
+class _PerspectivePitch extends Control:
+	signal dot_double_clicked(node: Node2D)
+	signal drag_started(node: Node2D)
+	signal dragged(node: Node2D, field_norm: Vector2)   # posição no campo, normalizada (-1..1)
+	signal drag_ended(node: Node2D)
+
+	const CAM_HEIGHT: float = 2.6      # altura da câmera (o campo tem 1 de meia-extensão no comprimento)
+	const CAM_DIST: float = 3.1        # distância da câmera até o centro do campo
+	const DOT_RADIUS: float = 0.09     # raio do personagem no mundo
+	const KEEPER_RADIUS: float = 0.09
+
 
 	var field: Field
-	var team: int = 0
-	var color: Color = Color.WHITE
-	var targets: Array[Node2D] = []   # Player/Goalkeeper; índice + 1 = número da posição
-	var hover_index: int = -1
+	var targets: Array = []             # todos os jogadores e goleiros (de todos os times)
+	var team_count: int = 2
+	var editable_team: int = 0
+	var slots: Array[Vector2] = []      # guias de formação (coordenadas locais do campo)
+	var yaw: float = 0.0                # giro do campo (0 ou PI = um time ou o outro na frente)
+	var spinning: bool = false          # girando: sem cliques
+	var locked: bool = false            # outra janela aberta: sem cliques
+	var selected: Node2D = null         # personagem com o seletor aberto
+
+	var _focal: float = 400.0
+	var _center: Vector2 = Vector2.ZERO
+	var _t: float = 0.0
+	var _wob: float = 0.0
+	var _wob_v: float = 0.0
+	var _bounce: float = 0.0
+	var _bounce_v: float = 0.0
+	var _springs: Dictionary = {}       # instance_id -> Vector2(escala, velocidade)
+	var _hover: Node2D = null
+	var _drag_node: Node2D = null
+	var _drag_pending: Node2D = null
+	var _press_pos: Vector2 = Vector2.ZERO
+	var _grab_offset: Vector2 = Vector2.ZERO
+	var _tex_cache: Dictionary = {}     # instance_id -> Texture2D (ou null)
 
 	func _init() -> void:
-		custom_minimum_size = Vector2(260.0, 170.0)
 		mouse_filter = Control.MOUSE_FILTER_STOP
+		clip_contents = false
+		custom_minimum_size = Vector2(420.0, 360.0)
 
-	## Posição global no campo -> posição neste mapa
-	func _to_mini(global_p: Vector2) -> Vector2:
-		var half: Vector2 = field.pitch_size * 0.5
-		var l: Vector2 = field.to_local(global_p)
-		var p := Vector2((l.x / half.x * 0.5 + 0.5) * size.x, (l.y / half.y * 0.5 + 0.5) * size.y)
-		# Quem ainda está fora do campo (antes de escolher a formação) fica na borda do mapa
-		return Vector2(clampf(p.x, 14.0, size.x - 14.0), clampf(p.y, 14.0, size.y - 14.0))
+	# ---------- gelatina ----------
 
-	func _index_at(pos: Vector2) -> int:
-		var best: int = -1
-		var best_dist: float = 17.0
-		for i in targets.size():
-			if not is_instance_valid(targets[i]):
+	## Sacode o campo inteiro (interação na tela). strength ~ 0.5 leve, 1 normal, 2 forte
+	func kick(strength: float = 1.0) -> void:
+		_wob_v += strength * 3.4
+		_bounce_v += strength * 2.2
+
+	## Dá um "pulinho" de gelatina no personagem
+	func pulse(node: Node2D, strength: float = 1.0) -> void:
+		if node == null:
+			return
+		var sp: Vector2 = _springs.get(node.get_instance_id(), Vector2(1.0, 0.0))
+		sp.y += 7.0 * strength
+		_springs[node.get_instance_id()] = sp
+
+	func refresh_targets() -> void:
+		_tex_cache.clear()
+		queue_redraw()
+
+	func _process(delta: float) -> void:
+		var dt: float = minf(delta, 0.033)
+		_t += dt
+		_wob_v += (-70.0 * _wob - 5.0 * _wob_v) * dt
+		_wob += _wob_v * dt
+		_bounce_v += (-90.0 * _bounce - 6.0 * _bounce_v) * dt
+		_bounce += _bounce_v * dt
+		for node in targets:
+			if not is_instance_valid(node):
 				continue
-			var d: float = _to_mini(targets[i].global_position).distance_to(pos)
-			if d < best_dist:
-				best = i
-				best_dist = d
+			var id: int = node.get_instance_id()
+			var sp: Vector2 = _springs.get(id, Vector2(1.0, 0.0))
+			var want: float = 1.0
+			if node == _drag_node:
+				want = 1.3
+			elif node == _hover or node == selected:
+				want = 1.14
+			sp.y += ((want - sp.x) * 150.0 - sp.y * 9.0) * dt
+			sp.x += sp.y * dt
+			_springs[id] = sp
+		queue_redraw()
+
+	# ---------- câmera ----------
+
+	func _wr() -> float:
+		return clampf(field.pitch_size.y / maxf(field.pitch_size.x, 1.0), 0.35, 1.0)
+
+	func _alpha() -> float:
+		return atan2(CAM_HEIGHT, CAM_DIST)
+
+	func _yaw_now() -> float:
+		return yaw + sin(_t * 0.65) * 0.03 + _wob * 0.07
+
+	func _zoom() -> float:
+		var spin: float = 1.0 - 0.36 * absf(sin(yaw))
+		return spin * (1.0 + sin(_t * 1.05) * 0.006 + _bounce * 0.035)
+
+	## Ponto do campo (nx = comprimento, ny = largura, -1..1) -> espaço da câmera
+	func _cam(nx: float, ny: float, ang: float, lift: float = 0.0) -> Vector3:
+		var x: float = ny * _wr()
+		var cy: float = cos(ang)
+		var sy: float = sin(ang)
+		var xp: float = x * cy + nx * sy
+		var zp: float = -x * sy + nx * cy
+		var a: float = _alpha()
+		var dy: float = -CAM_HEIGHT + lift
+		var dz: float = zp + CAM_DIST
+		return Vector3(xp, dy * cos(a) + dz * sin(a), -dy * sin(a) + dz * cos(a))
+
+	## Ajusta o zoom/centro para o campo (de frente) caber na área
+	func _fit() -> void:
+		var min_p := Vector2(INF, INF)
+		var max_p := Vector2(-INF, -INF)
+		for cx in [-1.0, 1.0]:
+			for cy in [-1.0, 1.0]:
+				var c: Vector3 = _cam(cx, cy, 0.0)
+				var q := Vector2(c.x / c.z, -c.y / c.z)
+				min_p = Vector2(minf(min_p.x, q.x), minf(min_p.y, q.y))
+				max_p = Vector2(maxf(max_p.x, q.x), maxf(max_p.y, q.y))
+		var bw: float = maxf(max_p.x - min_p.x, 0.001)
+		var bh: float = maxf(max_p.y - min_p.y, 0.001)
+		_focal = minf(size.x * 0.94 / bw, size.y * 0.80 / bh)
+		_center = size * 0.5 - _focal * (min_p + max_p) * 0.5 + Vector2(0.0, size.y * 0.04)
+
+	## Ponto do campo -> tela. z = pixels por unidade do mundo naquele ponto (escala)
+	func _proj(nx: float, ny: float, lift: float = 0.0) -> Vector3:
+		var c: Vector3 = _cam(nx, ny, _yaw_now(), lift)
+		var f: float = _focal * _zoom()
+		return Vector3(_center.x + f * c.x / c.z, _center.y - f * c.y / c.z, f / c.z)
+
+	func _p(nx: float, ny: float) -> Vector2:
+		var v: Vector3 = _proj(nx, ny)
+		return Vector2(v.x, v.y)
+
+	## Tela -> ponto do campo (inverso da projeção, no chão)
+	func _unproject(sp: Vector2) -> Vector2:
+		var f: float = _focal * _zoom()
+		var u: float = (sp.x - _center.x) / f
+		var v: float = (_center.y - sp.y) / f
+		var a: float = _alpha()
+		var denom: float = minf(v * cos(a) - sin(a), -0.001)
+		var t: float = -CAM_HEIGHT / denom
+		var xp: float = t * u
+		var zp: float = t * (v * sin(a) + cos(a)) - CAM_DIST
+		var ang: float = _yaw_now()
+		var x: float = xp * cos(ang) - zp * sin(ang)
+		var zr: float = xp * sin(ang) + zp * cos(ang)
+		return Vector2(clampf(zr, -1.0, 1.0), clampf(x / _wr(), -1.0, 1.0))
+
+	# ---------- personagens ----------
+
+	func _norm_of(node: Node2D) -> Vector2:
+		var half: Vector2 = field.pitch_size * 0.5
+		var l: Vector2 = field.to_local(node.global_position)
+		return Vector2(clampf(l.x / half.x, -1.0, 1.0), clampf(l.y / half.y, -1.0, 1.0))
+
+	func _team_of(node: Node2D) -> int:
+		return int(node.get("team"))
+
+	func _radius_of(node: Node2D) -> float:
+		return KEEPER_RADIUS if node is Goalkeeper else DOT_RADIUS
+
+	func _interactive(node: Node2D) -> bool:
+		return is_instance_valid(node) and _team_of(node) == editable_team
+
+	## Centro (na tela), raio e profundidade do personagem
+	func _geometry(node: Node2D) -> Dictionary:
+		var n: Vector2 = _norm_of(node)
+		var g: Vector3 = _proj(n.x, n.y)
+		var sp: Vector2 = _springs.get(node.get_instance_id(), Vector2(1.0, 0.0))
+		var r: float = _radius_of(node) * g.z * maxf(sp.x, 0.2)
+		var bob: float = sin(_t * 2.1 + float(node.get_instance_id() % 97)) * 1.4
+		var cam: Vector3 = _cam(n.x, n.y, _yaw_now())
+		return {"ground": Vector2(g.x, g.y), "center": Vector2(g.x, g.y - r * 1.05 + bob),
+			"r": r, "z": cam.z}
+
+	func _node_at(pos: Vector2) -> Node2D:
+		var best: Node2D = null
+		var best_d: float = INF
+		for node in targets:
+			if not _interactive(node):
+				continue
+			var geo: Dictionary = _geometry(node)
+			var d: float = (geo["center"] as Vector2).distance_to(pos)
+			if d <= float(geo["r"]) * 1.15 and d < best_d:
+				best = node
+				best_d = d
 		return best
 
+	func _texture_of(node: Node2D) -> Texture2D:
+		var id: int = node.get_instance_id()
+		if _tex_cache.has(id):
+			return _tex_cache[id] as Texture2D
+		var tex: Texture2D = null
+		if node is Goalkeeper:
+			tex = KeeperRoster.face_for((node as Goalkeeper).keeper_id)
+		elif node is Player:
+			tex = CharacterRoster.face_for((node as Player).character_id)
+		_tex_cache[id] = tex
+		return tex
+
+	# ---------- entrada ----------
+
 	func _gui_input(event: InputEvent) -> void:
+		if spinning or locked or field == null:
+			return
 		if event is InputEventMouseMotion:
-			var idx: int = _index_at((event as InputEventMouseMotion).position)
-			if idx != hover_index:
-				hover_index = idx
-				mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if idx >= 0 \
-					else Control.CURSOR_ARROW
-				queue_redraw()
-		elif event is InputEventMouseButton and event.pressed \
-				and event.button_index == MOUSE_BUTTON_LEFT:
-			var idx: int = _index_at((event as InputEventMouseButton).position)
-			if idx >= 0:
-				slot_clicked.emit(idx)
-			accept_event()
+			var pos: Vector2 = (event as InputEventMouseMotion).position
+			if _drag_pending != null and pos.distance_to(_press_pos) > 4.0:
+				_drag_node = _drag_pending
+				_drag_pending = null
+				drag_started.emit(_drag_node)
+			if _drag_node != null:
+				dragged.emit(_drag_node, _unproject(pos - _grab_offset))
+			else:
+				var over: Node2D = _node_at(pos)
+				if over != _hover:
+					_hover = over
+					mouse_default_cursor_shape = Control.CURSOR_POINTING_HAND if over != null \
+						else Control.CURSOR_ARROW
+		elif event is InputEventMouseButton and (event as InputEventMouseButton).button_index == MOUSE_BUTTON_LEFT:
+			var mb := event as InputEventMouseButton
+			if mb.pressed:
+				var node: Node2D = _node_at(mb.position)
+				if node == null:
+					return
+				accept_event()
+				pulse(node, 0.6)
+				if mb.double_click:
+					_drag_pending = null
+					_drag_node = null
+					dot_double_clicked.emit(node)
+				elif node is Player:
+					_drag_pending = node
+					_press_pos = mb.position
+					_grab_offset = mb.position - (_geometry(node)["center"] as Vector2)
+			else:
+				if _drag_node != null:
+					pulse(_drag_node, 1.2)   # soltou: a bolinha "quica"
+					drag_ended.emit(_drag_node)
+				_drag_node = null
+				_drag_pending = null
+				accept_event()
 
 	func _notification(what: int) -> void:
-		if what == NOTIFICATION_MOUSE_EXIT and hover_index != -1:
-			hover_index = -1
-			queue_redraw()
+		if what == NOTIFICATION_MOUSE_EXIT and _drag_node == null:
+			_hover = null
+			mouse_default_cursor_shape = Control.CURSOR_ARROW
+
+	# ---------- desenho ----------
+
+	func _poly(points: Array, color: Color, width: float, closed: bool = false) -> void:
+		var pts := PackedVector2Array()
+		for q in points:
+			pts.append(_p((q as Vector2).x, (q as Vector2).y))
+		if closed and not points.is_empty():
+			pts.append(pts[0])
+		if pts.size() >= 2:
+			draw_polyline(pts, color, width, true)
+
+	func _quad(x0: float, x1: float, y0: float, y1: float, color: Color) -> void:
+		draw_colored_polygon(PackedVector2Array([_p(x0, y0), _p(x1, y0), _p(x1, y1), _p(x0, y1)]), color)
 
 	func _draw() -> void:
 		if field == null:
 			return
-		var r := Rect2(Vector2.ZERO, size)
-		draw_rect(r, Color(0.12, 0.38, 0.20))
-		for i in 8:   # faixas do gramado
+		_fit()
+		var wr: float = _wr()
+
+		# Placa do campo (sombra + gramado + listras + metades dos times)
+		var plate := PackedVector2Array([_p(-1, -1), _p(1, -1), _p(1, 1), _p(-1, 1)])
+		var shadow := PackedVector2Array()
+		for q in plate:
+			shadow.append(q + Vector2(0.0, 16.0))
+		draw_colored_polygon(shadow, Color(0, 0, 0, 0.35))
+		draw_colored_polygon(plate, Color(0.14, 0.42, 0.22))
+		var bands: int = 12
+		for i in bands:
 			if i % 2 == 0:
-				draw_rect(Rect2(size.x * float(i) / 8.0, 0.0, size.x / 8.0, size.y), Color(1, 1, 1, 0.045))
-		var half_w: float = size.x * 0.5
-		# metade do time (cor do time)
-		draw_rect(Rect2(0.0 if team == 0 else half_w, 0.0, half_w, size.y), Color(color, 0.24))
-		# linhas
-		var line := Color(1, 1, 1, 0.75)
-		draw_rect(r, line, false, 2.0)
-		draw_line(Vector2(half_w, 0.0), Vector2(half_w, size.y), line, 1.5)
-		draw_arc(Vector2(half_w, size.y * 0.5), size.y * 0.17, 0.0, TAU, 28, line, 1.5)
-		var box := Vector2(size.x * 0.14, size.y * 0.5)
-		draw_rect(Rect2(0.0, (size.y - box.y) * 0.5, box.x, box.y), line, false, 1.5)
-		draw_rect(Rect2(size.x - box.x, (size.y - box.y) * 0.5, box.x, box.y), line, false, 1.5)
-		# posições
-		var font: Font = ThemeDB.fallback_font
-		for i in targets.size():
-			var t: Node2D = targets[i]
-			if not is_instance_valid(t):
-				continue
-			var p: Vector2 = _to_mini(t.global_position)
-			var strong: bool = i == hover_index
-			var radius: float = 12.5 if strong else 10.5
-			var fill: Color = color.lightened(0.45) if t is Goalkeeper else color
-			draw_circle(p + Vector2(0.0, 2.0), radius + 1.0, Color(0, 0, 0, 0.35))
-			draw_circle(p, radius, fill)
-			draw_arc(p, radius, 0.0, TAU, 20, Color.WHITE if strong else Color(1, 1, 1, 0.8),
-				3.0 if strong else 1.5)
-			var txt: String = "G" if t is Goalkeeper else str(i + 1)
-			draw_string_outline(font, p + Vector2(-6.0, 5.0), txt, HORIZONTAL_ALIGNMENT_CENTER, 12.0, 13, 4, Color(0, 0, 0, 0.8))
-			draw_string(font, p + Vector2(-6.0, 5.0), txt, HORIZONTAL_ALIGNMENT_CENTER, 12.0, 13, Color.WHITE)
+				var x0: float = -1.0 + 2.0 * float(i) / float(bands)
+				_quad(x0, x0 + 2.0 / float(bands), -1.0, 1.0, Color(1, 1, 1, 0.055))
+		for t in team_count:
+			var left: bool = field.defend_dir(t) < 0
+			var tint: Color = TeamStyle.color_of(t)
+			_quad(-1.0 if left else 0.0, 0.0 if left else 1.0, -1.0, 1.0,
+				Color(tint, 0.26 if t == editable_team else 0.09))
+
+		# Linhas do campo
+		var line := Color(1, 1, 1, 0.88)
+		_poly([Vector2(-1, -1), Vector2(1, -1), Vector2(1, 1), Vector2(-1, 1)], line, 2.2, true)
+		_poly([Vector2(0, -1), Vector2(0, 1)], line, 2.0)
+		var circle: Array = []
+		for i in 33:
+			var a: float = TAU * float(i) / 32.0
+			circle.append(Vector2(0.17 * cos(a), 0.17 * sin(a) / wr))
+		_poly(circle, line, 2.0)
+		for sgn in [-1.0, 1.0]:
+			_poly([Vector2(sgn, -0.59), Vector2(sgn * 0.686, -0.59), Vector2(sgn * 0.686, 0.59), Vector2(sgn, 0.59)], line, 2.0)
+			_poly([Vector2(sgn, -0.27), Vector2(sgn * 0.895, -0.27), Vector2(sgn * 0.895, 0.27), Vector2(sgn, 0.27)], line, 2.0)
+			_poly([Vector2(sgn, -0.11), Vector2(sgn * 1.04, -0.11), Vector2(sgn * 1.04, 0.11), Vector2(sgn, 0.11)], Color(1, 1, 1, 0.7), 2.0)
+			var arc: Array = []   # meia-lua da área (só a parte de fora)
+			for i in 25:
+				var a2: float = -1.1 + 2.2 * float(i) / 24.0
+				var px: float = sgn * 0.79 - sgn * 0.174 * cos(a2)
+				if absf(px) < 0.686:
+					arc.append(Vector2(px, 0.174 * sin(a2) / wr))
+			_poly(arc, line, 2.0)
+
+		# Guias da formação (a pré-visualização dos botões de formação)
+		var half: Vector2 = field.pitch_size * 0.5
+		for s in slots:
+			var n := Vector2(clampf(s.x / half.x, -1.0, 1.0), clampf(s.y / half.y, -1.0, 1.0))
+			var ring: Array = []
+			for i in 21:
+				var a3: float = TAU * float(i) / 20.0
+				ring.append(Vector2(n.x + 0.05 * cos(a3), n.y + 0.05 * sin(a3) / wr))
+			var gc: Color = TeamStyle.color_of(editable_team).lightened(0.4)
+			_poly(ring, Color(gc, 0.95), 2.4)
+
+		# Personagens, do fundo para a frente
+		var order: Array[Node2D] = []
+		for node in targets:
+			if is_instance_valid(node):
+				order.append(node)
+		var geos: Dictionary = {}
+		for node in order:
+			geos[node] = _geometry(node)
+		order.sort_custom(func(a: Node2D, b: Node2D) -> bool:
+			return float((geos[a] as Dictionary)["z"]) > float((geos[b] as Dictionary)["z"]))
+		var number: int = 0
+		var numbers: Dictionary = {}
+		for node in targets:
+			if is_instance_valid(node) and node is Player and _team_of(node) == editable_team:
+				number += 1
+				numbers[node] = number
+		for node in order:
+			_draw_dot(node, geos[node] as Dictionary, int(numbers.get(node, 0)))
+
+	func _draw_dot(node: Node2D, geo: Dictionary, number: int) -> void:
+		var r: float = geo["r"]
+		var c: Vector2 = geo["center"]
+		var ground: Vector2 = geo["ground"]
+		var team: int = _team_of(node)
+		var color: Color = TeamStyle.color_of(team)
+		var mine: bool = team == editable_team
+		var strong: bool = node == _hover or node == _drag_node or node == selected
+
+		# sombra no chão
+		var sh := PackedVector2Array()
+		for i in 20:
+			var a: float = TAU * float(i) / 20.0
+			sh.append(ground + Vector2(cos(a) * r * 0.95, sin(a) * r * 0.34 + 2.0))
+		draw_colored_polygon(sh, Color(0, 0, 0, 0.38 if not strong else 0.5))
+
+		# aro na cor do time (mais grosso e claro para quem pode ser editado)
+		var ring_w: float = maxf(r * (0.16 if mine else 0.1), 2.0)
+		draw_circle(c, r + ring_w, Color.WHITE if strong else color.lightened(0.15 if mine else 0.0))
+		draw_circle(c, r + ring_w * 0.55, color)
+
+		# imagem do personagem recortada em círculo
+		var tex: Texture2D = _texture_of(node)
+		var modulate_c: Color = Color.WHITE if mine else Color(0.82, 0.84, 0.9, 1.0)
+		if tex != null:
+			var aspect: float = float(tex.get_width()) / maxf(float(tex.get_height()), 1.0)
+			var su: float = 1.0 / aspect if aspect >= 1.0 else 1.0
+			var sv: float = 1.0 if aspect >= 1.0 else aspect
+			var cv: float = 0.5 - maxf(0.0, 1.0 - aspect) * 0.25   # retrato alto: foca na parte de cima
+			var pts := PackedVector2Array()
+			var uvs := PackedVector2Array()
+			for i in 36:
+				var a2: float = TAU * float(i) / 36.0
+				pts.append(c + Vector2(cos(a2), sin(a2)) * r)
+				uvs.append(Vector2(0.5 + 0.5 * cos(a2) * su, cv + 0.5 * sin(a2) * sv))
+			draw_colored_polygon(pts, modulate_c, uvs, tex)
+		else:
+			draw_circle(c, r, color.darkened(0.45))
+			var font: Font = ThemeDB.fallback_font
+			var letter: String = "G" if node is Goalkeeper else "?"
+			var fs: int = maxi(int(r * 1.1), 8)
+			draw_string(font, c + Vector2(-r, fs * 0.35), letter, HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, fs, Color.WHITE)
+
+		# número da posição (só do time da vez; G = goleiro)
+		if mine and r > 6.0:
+			var br: float = maxf(r * 0.36, 6.0)
+			var bp: Vector2 = c + Vector2(r * 0.72, r * 0.72)
+			draw_circle(bp, br + 1.5, Color(0, 0, 0, 0.55))
+			draw_circle(bp, br, color.darkened(0.15))
+			var txt: String = "G" if node is Goalkeeper else str(number)
+			var fsz: int = maxi(int(br * 1.25), 7)
+			draw_string(ThemeDB.fallback_font, bp + Vector2(-br, fsz * 0.36), txt,
+				HORIZONTAL_ALIGNMENT_CENTER, br * 2.0, fsz, Color.WHITE)
 
 
 func _ready() -> void:
@@ -233,10 +576,13 @@ func _ready() -> void:
 	_overlay = _Overlay.new()
 	_overlay.z_as_relative = false
 	_overlay.z_index = -4000   # acima do gramado, abaixo de jogadores e bola
+	_overlay.visible = false   # o campo do jogo fica escondido; o destaque agora é desenhado no campo em perspectiva
 	_field.add_child(_overlay)
 
 	_build_ui()
+	_pitch.slots = _overlay.slots
 	_begin_team(0)
+	_intro.call_deferred()
 
 
 func _exit_tree() -> void:
@@ -264,82 +610,184 @@ func _big_button(b: Button, min_size: Vector2, font: int) -> void:
 	b.add_theme_font_size_override("font_size", font)
 
 
+func _make_menu_card(text: String) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(0.0, 136.0)
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	UiStyle.style_card_button(b, _fs(22))
+	return b
+
+
 func _build_ui() -> void:
-	# Topo: faixa com a vez de quem monta (a borda leva a cor do time). Fica do lado do time.
-	_top_panel = PanelContainer.new()
-	_top_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_title_style = _big_panel(_top_panel)
-	_title_style.set_border_width_all(3)
-	add_child(_top_panel)
+	# Fundo escuro: esconde o campo do jogo (sobra só um rastro dele, com a opacidade bem baixa)
+	_bg = ColorRect.new()
+	_bg.color = UiStyle.SCREEN_BG
+	_bg.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_bg.mouse_filter = Control.MOUSE_FILTER_STOP
+	add_child(_bg)
 
-	var top_row := HBoxContainer.new()
-	top_row.add_theme_constant_override("separation", 20)
-	top_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_top_panel.add_child(top_row)
+	var margin := MarginContainer.new()
+	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
+	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right", "top", "bottom"]:
+		margin.add_theme_constant_override("margin_" + side, 44)
+	add_child(margin)
 
-	_banner_badge = TeamBadge.make(0, 64.0)
-	_banner_badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	top_row.add_child(_banner_badge)
+	var cols := HBoxContainer.new()
+	cols.add_theme_constant_override("separation", 48)
+	cols.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	margin.add_child(cols)
 
-	var top_box := VBoxContainer.new()
-	top_box.add_theme_constant_override("separation", 6)
-	top_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	top_row.add_child(top_box)
-	_title = UiStyle.make_label("", _fs(24))
-	top_box.add_child(_title)
-	var hint: Label = UiStyle.make_label(
-		"Arraste os jogadores dentro da sua metade (área colorida) ou escolha uma formação pronta",
-		_fs(11), UiStyle.MUTED_COLOR)
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.custom_minimum_size = Vector2(430.0, 0.0)
-	top_box.add_child(hint)
+	# ---------- ESQUERDA: cartões grandes ----------
+	_left_col = VBoxContainer.new()
+	_left_col.alignment = BoxContainer.ALIGNMENT_CENTER
+	_left_col.add_theme_constant_override("separation", 30)
+	_left_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_left_col.size_flags_stretch_ratio = 0.8
+	_left_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cols.add_child(_left_col)
 
-	var customize := Button.new()
-	customize.text = "Personalizar time"
-	customize.focus_mode = Control.FOCUS_NONE
-	customize.tooltip_text = "Nome, ícone e cor do time"
-	UiStyle.style_button(customize, Color(0.35, 0.45, 0.85))
-	_big_button(customize, Vector2(220.0, 52.0), _fs(15))
-	customize.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	customize.pressed.connect(_open_team_modal)
-	top_row.add_child(customize)
+	_card_team = _make_menu_card("Personalizar time")
+	_card_team.tooltip_text = "Nome, ícone e cor do time"
+	_card_team.pressed.connect(_open_team_modal)
+	_left_col.add_child(_card_team)
+	_card_badge = TeamBadge.make(0, 62.0)
+	_card_badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_card_badge.set_anchors_and_offsets_preset(Control.PRESET_CENTER_LEFT, Control.PRESET_MODE_KEEP_SIZE, 26)
+	_card_team.add_child(_card_badge)
 
-	# Rodapé: formações prontas + confirmar
-	_bottom_panel = PanelContainer.new()
-	_bottom_panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_bottom_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_bottom_panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	_bottom_panel.offset_bottom = -16
-	_big_panel(_bottom_panel)
-	add_child(_bottom_panel)
+	_card_forms = _make_menu_card("Formações")
+	_card_forms.tooltip_text = "Formações prontas (passe o mouse para ver os espaços no campo)"
+	_card_forms.pressed.connect(_toggle_presets)
+	_left_col.add_child(_card_forms)
 
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 14)
-	_bottom_panel.add_child(box)
-
-	var presets_title: Label = UiStyle.make_label("Formações prontas", _fs(14))
-	presets_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	box.add_child(presets_title)
-
+	_preset_panel = PanelContainer.new()
+	_preset_panel.visible = false
+	_big_panel(_preset_panel)
+	_left_col.add_child(_preset_panel)
 	_preset_box = HFlowContainer.new()
 	_preset_box.alignment = FlowContainer.ALIGNMENT_CENTER
-	_preset_box.add_theme_constant_override("h_separation", 12)
-	_preset_box.add_theme_constant_override("v_separation", 12)
-	_preset_box.custom_minimum_size = Vector2(640.0, 0.0)
-	box.add_child(_preset_box)
+	_preset_box.add_theme_constant_override("h_separation", 10)
+	_preset_box.add_theme_constant_override("v_separation", 10)
+	_preset_panel.add_child(_preset_box)
+
+	# ---------- DIREITA: faixa do time, campo em perspectiva, reservas e botões ----------
+	var right := VBoxContainer.new()
+	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	right.size_flags_stretch_ratio = 1.2
+	right.add_theme_constant_override("separation", 12)
+	right.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	cols.add_child(right)
+
+	# Faixa do time (a borda leva a cor do time)
+	_top_panel = PanelContainer.new()
+	_top_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_title_style = UiStyle.panel_style(UiStyle.PANEL_BORDER, 22.0, 10.0)
+	_title_style.set_border_width_all(3)
+	_top_panel.add_theme_stylebox_override("panel", _title_style)
+	right.add_child(_top_panel)
+
+	var top_row := HBoxContainer.new()
+	top_row.add_theme_constant_override("separation", 16)
+	top_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_top_panel.add_child(top_row)
+	_banner_badge = TeamBadge.make(0, 52.0)
+	_banner_badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	top_row.add_child(_banner_badge)
+	var top_box := VBoxContainer.new()
+	top_box.add_theme_constant_override("separation", 2)
+	top_box.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	top_box.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	top_row.add_child(top_box)
+	_title = UiStyle.make_label("", _fs(20))
+	_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	top_box.add_child(_title)
+	_formation_label = UiStyle.make_label("", _fs(11), UiStyle.MUTED_COLOR)
+	_formation_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	top_box.add_child(_formation_label)
+	_composition_label = UiStyle.make_label("", _fs(11), UiStyle.ACCENT_COLOR)
+	_composition_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	top_box.add_child(_composition_label)
+	var hint: Label = UiStyle.make_label("Arraste • duplo clique para trocar o personagem", _fs(10), UiStyle.MUTED_COLOR)
+	hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	hint.size_flags_vertical = Control.SIZE_SHRINK_END
+	top_row.add_child(hint)
+
+	# Campo em perspectiva
+	_pitch = _PerspectivePitch.new()
+	_pitch.field = _field
+	_pitch.team_count = manager.team_count
+	_pitch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_pitch.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_pitch.dot_double_clicked.connect(_on_dot_double_clicked)
+	_pitch.drag_started.connect(_on_dot_drag_started)
+	_pitch.dragged.connect(_on_dot_dragged)
+	_pitch.drag_ended.connect(_on_dot_drag_ended)
+	right.add_child(_pitch)
+
+	# Reservas
+	_bench_row = HBoxContainer.new()
+	_bench_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_bench_row.add_theme_constant_override("separation", 12)
+	right.add_child(_bench_row)
+
+	# Voltar (editar de novo o time que já confirmou) + Confirmar
+	var action_row := HBoxContainer.new()
+	action_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	action_row.add_theme_constant_override("separation", 16)
+	right.add_child(action_row)
+
+	_back_button = Button.new()
+	_back_button.focus_mode = Control.FOCUS_NONE
+	_back_button.visible = false   # só aparece quando já existe um time confirmado para voltar
+	UiStyle.style_button(_back_button, Color(0.35, 0.45, 0.85))
+	_big_button(_back_button, Vector2(260.0, 54.0), _fs(15))
+	_back_button.pressed.connect(_on_back_pressed)
+	action_row.add_child(_back_button)
 
 	_confirm_button = Button.new()
-	_confirm_button.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	UiStyle.style_button(_confirm_button, Color(0.25, 0.65, 0.35))
-	_big_button(_confirm_button, Vector2(300.0, 58.0), _fs(16))
+	_big_button(_confirm_button, Vector2(300.0, 54.0), _fs(16))
 	_confirm_button.pressed.connect(_on_confirm_pressed)
-	box.add_child(_confirm_button)
+	action_row.add_child(_confirm_button)
 
-	_build_side_panel()
 	_build_team_modal()
 	_build_picker()
 	_build_icon_picker()
 	_build_reveal()
+
+	# A tela inteira reage a cada clique em botão
+	for b: Button in [_card_team, _card_forms, _back_button, _confirm_button]:
+		b.pressed.connect(_poke_ui)
+
+
+## Entrada: os elementos "pulam" um depois do outro e depois ficam balançando de leve
+func _intro() -> void:
+	await get_tree().process_frame
+	var floaters: Array = [_card_team, _card_forms, _top_panel, _pitch, _confirm_button]
+	for i in floaters.size():
+		var c: Control = floaters[i]
+		c.pivot_offset = c.size * 0.5
+		if c != _pitch:   # o campo tem a própria molinha
+			UiStyle.alive(c, float(i) / float(floaters.size()))
+	_card_badge.pivot_offset = _card_badge.size * 0.5
+	UiStyle.jelly_chain([_card_team, _card_forms, _top_panel, _confirm_button], 1.12, 0.07)
+	_pitch.kick(1.6)
+
+
+## Mexeu em qualquer botão: o campo e os cartões balançam um pouco mais
+func _poke_ui() -> void:
+	_pitch.kick(0.7)
+	UiStyle.jelly_chain([_card_team, _card_forms, _top_panel], 1.05, 0.05)
+
+
+func _toggle_presets() -> void:
+	_end_preview_preset()
+	_preset_panel.visible = not _preset_panel.visible
+	if _preset_panel.visible:
+		UiStyle.pop(_preset_panel, 0.85, 0.4)
 
 
 ## Janela "Personalizar time": nome, ícone e cor, com folga entre as seções
@@ -484,6 +932,9 @@ func _rebuild_presets() -> void:
 		b.text = formation
 		b.tooltip_text = Formations.nickname(formation)
 		b.pressed.connect(_apply_preset.bind(formation))
+		b.pressed.connect(_pitch.kick.bind(0.9))
+		b.mouse_entered.connect(_preview_preset.bind(formation))
+		b.mouse_exited.connect(_end_preview_preset)
 		UiStyle.style_button(b)
 		_big_button(b, Vector2(88.0, 50.0), _fs(14))
 		_preset_box.add_child(b)
@@ -491,6 +942,7 @@ func _rebuild_presets() -> void:
 	var restore := Button.new()
 	restore.text = "Restaurar"
 	restore.pressed.connect(_restore)
+	restore.pressed.connect(_pitch.kick.bind(0.9))
 	UiStyle.style_button(restore, Color(0.75, 0.30, 0.30))
 	_big_button(restore, Vector2(130.0, 50.0), _fs(14))
 	_preset_box.add_child(restore)
@@ -561,8 +1013,6 @@ func _apply_color(color: Color, rebuild: bool) -> void:
 
 	_overlay.color = color
 	_overlay.queue_redraw()
-	if _mini != null:
-		_mini.color = color
 	if _color_tween and _color_tween.is_valid():
 		_color_tween.kill()
 	_color_tween = create_tween()
@@ -617,68 +1067,6 @@ func _make_face(tex: Texture2D, label: String, px: int, border: Color) -> Contro
 	return holder
 
 
-func _build_side_panel() -> void:
-	_side_panel = PanelContainer.new()
-	_big_panel(_side_panel)
-	add_child(_side_panel)
-
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 16)
-	_side_panel.add_child(box)
-
-	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 14)
-	box.add_child(head)
-	_side_badge = TeamBadge.make(0, 46.0)
-	head.add_child(_side_badge)
-	var title: Label = UiStyle.make_label("Posições", _fs(20))
-	title.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	title.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	head.add_child(title)
-	_formation_label = UiStyle.make_label("", _fs(12), UiStyle.MUTED_COLOR)
-	_formation_label.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	head.add_child(_formation_label)
-	box.add_child(UiStyle.make_label(
-		"Clique numa posição (no mapa ou na lista) para escolher o personagem", _fs(11), UiStyle.MUTED_COLOR))
-
-	var body := HBoxContainer.new()
-	body.add_theme_constant_override("separation", 22)
-	box.add_child(body)
-
-	_mini = _MiniPitch.new()
-	_mini.field = _field
-	var aspect: float = _field.pitch_size.y / maxf(_field.pitch_size.x, 1.0)
-	_mini.custom_minimum_size = Vector2(300.0, clampf(300.0 * aspect, 140.0, 260.0))
-	_mini.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
-	_mini.slot_clicked.connect(_open_picker)
-	body.add_child(_mini)
-
-	# A lista usa a altura que sobra na tela (acima do rodapé)
-	var screen_h: float = get_viewport().get_visible_rect().size.y
-	var list_h: float = clampf(screen_h - 520.0, 220.0, 560.0)
-	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(350.0, list_h)
-	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-	body.add_child(scroll)
-	_position_list = VBoxContainer.new()
-	_position_list.add_theme_constant_override("separation", 12)
-	_position_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	scroll.add_child(_position_list)
-
-
-## Faixa do topo e o painel de posições ficam em lados opostos: a faixa do lado do time e as
-## posições do lado OPOSTO (time 0 = esquerda), para nada cobrir quem está sendo arrastado
-func _place_panels(team: int) -> void:
-	var left: bool = team == 0
-	_top_panel.set_anchors_and_offsets_preset(
-		Control.PRESET_TOP_LEFT if left else Control.PRESET_TOP_RIGHT, Control.PRESET_MODE_MINSIZE, 16)
-	_top_panel.grow_horizontal = Control.GROW_DIRECTION_END if left else Control.GROW_DIRECTION_BEGIN
-	_side_panel.set_anchors_and_offsets_preset(
-		Control.PRESET_TOP_RIGHT if left else Control.PRESET_TOP_LEFT, Control.PRESET_MODE_MINSIZE, 16)
-	_side_panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN if left else Control.GROW_DIRECTION_END
-	_side_panel.offset_top = 128.0   # abaixo da faixa do topo
-
-
 func _update_formation_label() -> void:
 	if _formation_name == "":
 		_formation_label.text = "Formação personalizada"
@@ -699,15 +1087,34 @@ func _keeper_name(id: String) -> String:
 	return id
 
 
+## Quão "para a frente" o jogador está na metade do time: 0 = linha de fundo, 1 = meio-campo
+func _depth_of(node: Node2D) -> float:
+	var area: Rect2 = Formations.team_area(_team, _field)
+	var local: Vector2 = _field.to_local(node.global_position)
+	var depth: float = (local.x - area.position.x) / maxf(area.size.x, 1.0)
+	return 1.0 - depth if _field.defend_dir(_team) > 0 else depth
+
+
+## Categoria de personagem que mais combina com onde a posição está (id de CharacterRoster.ROLES).
+## É só uma SUGESTÃO: o seletor abre nela, mas dá para escolher qualquer personagem.
+## Ataque = Atacante; defesa ou meio bem aberto, perto da lateral = Lateral; o resto da defesa =
+## Zagueiro e o resto do meio = Meio-campista.
+func _recommended_role(node: Node2D) -> String:
+	var depth: float = _depth_of(node)
+	if depth >= 0.67:
+		return "atacante"
+	var half_h: float = maxf(_field.pitch_size.y * 0.5, 1.0)
+	var wide: float = absf(_field.to_local(node.global_position).y) / half_h
+	if wide >= WIDE_ROLE_THRESHOLD:
+		return "lateral"
+	return "zagueiro" if depth < 0.34 else "meio"
+
+
 ## "Defesa / Meio-campo / Ataque", conforme onde o jogador está na metade do time
 func _role_for(node: Node2D) -> String:
 	if node is Goalkeeper:
 		return "Goleiro"
-	var area: Rect2 = Formations.team_area(_team, _field)
-	var local: Vector2 = _field.to_local(node.global_position)
-	var depth: float = (local.x - area.position.x) / maxf(area.size.x, 1.0)
-	if _team == 1:
-		depth = 1.0 - depth
+	var depth: float = _depth_of(node)
 	if depth < 0.34:
 		return "Defesa"
 	if depth < 0.67:
@@ -715,88 +1122,10 @@ func _role_for(node: Node2D) -> String:
 	return "Ataque"
 
 
-## Uma linha por posição: número, rosto, nome do personagem e função. Clicar abre o seletor.
-func _make_position_card(index: int, target: Node2D) -> Button:
-	var is_keeper: bool = target is Goalkeeper
-	var name_text: String
-	var face: Texture2D
-	if is_keeper:
-		var keeper: Goalkeeper = target as Goalkeeper
-		name_text = _keeper_name(keeper.keeper_id)
-		face = KeeperRoster.art_for(keeper.keeper_id)
-	else:
-		var player: Player = target as Player
-		name_text = _character_name(player.character_id, player)
-		face = CharacterRoster.face_for(player.character_id)
-
-	var team_color: Color = TeamStyle.color_of(_team)
-	var card := Button.new()
-	card.focus_mode = Control.FOCUS_NONE
-	card.custom_minimum_size = Vector2(0.0, POSITION_FACE_SIZE + 20.0)
-	card.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	card.tooltip_text = "Clique para escolher o personagem desta posição"
-	if is_keeper:
-		card.tooltip_text = KeeperRoster.description_for((target as Goalkeeper).keeper_id) \
-			+ "\n\nClique para escolher o goleiro desta posição"
-	card.add_theme_stylebox_override("normal", _card_style(CARD_BG, Color(1, 1, 1, 0.12)))
-	card.add_theme_stylebox_override("hover", _card_style(CARD_HOVER, team_color, 3))
-	card.add_theme_stylebox_override("pressed", _card_style(CARD_HOVER, Color.WHITE, 3))
-	card.add_theme_stylebox_override("focus", _card_style(CARD_HOVER, Color.WHITE, 3))
-	card.pressed.connect(_open_picker.bind(index))
-	card.mouse_entered.connect(_set_mini_hover.bind(index))
-	card.mouse_exited.connect(_set_mini_hover.bind(-1))
-
-	var margin := MarginContainer.new()
-	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
-	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 10)
-	card.add_child(margin)
-
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 14)
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	margin.add_child(row)
-
-	var badge: Label = UiStyle.make_label("G" if is_keeper else str(index + 1), _fs(16), team_color.lightened(0.35))
-	badge.custom_minimum_size = Vector2(30.0, 0.0)
-	badge.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	badge.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	badge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(badge)
-
-	row.add_child(_make_face(face, name_text, POSITION_FACE_SIZE, team_color))
-
-	var col := VBoxContainer.new()
-	col.alignment = BoxContainer.ALIGNMENT_CENTER
-	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(col)
-	var name_label: Label = UiStyle.make_label(name_text, _fs(14))
-	name_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(name_label)
-	var role_label: Label = UiStyle.make_label(_role_for(target), _fs(10), UiStyle.MUTED_COLOR)
-	role_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	col.add_child(role_label)
-	_role_labels.append(role_label)
-	return card
-
-
-func _set_mini_hover(index: int) -> void:
-	if _mini != null:
-		_mini.hover_index = index
-		_mini.queue_redraw()
-
-
-## Refaz a lista de posições (e o mapa) do time atual: um cartão por jogador + o goleiro
+## Refaz o que o campo mostra e as vagas de reserva do time atual
 func _rebuild_positions() -> void:
-	for child in _position_list.get_children():
-		_position_list.remove_child(child)
-		child.queue_free()
 	_slot_targets.clear()
-	_role_labels.clear()
-
-	var players: Array[Player] = manager.get_team_players(_team)
-	for p in players:
+	for p in manager.get_team_players(_team):
 		_slot_targets.append(p)
 
 	# O goleiro do time (ele não é um Player: a troca é pelo KeeperRoster). O Field o cria no
@@ -808,14 +1137,82 @@ func _rebuild_positions() -> void:
 		_keeper_retried = true
 		_rebuild_positions.call_deferred()
 
-	for i in _slot_targets.size():
-		_position_list.add_child(_make_position_card(i, _slot_targets[i]))
+	_refresh_pitch_targets()
+	_rebuild_bench()
+	_update_composition()
 
-	_mini.team = _team
-	_mini.color = TeamStyle.color_of(_team)
-	_mini.targets = _slot_targets
-	_mini.hover_index = -1
-	_mini.queue_redraw()
+
+## O campo em perspectiva mostra TODOS os personagens (os do outro time só para ver)
+func _refresh_pitch_targets() -> void:
+	var all: Array = []
+	for t in manager.team_count:
+		for p in manager.get_team_players(t):
+			all.append(p)
+	for k in get_tree().get_nodes_in_group("goalkeepers"):
+		all.append(k)
+	_pitch.targets = all
+	_pitch.editable_team = _team
+	_pitch.refresh_targets()
+
+
+## Três vagas de reserva (embaixo do campo). Clicar abre o mesmo seletor.
+## O índice da vaga no seletor é o número de posições + o número da vaga (veja _open_picker).
+func _rebuild_bench() -> void:
+	for child in _bench_row.get_children():
+		_bench_row.remove_child(child)
+		child.queue_free()
+	_bench_row.visible = manager.bench != null
+	if manager.bench == null:
+		return
+	var title: Label = UiStyle.make_label("Reservas", _fs(12), UiStyle.MUTED_COLOR)
+	_bench_row.add_child(title)
+	var team_color: Color = TeamStyle.color_of(_team)
+	for slot in BenchManager.RESERVES:
+		var id: String = manager.bench.reserve_id(_team, slot)
+		var entry: Dictionary = CharacterRoster.find(id) if id != "" else {}
+		var chip := Button.new()
+		chip.focus_mode = Control.FOCUS_NONE
+		chip.custom_minimum_size = Vector2(82.0, 82.0)
+		chip.expand_icon = true
+		chip.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		chip.tooltip_text = "Reserva %d: %s\nEntra no jogo quando o time faz uma substituição (máx. %d por partida)" \
+			% [slot + 1, String(entry.get("name", "vaga vazia")), BenchManager.MAX_SUBS]
+		if id != "":
+			chip.icon = CharacterRoster.face_for(id)
+		else:
+			chip.text = "+"
+			chip.add_theme_font_size_override("font_size", _fs(22))
+		for state in ["normal", "hover", "pressed", "focus"]:
+			var sb: StyleBoxFlat = _card_style(CARD_HOVER if state != "normal" else CARD_BG,
+				Color.WHITE if state == "pressed" else team_color, 3)
+			sb.set_corner_radius_all(20)
+			sb.set_content_margin_all(5)
+			chip.add_theme_stylebox_override(state, sb)
+		chip.pressed.connect(_open_picker.bind(_slot_targets.size() + slot))
+		chip.pressed.connect(UiStyle.jelly.bind(chip, 1.2, 0.5))
+		_bench_row.add_child(chip)
+
+
+## Resumo do time pelas categorias dos personagens escolhidos (só informativo)
+func _update_composition() -> void:
+	if _composition_label == null:
+		return
+	var counts: Dictionary = {}
+	var uncategorized: int = 0
+	for p in manager.get_team_players(_team):
+		var role: String = CharacterRoster.role_of(p.character_id)
+		if role == "":
+			uncategorized += 1
+		else:
+			counts[role] = int(counts.get(role, 0)) + 1
+	var parts: PackedStringArray = []
+	for r in CharacterRoster.ROLES:
+		var n: int = int(counts.get(r["id"], 0))
+		if n > 0:
+			parts.append("%d %s" % [n, r["single"] if n == 1 else r["plural"]])
+	if uncategorized > 0:
+		parts.append("%d sem categoria" % uncategorized)
+	_composition_label.text = ("Elenco: " + " · ".join(parts)) if not parts.is_empty() else ""
 
 
 ## Troca o personagem de um jogador (o nó antigo é substituído por um novo, no mesmo lugar)
@@ -833,6 +1230,8 @@ func _apply_character(old: Player, id: String) -> void:
 		return
 
 	manager.register_player(fresh)
+	_pitch.kick(1.1)
+	_pitch.pulse(fresh, 1.8)
 	if _snapshot.has(old):
 		_snapshot[fresh] = _snapshot[old]   # o "Restaurar" continua valendo para o jogador novo
 		_snapshot.erase(old)
@@ -856,37 +1255,65 @@ func _keeper_of(team: int) -> Goalkeeper:
 # ---------- SELETOR DE PERSONAGEM ----------
 
 func _build_picker() -> void:
-	_picker = Control.new()
-	_picker.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_picker.visible = false
-	add_child(_picker)
-
-	var dim := ColorRect.new()
-	dim.color = Color(0, 0, 0, 0.72)
-	dim.set_anchors_preset(Control.PRESET_FULL_RECT)
-	dim.mouse_filter = Control.MOUSE_FILTER_STOP
-	_picker.add_child(dim)
-
-	var center := CenterContainer.new()
-	center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_picker.add_child(center)
+	# Menuzinho na ESQUERDA (o campo em perspectiva continua à direita, com o personagem escolhido em destaque)
+	var holder := MarginContainer.new()
+	holder.set_anchors_and_offsets_preset(Control.PRESET_LEFT_WIDE, Control.PRESET_MODE_MINSIZE)
+	holder.custom_minimum_size = Vector2(PICK_PANEL_W + 100.0, 0.0)
+	holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for side in ["left", "right", "top", "bottom"]:
+		holder.add_theme_constant_override("margin_" + side, 24)
+	holder.visible = false
+	add_child(holder)
+	_picker = holder
 
 	var panel := PanelContainer.new()
-	_big_panel(panel)
-	center.add_child(panel)
+	var panel_sb: StyleBoxFlat = _big_panel(panel)
+	panel_sb.content_margin_left = 22.0
+	panel_sb.content_margin_right = 22.0
+	panel_sb.content_margin_top = 18.0
+	panel_sb.content_margin_bottom = 18.0
+	_picker_panel = panel
+	holder.add_child(panel)
 
 	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 18)
+	box.add_theme_constant_override("separation", 12)
 	panel.add_child(box)
 
-	_picker_title = UiStyle.make_label("", _fs(22))
+	_picker_title = UiStyle.make_label("", _fs(20))
 	_picker_title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_picker_title)
-	box.add_child(UiStyle.make_label("Clique num personagem e confirme (Esc cancela)", _fs(11), UiStyle.MUTED_COLOR))
+	var picker_hint: Label = UiStyle.make_label(
+		"Clique e confirme (duplo clique escolhe na hora; Esc cancela)", _fs(10), UiStyle.MUTED_COLOR)
+	picker_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	picker_hint.custom_minimum_size = Vector2(PICK_PANEL_W, 0.0)
+	box.add_child(picker_hint)
+	_picker_role_hint = UiStyle.make_label("", _fs(12), UiStyle.ACCENT_COLOR)
+	_picker_role_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_picker_role_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_picker_role_hint.custom_minimum_size = Vector2(PICK_PANEL_W, 0.0)
+	box.add_child(_picker_role_hint)
+
+	# Abas de categoria (refeitas a cada abertura) e busca por nome
+	_picker_tab_box = HFlowContainer.new()
+	_picker_tab_box.alignment = FlowContainer.ALIGNMENT_CENTER
+	_picker_tab_box.add_theme_constant_override("h_separation", 8)
+	_picker_tab_box.add_theme_constant_override("v_separation", 8)
+	_picker_tab_box.custom_minimum_size = Vector2(PICK_PANEL_W, 0.0)
+	box.add_child(_picker_tab_box)
+	_picker_search = LineEdit.new()
+	_picker_search.placeholder_text = "Buscar personagem..."
+	_picker_search.clear_button_enabled = true
+	_picker_search.custom_minimum_size = Vector2(PICK_PANEL_W - 20.0, 40.0)
+	_picker_search.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	_picker_search.add_theme_font_size_override("font_size", _fs(13))
+	_picker_search.text_changed.connect(func(_text: String) -> void: _apply_pick_filter())
+	box.add_child(_picker_search)
 
 	var scroll := ScrollContainer.new()
-	scroll.custom_minimum_size = Vector2(float(PICK_COLUMNS) * 156.0, 400.0)
+	# A grade usa a altura que sobra no menu (as abas e a busca ocupam espaço)
+	scroll.custom_minimum_size = Vector2(PICK_PANEL_W, 200.0)
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_picker_scroll = scroll
 	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 	box.add_child(scroll)
 	_picker_grid = GridContainer.new()
@@ -895,45 +1322,58 @@ func _build_picker() -> void:
 	_picker_grid.add_theme_constant_override("v_separation", 10)
 	scroll.add_child(_picker_grid)
 
+	_picker_empty = UiStyle.make_label("Nenhum personagem encontrado nesta aba", _fs(13), UiStyle.MUTED_COLOR)
+	_picker_empty.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_picker_empty.visible = false
+	box.add_child(_picker_empty)
+
 	_picker_name = UiStyle.make_label("", _fs(18))
 	_picker_name.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(_picker_name)
 	_picker_desc = UiStyle.make_label("", _fs(12), UiStyle.MUTED_COLOR)
 	_picker_desc.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_picker_desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_picker_desc.custom_minimum_size = Vector2(float(PICK_COLUMNS) * 156.0, 0.0)
+	_picker_desc.custom_minimum_size = Vector2(PICK_PANEL_W, 0.0)
 	_picker_desc.visible = false
 	box.add_child(_picker_desc)
 
 	var buttons := HBoxContainer.new()
 	buttons.alignment = BoxContainer.ALIGNMENT_CENTER
-	buttons.add_theme_constant_override("separation", 14)
+	buttons.add_theme_constant_override("separation", 10)
 	box.add_child(buttons)
 	var cancel := Button.new()
 	cancel.text = "Cancelar"
 	UiStyle.style_button(cancel, Color(0.75, 0.30, 0.30))
-	_big_button(cancel, Vector2(180.0, 54.0), _fs(15))
+	_big_button(cancel, Vector2(120.0, 48.0), _fs(13))
 	cancel.pressed.connect(_close_picker)
 	buttons.add_child(cancel)
+	var random := Button.new()
+	random.text = "Sortear"
+	random.focus_mode = Control.FOCUS_NONE
+	random.tooltip_text = "Escolhe um personagem aleatório entre os que aparecem na aba"
+	UiStyle.style_button(random)
+	_big_button(random, Vector2(120.0, 48.0), _fs(13))
+	random.pressed.connect(_on_pick_random)
+	buttons.add_child(random)
 	var ok := Button.new()
-	ok.text = "Confirmar personagem"
+	ok.text = "Confirmar"
 	UiStyle.style_button(ok, Color(0.25, 0.65, 0.35))
-	_big_button(ok, Vector2(260.0, 54.0), _fs(15))
+	_big_button(ok, Vector2(200.0, 48.0), _fs(13))
 	ok.pressed.connect(_on_picker_confirm)
 	buttons.add_child(ok)
 
 
-## Entradas do seletor: {id, name, face, full} (+ description nos goleiros). Goleiro usa o KeeperRoster (uma imagem só).
+## Entradas do seletor: {id, name, face, full} (+ role nos personagens e description nos goleiros). Goleiro usa o KeeperRoster (rosto = face_for, imagem completa = art_for).
 func _entries_for(keeper: bool) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if keeper:
 		for k in KeeperRoster.KEEPERS:
 			var art: Texture2D = KeeperRoster.art_for(k["id"])
-			out.append({"id": k["id"], "name": k["name"], "face": art, "full": art,
+			out.append({"id": k["id"], "name": k["name"], "face": KeeperRoster.face_for(k["id"]), "full": art,
 				"description": KeeperRoster.description_for(k["id"])})
 	else:
 		for c in CharacterRoster.available():
-			out.append({"id": c["id"], "name": c["name"],
+			out.append({"id": c["id"], "name": c["name"], "role": String(c.get("role", "")),
 				"face": CharacterRoster.face_for(c["id"]), "full": CharacterRoster.full_for(c["id"])})
 	return out
 
@@ -948,8 +1388,9 @@ func _entry_by_id(id: String) -> Dictionary:
 func _make_pick_card(entry: Dictionary) -> Button:
 	var card := Button.new()
 	card.focus_mode = Control.FOCUS_NONE
-	card.custom_minimum_size = Vector2(142.0, float(PICK_FACE_SIZE) + 56.0)
+	card.custom_minimum_size = Vector2(PICK_CARD_W, float(PICK_FACE_SIZE) + 62.0)
 	card.pressed.connect(_on_pick_card_pressed.bind(String(entry["id"])))
+	card.gui_input.connect(_on_pick_card_input.bind(String(entry["id"])))
 
 	var margin := MarginContainer.new()
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -967,10 +1408,18 @@ func _make_pick_card(entry: Dictionary) -> Button:
 	var face: Control = _make_face(entry["face"], String(entry["name"]), PICK_FACE_SIZE, Color(1, 1, 1, 0.25))
 	face.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	col.add_child(face)
-	var label: Label = UiStyle.make_label(String(entry["name"]), _fs(11))
+	var label: Label = UiStyle.make_label(String(entry["name"]), _fs(10))
 	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.custom_minimum_size = Vector2(PICK_CARD_W - 14.0, 0.0)
 	label.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	col.add_child(label)
+	# Aviso pequeno ("Já no time" / "No adversário"); preenchido em _refresh_pick_tags
+	var tag: Label = UiStyle.make_label("", _fs(9), UiStyle.MUTED_COLOR)
+	tag.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tag.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	col.add_child(tag)
+	_pick_tags[String(entry["id"])] = tag
 	return card
 
 
@@ -995,6 +1444,137 @@ func _refresh_pick_selection() -> void:
 	_picker_desc.visible = desc != ""
 
 
+## Duplo clique num personagem = escolhe e confirma na hora
+func _on_pick_card_input(event: InputEvent, id: String) -> void:
+	if event is InputEventMouseButton and event.pressed and event.double_click \
+			and event.button_index == MOUSE_BUTTON_LEFT:
+		_picker_pending_id = id
+		_refresh_pick_selection()
+		_on_picker_confirm()
+
+
+## Escolhe um personagem aleatório entre os que aparecem na aba (e na busca)
+func _on_pick_random() -> void:
+	var options: Array[String] = []
+	for entry in _picker_entries:
+		var id: String = String(entry["id"])
+		var candidate: Button = _pick_buttons.get(id) as Button
+		if candidate != null and candidate.visible and id != _picker_pending_id:
+			options.append(id)
+	if options.is_empty():
+		return
+	_picker_pending_id = String(options.pick_random())
+	_refresh_pick_selection()
+	var chosen: Button = _pick_buttons.get(_picker_pending_id) as Button
+	if chosen != null and _picker_scroll != null:
+		_picker_scroll.ensure_control_visible(chosen)
+	UiStyle.pop(_picker_name, 1.1, 0.15)
+
+
+## Mostra só os cartões da aba aberta que combinam com a busca (goleiros: sempre todos)
+func _apply_pick_filter() -> void:
+	var query: String = _picker_search.text.strip_edges().to_lower()
+	var shown: int = 0
+	for entry in _picker_entries:
+		var card: Button = _pick_buttons.get(String(entry["id"])) as Button
+		if card == null:
+			continue
+		var in_tab: bool = _picker_is_keeper or _picker_tab == "" \
+			or String(entry.get("role", "")) == _picker_tab
+		var in_search: bool = query == "" or String(entry["name"]).to_lower().contains(query)
+		card.visible = in_tab and in_search
+		if card.visible:
+			shown += 1
+	_picker_empty.visible = shown == 0
+
+
+func _tab_style(bg: Color, border: Color, width: int) -> StyleBoxFlat:
+	var sb: StyleBoxFlat = _card_style(bg, border, width)
+	sb.content_margin_left = 14.0
+	sb.content_margin_right = 14.0
+	return sb
+
+
+func _style_tab_button(b: Button, selected: bool) -> void:
+	var team_color: Color = TeamStyle.color_of(_team)
+	var bg: Color = team_color.darkened(0.45) if selected else CARD_BG
+	var border: Color = team_color.lightened(0.25) if selected else Color(1, 1, 1, 0.12)
+	var width: int = 3 if selected else 2
+	b.add_theme_stylebox_override("normal", _tab_style(bg, border, width))
+	b.add_theme_stylebox_override("hover", _tab_style(CARD_HOVER, team_color, 3))
+	b.add_theme_stylebox_override("pressed", _tab_style(CARD_HOVER, Color.WHITE, 3))
+	b.add_theme_stylebox_override("focus", _tab_style(bg, border, width))
+
+
+func _add_pick_tab(role_id: String, text: String) -> void:
+	var b := Button.new()
+	b.text = text
+	b.focus_mode = Control.FOCUS_NONE
+	b.custom_minimum_size = Vector2(0.0, 44.0)
+	b.add_theme_font_size_override("font_size", _fs(12))
+	b.pressed.connect(_set_pick_tab.bind(role_id))
+	_picker_tab_box.add_child(b)
+	_picker_tab_buttons[role_id] = b
+
+
+## Abas: "Todos" + uma por categoria, com a quantidade de personagens de cada
+func _rebuild_pick_tabs() -> void:
+	for child in _picker_tab_box.get_children():
+		_picker_tab_box.remove_child(child)
+		child.queue_free()
+	_picker_tab_buttons.clear()
+	var counts: Dictionary = {}
+	for e in _picker_entries:
+		var r: String = String(e.get("role", ""))
+		counts[r] = int(counts.get(r, 0)) + 1
+	_add_pick_tab("", "Todos (%d)" % _picker_entries.size())
+	for r in CharacterRoster.ROLES:
+		_add_pick_tab(String(r["id"]), "%s (%d)" % [r["plural"], int(counts.get(r["id"], 0))])
+
+
+func _set_pick_tab(role_id: String) -> void:
+	_picker_tab = role_id
+	for id: String in _picker_tab_buttons:
+		_style_tab_button(_picker_tab_buttons[id] as Button, id == role_id)
+	_apply_pick_filter()
+	if _picker_scroll != null:
+		_picker_scroll.scroll_vertical = 0
+
+
+## Avisa nos cartões quem já está em campo: no próprio time (outra posição) ou no adversário.
+## É só informação: dá para escolher o mesmo personagem de novo.
+func _refresh_pick_tags(current: Node2D) -> void:
+	var mine: Dictionary = {}
+	var theirs: Dictionary = {}
+	for t in manager.team_count:
+		for p in manager.get_team_players(t):
+			if p == current or p.character_id == "base":
+				continue
+			if t == _team:
+				mine[p.character_id] = true
+			else:
+				theirs[p.character_id] = true
+	if manager.bench != null:
+		for t in manager.team_count:
+			for rid in manager.bench.reserves_of(t):
+				if rid == "" or rid == _picker_current_id:
+					continue
+				if t == _team:
+					mine[rid] = true
+				else:
+					theirs[rid] = true
+	for id: String in _pick_tags:
+		var tag: Label = _pick_tags[id] as Label
+		if mine.has(id):
+			tag.text = "Já no time"
+			tag.add_theme_color_override("font_color", UiStyle.ACCENT_COLOR)
+		elif theirs.has(id):
+			tag.text = "No adversário"
+			tag.add_theme_color_override("font_color", UiStyle.MUTED_COLOR)
+		else:
+			tag.text = ""
+
+
 func _on_pick_card_pressed(id: String) -> void:
 	_picker_pending_id = id
 	_refresh_pick_selection()
@@ -1002,12 +1582,15 @@ func _on_pick_card_pressed(id: String) -> void:
 		UiStyle.pop(_picker_name, 1.1, 0.15)
 
 
-## Abre o seletor para a posição (índice na lista/mapa; a última é o goleiro)
+## Abre o seletor para a posição (índice na lista/mapa; a última é o goleiro).
+## Índices DEPOIS da última posição são as vagas do banco de reservas (BenchManager.RESERVES).
 func _open_picker(index: int) -> void:
-	if _modal_open or index < 0 or index >= _slot_targets.size():
+	var is_bench: bool = manager.bench != null and index >= _slot_targets.size() \
+		and index < _slot_targets.size() + BenchManager.RESERVES
+	if (_modal_open and not _picker.visible) or index < 0 or (index >= _slot_targets.size() and not is_bench):
 		return
-	var target: Node2D = _slot_targets[index]
-	if not is_instance_valid(target):
+	var target: Node2D = null if is_bench else _slot_targets[index]
+	if not is_bench and not is_instance_valid(target):
 		return
 	_finish_move()
 	_dragging = null
@@ -1015,30 +1598,68 @@ func _open_picker(index: int) -> void:
 	_picker_index = index
 	_picker_is_keeper = target is Goalkeeper
 	_picker_entries = _entries_for(_picker_is_keeper)
-	_picker_current_id = (target as Goalkeeper).keeper_id if _picker_is_keeper \
-		else (target as Player).character_id
+	if is_bench:
+		_picker_current_id = manager.bench.reserve_id(_team, index - _slot_targets.size())
+	else:
+		_picker_current_id = (target as Goalkeeper).keeper_id if _picker_is_keeper \
+			else (target as Player).character_id
 	_picker_pending_id = _picker_current_id
-	_picker_title.text = ("Goleiro" if _picker_is_keeper else "Posição %d" % (index + 1)) \
-		+ " — escolha o personagem"
+	if is_bench:
+		_picker_title.text = "Reserva %d — escolha o personagem" % (index - _slot_targets.size() + 1)
+	else:
+		_picker_title.text = ("Goleiro" if _picker_is_keeper else "Posição %d" % (index + 1)) \
+			+ " — escolha o personagem"
 
 	for child in _picker_grid.get_children():
 		_picker_grid.remove_child(child)
 		child.queue_free()
 	_pick_buttons.clear()
+	_pick_tags.clear()
 	for entry in _picker_entries:
 		var card: Button = _make_pick_card(entry)
 		_picker_grid.add_child(card)
 		_pick_buttons[String(entry["id"])] = card
 	_refresh_pick_selection()
 
+	# Abas e busca (goleiros não têm categorias). Abre na categoria que combina com a posição.
+	_picker_recommended = "" if (_picker_is_keeper or is_bench) else _recommended_role(target)
+	_picker_tab_box.visible = not _picker_is_keeper
+	_picker_search.visible = not _picker_is_keeper
+	_picker_role_hint.visible = not _picker_is_keeper
+	_picker_search.text = ""
+	if not _picker_is_keeper:
+		_refresh_pick_tags(target)
+		_rebuild_pick_tabs()
+		if is_bench:
+			_picker_role_hint.text = "Reserva: entra no lugar de um jogador em campo, numa substituição durante a partida."
+		else:
+			_picker_role_hint.text = "Sugestão para esta posição: %s. Você pode escolher qualquer personagem (veja a aba Todos)." \
+				% String(CharacterRoster.role_info(_picker_recommended).get("plural", ""))
+	_set_pick_tab(_picker_recommended)
+
 	_picker.visible = true
 	_modal_open = true
+	_left_col.visible = false      # o menu de personagens ocupa o lugar dos cartões
+	_pitch.selected = target       # a bolinha escolhida fica em destaque no campo
+	_pitch.kick(0.8)
 	UiStyle.pop(_picker_title, 1.08, 0.2)
+	_jelly_next_frame(_picker_panel, 1.07)
 
 
 func _close_picker() -> void:
 	_picker.visible = false
 	_modal_open = false
+	_left_col.visible = true
+	_pitch.selected = null
+	_jelly_next_frame(_left_col, 1.03)
+
+
+## Gelatina no próximo quadro (o tamanho do controle só é conhecido depois do layout)
+func _jelly_next_frame(control: Control, strength: float) -> void:
+	await get_tree().process_frame
+	if is_instance_valid(control):
+		control.pivot_offset = control.size * 0.5
+		UiStyle.jelly(control, strength, 0.6)
 
 
 func _on_picker_confirm() -> void:
@@ -1046,10 +1667,15 @@ func _on_picker_confirm() -> void:
 	if entry.is_empty():
 		return
 	var id: String = _picker_pending_id
+	var is_bench: bool = _picker_index >= _slot_targets.size()
 	var target: Node2D = _slot_targets[_picker_index] if _picker_index < _slot_targets.size() else null
 	_close_picker()
 
-	if is_instance_valid(target) and id != _picker_current_id:
+	if is_bench:
+		if manager.bench != null and id != _picker_current_id:
+			manager.bench.set_reserve(_team, _picker_index - _slot_targets.size(), id)
+			_rebuild_positions.call_deferred()   # os cartões do banco mostram o reserva novo
+	elif is_instance_valid(target) and id != _picker_current_id:
 		if _picker_is_keeper:
 			KeeperRoster.replace_keeper(target as Goalkeeper, id)
 			_rebuild_positions.call_deferred()   # a lista passa a apontar para o goleiro novo
@@ -1377,7 +2003,6 @@ func _on_icon_chosen(id: String) -> void:
 	_close_icon_picker()
 	UiStyle.pop(_icon_badge, 1.5, 0.35)
 	UiStyle.pop(_banner_badge, 1.4, 0.3)
-	UiStyle.pop(_side_badge, 1.4, 0.3)
 	if _icon_name_label != null:
 		_icon_name_label.text = _icon_display_name()
 
@@ -1447,7 +2072,7 @@ func _begin_team(team: int) -> void:
 	_overlay.queue_redraw()
 
 	_overlay.icon = TeamStyle.icon_of(team)
-	for badge in [_icon_badge, _side_badge, _banner_badge]:
+	for badge in [_icon_badge, _card_badge, _banner_badge]:
 		badge.team = team
 		badge.fallback_name = manager.get_default_team_name(team)
 	_icon_name_label.text = _icon_display_name()
@@ -1466,11 +2091,59 @@ func _begin_team(team: int) -> void:
 	_confirm_button.text = "Confirmar e começar a partida" if _next_team_after(team) == -1 \
 		else "Confirmar formação"
 	_rebuild_presets()
-	_formation_name = ""
+	_preview_active = false
+	_formation_name = String(_formation_by_team.get(team, ""))   # voltando a um time: a formação que ele tinha
 	_update_formation_label()
-	_place_panels(team)
+	_update_back_button()
 	_keeper_retried = false
 	_rebuild_positions()
+	_ensure_on_pitch()
+	_spin_to_team(team, _spun_once)
+	_spun_once = true
+
+
+## Yaw do campo em perspectiva para o time da vez ficar na frente (0 = metade da esquerda perto)
+func _team_yaw(team: int) -> float:
+	return 0.0 if _field.defend_dir(team) < 0 else PI
+
+
+## O campo dá meia-volta (com um balanço de gelatina no fim) e o time da vez passa a ficar na frente
+func _spin_to_team(team: int, animate: bool) -> void:
+	var target: float = _team_yaw(team)
+	if _spin_tween and _spin_tween.is_valid():
+		_spin_tween.kill()
+	_pitch.spinning = false
+	var diff: float = fposmod(target - _pitch.yaw, TAU)
+	if not animate or diff < 0.01 or diff > TAU - 0.01:
+		_pitch.yaw = target
+		return
+	_pitch.spinning = true
+	_pitch.kick(1.6)
+	_spin_tween = create_tween()
+	_spin_tween.tween_property(_pitch, "yaw", _pitch.yaw + diff, 1.1) \
+		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+	_spin_tween.tween_callback(func() -> void:
+		_pitch.spinning = false
+		_pitch.kick(1.2))
+
+
+## Personagens ainda fora do campo (antes de qualquer formação) ficariam empilhados na borda do
+## mapa: nesse caso entra a primeira formação pronta, e "Restaurar" volta a ela.
+func _ensure_on_pitch() -> void:
+	var half: Vector2 = _field.pitch_size * 0.5
+	var outside: bool = false
+	for p in manager.get_team_players(_team):
+		var l: Vector2 = _field.to_local(p.global_position)
+		if absf(l.x) > half.x or absf(l.y) > half.y:
+			outside = true
+	if not outside:
+		return
+	var presets: Array = Formations.presets_for(manager.get_team_players(_team).size())
+	if presets.is_empty():
+		return
+	_apply_preset(String(presets[0]))
+	for key in _targets:
+		_snapshot[key] = _targets[key]
 
 
 ## Próximo time que ainda não confirmou (-1 = ninguém, ou seja, este é o último)
@@ -1481,10 +2154,35 @@ func _next_team_after(team: int) -> int:
 	return -1
 
 
+## Botão "Voltar": reabre o último time que confirmou para mexer de novo. O que o time que está
+## sendo editado agora já fez (posições, nome, cor, personagens) fica guardado.
+func _on_back_pressed() -> void:
+	if _history.is_empty() or _modal_open:
+		return
+	_finish_move()
+	_dragging = null
+	_end_preview_preset()
+	_formation_by_team[_team] = _formation_name
+	var previous: int = _history.pop_back()
+	_confirmed[previous] = false
+	_begin_team(previous)
+
+
+func _update_back_button() -> void:
+	if _back_button == null:
+		return
+	_back_button.visible = not _history.is_empty()
+	if not _history.is_empty():
+		_back_button.text = "Voltar e editar %s" % manager.get_team_name(int(_history.back()))
+
+
 func _on_confirm_pressed() -> void:
 	_finish_move()
 	_dragging = null
+	_end_preview_preset()
 	_confirmed[_team] = true
+	_formation_by_team[_team] = _formation_name
+	_history.append(_team)
 	var next: int = _next_team_after(_team)
 	if next == -1:
 		finished.emit()
@@ -1497,6 +2195,7 @@ func _on_confirm_pressed() -> void:
 
 func _apply_preset(formation: String) -> void:
 	_finish_move()
+	_preview_active = false   # o clique vale mais que a pré-visualização (que some ao tirar o mouse)
 	var players: Array[Player] = manager.get_team_players(_team)
 	var slot_positions: Array[Vector2] = Formations.slots(formation, _team, _field)
 	_targets = Formations.assign(players, slot_positions)
@@ -1507,6 +2206,32 @@ func _apply_preset(formation: String) -> void:
 	for s in slot_positions:
 		_overlay.slots.append(_field.to_local(s))
 	_start_move()
+
+
+## Mouse em cima do botão de uma formação: mostra os espaços dela no campo, sem aplicar
+func _preview_preset(formation: String) -> void:
+	if _modal_open or _dragging != null:
+		return
+	if not _preview_active:
+		_slots_before_preview.clear()
+		for v in _overlay.slots:
+			_slots_before_preview.append(v)
+	_preview_active = true
+	_overlay.slots.clear()
+	for pos in Formations.slots(formation, _team, _field):
+		_overlay.slots.append(_field.to_local(pos))
+	_overlay.queue_redraw()
+
+
+## Tirou o mouse do botão: os espaços voltam ao que estavam
+func _end_preview_preset() -> void:
+	if not _preview_active:
+		return
+	_preview_active = false
+	_overlay.slots.clear()
+	for v in _slots_before_preview:
+		_overlay.slots.append(v)
+	_overlay.queue_redraw()
 
 
 func _restore() -> void:
@@ -1539,22 +2264,35 @@ func _finish_move() -> void:
 	_targets.clear()
 
 
-# ---------- ARRASTAR ----------
+# ---------- ARRASTAR (o campo em perspectiva manda; o jogador de verdade acompanha) ----------
 
-func _mouse_world() -> Vector2:
-	return _field.get_global_mouse_position()
+func _on_dot_double_clicked(node: Node2D) -> void:
+	var idx: int = _slot_targets.find(node)
+	if idx < 0:
+		return
+	if _picker.visible:
+		_close_picker()
+	_open_picker(idx)
 
 
-## Jogador do time atual debaixo do mouse (o mais próximo)
-func _player_at(pos: Vector2) -> Player:
-	var best: Player = null
-	var best_dist: float = INF
-	for p in manager.get_team_players(_team):
-		var d: float = p.global_position.distance_to(pos)
-		if d <= p.body_radius + 12.0 and d < best_dist:
-			best = p
-			best_dist = d
-	return best
+func _on_dot_drag_started(_node: Node2D) -> void:
+	_finish_move()
+	_formation_name = ""   # mexeu na mão: deixa de ser uma formação pronta
+	_update_formation_label()
+	_overlay.slots.clear()   # o guia some quando você começa a mexer na mão
+	_pitch.kick(0.5)
+
+
+func _on_dot_dragged(node: Node2D, field_norm: Vector2) -> void:
+	if not (node is Player) or not is_instance_valid(node):
+		return
+	var half: Vector2 = _field.pitch_size * 0.5
+	var world: Vector2 = _field.to_global(Vector2(field_norm.x * half.x, field_norm.y * half.y))
+	node.global_position = _constrain(world, node as Player)
+
+
+func _on_dot_drag_ended(_node: Node2D) -> void:
+	_pitch.kick(0.8)
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -1565,6 +2303,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		_close_picker()
 		get_viewport().set_input_as_handled()
 		return
+	# Enter confirma o personagem escolhido (digitando na busca, o Enter fica com o campo de texto)
+	if _picker != null and _picker.visible and event.is_action_pressed("ui_accept"):
+		_on_picker_confirm()
+		get_viewport().set_input_as_handled()
+		return
 	if _icon_picker != null and _icon_picker.visible and event.is_action_pressed("ui_cancel"):
 		_close_icon_picker()
 		get_viewport().set_input_as_handled()
@@ -1573,53 +2316,13 @@ func _unhandled_input(event: InputEvent) -> void:
 		_close_team_modal()
 		get_viewport().set_input_as_handled()
 		return
-	if _modal_open:
-		return   # seletor/revelação na tela: o campo não recebe cliques
-
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if event.pressed:
-			_name_edit.release_focus()   # clicar no campo tira o cursor do campo de nome
-			var p: Player = _player_at(_mouse_world())
-			if p != null:
-				_finish_move()
-				_dragging = p
-				_formation_name = ""   # mexeu na mão: deixa de ser uma formação pronta
-				_update_formation_label()
-				_drag_offset = p.global_position - _mouse_world()
-				_overlay.slots.clear()   # o guia some quando você começa a mexer na mão
-				get_viewport().set_input_as_handled()
-		elif _dragging != null:
-			_dragging = null
-			get_viewport().set_input_as_handled()
-	elif event is InputEventMouseMotion and _dragging != null:
-		_dragging.global_position = _constrain(_mouse_world() + _drag_offset, _dragging)
-		get_viewport().set_input_as_handled()
 
 
-func _process(delta: float) -> void:
-	if _field == null or _team < 0:
+func _process(_delta: float) -> void:
+	if _field == null or _team < 0 or _pitch == null:
 		return
-	# O mapa acompanha os jogadores (arrastar, formação deslizando) e a função de cada posição
-	if _mini != null:
-		_mini.queue_redraw()
-	_role_timer -= delta
-	if _role_timer <= 0.0:
-		_role_timer = 0.15
-		for i in _role_labels.size():
-			if i < _slot_targets.size() and is_instance_valid(_slot_targets[i]) \
-					and is_instance_valid(_role_labels[i]):
-				_role_labels[i].text = _role_for(_slot_targets[i])
-	if _modal_open:
-		Input.set_default_cursor_shape(Input.CURSOR_ARROW)
-		return
-	if _dragging == null:
-		_hover = _player_at(_mouse_world())
-	Input.set_default_cursor_shape(
-		Input.CURSOR_DRAG if _dragging != null
-		else (Input.CURSOR_POINTING_HAND if _hover != null else Input.CURSOR_ARROW))
-	_overlay.hover = _hover
-	_overlay.dragging = _dragging
-	_overlay.queue_redraw()
+	# Com o seletor aberto o campo continua mexível; com as outras janelas, não
+	_pitch.locked = _modal_open and not _picker.visible
 
 
 ## Mantém o jogador dentro da metade do time e fora de cima de outros jogadores e goleiros

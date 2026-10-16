@@ -1203,16 +1203,94 @@ func _draw() -> void:
 
 func _draw_skull(center: Vector2, skull_scale: float, alpha: float) -> void:
 	draw_set_transform(center, 0.0, Vector2(skull_scale, skull_scale))
-	var bone := Color(0.96, 0.96, 0.98, alpha)
-	var shade := Color(0.05, 0.05, 0.08, minf(alpha * 1.3, 1.0))
-	draw_arc(Vector2(0.0, -4.0), 21.0, 0.0, TAU, 32, Color(1, 1, 1, alpha * 0.5), 1.5)   # halo
-	draw_circle(Vector2(0.0, -6.0), 14.0, bone)                 # crânio
-	draw_rect(Rect2(-8.0, 2.0, 16.0, 11.0), bone)               # mandíbula
-	draw_circle(Vector2(-5.5, -6.0), 4.2, shade)                # olhos
-	draw_circle(Vector2(5.5, -6.0), 4.2, shade)
-	draw_colored_polygon(PackedVector2Array(
-		[Vector2(0.0, -1.5), Vector2(-2.2, 3.0), Vector2(2.2, 3.0)]), shade)   # nariz
-	for i in 4:
-		var x: float = -4.5 + i * 3.0
-		draw_line(Vector2(x, 7.5), Vector2(x, 13.0), shade, 1.2)               # dentes
+	var bone := Color(0.98, 0.98, 1.0, alpha)
+	var bone_shadow := Color(0.85, 0.85, 0.9, alpha * 0.7)
+	var shade := Color(0.04, 0.04, 0.08, minf(alpha * 1.3, 1.0))
+	var white_glow := Color(1.0, 1.0, 1.0, alpha * 0.55)
+
+	# ---------- HALO (brilho branco/roxo atrás) ----------
+	for i in 3:
+		draw_circle(Vector2(0.0, -6.0), 22.0 + float(i) * 6.0,
+			Color(0.85, 0.75, 1.0, alpha * (0.20 - float(i) * 0.05)))
+	# raios brancos por trás
+	for i in 8:
+		var ang: float = TAU * float(i) / 8.0 + Time.get_ticks_msec() * 0.001
+		var r0: float = 18.0
+		var r1: float = 28.0 + 6.0 * sin(Time.get_ticks_msec() * 0.005 + float(i))
+		draw_line(Vector2(cos(ang) * r0, sin(ang) * r0 - 6.0),
+			Vector2(cos(ang) * r1, sin(ang) * r1 - 6.0), white_glow, 2.0)
+
+	# ---------- CRÂNIO ----------
+	# Base do crânio com bochechas salientes
+	var cranium := PackedVector2Array([
+		Vector2(-12.0, -12.0), Vector2(-14.0, -18.0), Vector2(-8.0, -22.0),
+		Vector2(8.0, -22.0), Vector2(14.0, -18.0), Vector2(12.0, -12.0),
+		Vector2(14.0, -2.0), Vector2(12.0, 4.0), Vector2(8.0, 8.0),
+		Vector2(-8.0, 8.0), Vector2(-12.0, 4.0), Vector2(-14.0, -2.0)])
+	draw_colored_polygon(cranium, bone)
+	var cranium_line := cranium.duplicate()
+	cranium_line.append(cranium[0])
+	draw_polyline(cranium_line, Color(0.02, 0.02, 0.05, alpha), 1.6)
+
+	# Sombra nas laterais do crânio (para dar volume)
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(-12.0, -12.0), Vector2(-14.0, -18.0), Vector2(-8.0, -22.0),
+		Vector2(-4.0, -20.0), Vector2(-8.0, -14.0), Vector2(-10.0, -4.0),
+		Vector2(-12.0, 4.0)]), bone_shadow)
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(12.0, -12.0), Vector2(14.0, -18.0), Vector2(8.0, -22.0),
+		Vector2(4.0, -20.0), Vector2(8.0, -14.0), Vector2(10.0, -4.0),
+		Vector2(12.0, 4.0)]), bone_shadow)
+
+	# Testa com uma rachadura
+	draw_line(Vector2(-3.0, -20.0), Vector2(-1.0, -14.0), Color(0.4, 0.4, 0.5, alpha), 1.0)
+	draw_line(Vector2(-1.0, -14.0), Vector2(-4.0, -10.0), Color(0.4, 0.4, 0.5, alpha), 1.0)
+
+	# ---------- ÓRBITAS ----------
+	# Órbita esquerda
+	draw_circle(Vector2(-5.5, -6.0), 5.2, shade)
+	draw_arc(Vector2(-5.5, -6.0), 5.2, 0.0, TAU, 16, Color(0.5, 0.5, 0.6, alpha * 0.7), 1.0)
+	# Brilho branco dentro (o "olho" fantasma)
+	draw_circle(Vector2(-5.5, -6.0), 2.0, Color(1.0, 1.0, 1.0, alpha * 0.85))
+	# Órbita direita
+	draw_circle(Vector2(5.5, -6.0), 5.2, shade)
+	draw_arc(Vector2(5.5, -6.0), 5.2, 0.0, TAU, 16, Color(0.5, 0.5, 0.6, alpha * 0.7), 1.0)
+	draw_circle(Vector2(5.5, -6.0), 2.0, Color(1.0, 1.0, 1.0, alpha * 0.85))
+
+	# ---------- NARIZ ----------
+	# Formato de coração invertido
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(0.0, -1.0), Vector2(-3.0, 3.0), Vector2(-1.5, 4.0),
+		Vector2(0.0, 3.0), Vector2(1.5, 4.0), Vector2(3.0, 3.0)]), shade)
+
+	# ---------- MANDÍBULA ----------
+	var jaw := PackedVector2Array([
+		Vector2(-8.0, 6.0), Vector2(8.0, 6.0), Vector2(9.0, 14.0),
+		Vector2(5.0, 16.0), Vector2(-5.0, 16.0), Vector2(-9.0, 14.0)])
+	draw_colored_polygon(jaw, bone)
+	var jaw_line := jaw.duplicate()
+	jaw_line.append(jaw[0])
+	draw_polyline(jaw_line, Color(0.02, 0.02, 0.05, alpha), 1.6)
+	# Sombra entre maxila e mandíbula
+	draw_rect(Rect2(-8.0, 6.0, 16.0, 3.0), Color(0.15, 0.15, 0.2, alpha * 0.6))
+
+	# ---------- DENTES ----------
+	# Linha superior (7 dentes)
+	for i in 7:
+		var x: float = -6.0 + float(i) * 2.0
+		draw_line(Vector2(x, 6.5), Vector2(x, 10.5), shade, 1.0)
+	# Linha inferior (6 dentes)
+	for i in 6:
+		var x: float = -5.0 + float(i) * 2.0
+		draw_line(Vector2(x, 15.5), Vector2(x, 12.0), shade, 1.0)
+	# Um dente lascado (o segundo da esquerda, quebrado)
+	draw_line(Vector2(-4.0, 10.5), Vector2(-4.0, 13.0), shade, 1.0)
+
+	# ---------- BOLHAS BRANCAS (partículas do Miracle) ----------
+	for i in 5:
+		var t: float = fposmod(Time.get_ticks_msec() * 0.0008 + float(i) * 0.2, 1.0)
+		var x: float = -14.0 + float(i) * 7.0
+		var y: float = -22.0 - t * 26.0
+		draw_circle(Vector2(x, y), 1.6 * (1.0 - t), Color(1.0, 1.0, 1.0, alpha * (1.0 - t)))
+
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

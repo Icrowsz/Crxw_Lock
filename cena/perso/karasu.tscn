@@ -1,9 +1,9 @@
 [gd_scene format=3 uid="uid://biu1bmmh65qlh"]
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_4ikdh"]
-[ext_resource type="Texture2D" uid="uid://sv58ke6ve6h8" path="res://img/icons/karasuicon.png" id="2_6d4ex"]
 [ext_resource type="Script" uid="uid://b7xsjunegam3s" path="res://scr/perso/karasu.gd" id="2_hpwbx"]
 [ext_resource type="Texture2D" uid="uid://c5lquxbhi48b3" path="res://img/mvps/karasu.jpg" id="3_2w6vw"]
+[ext_resource type="Texture2D" uid="uid://cv5i05o3kbhnw" path="res://img/testes/karasu.png" id="4_2w6vw"]
 
 [node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_4ikdh")]
 script = ExtResource("2_hpwbx")
@@ -14,6 +14,10 @@ feint_shot_bonus = 0.06
 feint_ally_range = 300.0
 feint_extra_skills = 1
 feint_stick_extra_rounds = 0
+feint_grab_time = 0.15
+feint_trigger_radius = 75.0
+feint_dodge_distance = 190.0
+feint_dodge_time = 0.25
 assault_cooldown = 2
 aerial_rise_time = 0.45
 aerial_fall_time = 0.45
@@ -25,6 +29,7 @@ wings_cooldown = 3
 wings_rounds = 2
 wings_range = 150.0
 wings_max_targets = 2
+wings_run_slow = 0.5
 steal_range = 150.0
 steal_reach_time = 0.2
 steal_descend_time = 0.4
@@ -36,4 +41,4 @@ visual_root = NodePath("SprPlayer")
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)
-texture = ExtResource("2_6d4ex")
+texture = ExtResource("4_2w6vw")

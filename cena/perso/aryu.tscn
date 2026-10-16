@@ -1,9 +1,9 @@
 [gd_scene format=3 uid="uid://b3ostnej5bsky"]
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_uwgvi"]
-[ext_resource type="Texture2D" uid="uid://djcyw7lpuvggj" path="res://img/icons/aryuicon.png" id="2_m11k7"]
 [ext_resource type="Script" uid="uid://c8raj8w0tm156" path="res://scr/perso/aryu.gd" id="2_ywvi1"]
 [ext_resource type="Texture2D" uid="uid://dldlyj277fly5" path="res://img/mvps/aryu.png" id="3_ywvi1"]
+[ext_resource type="Texture2D" uid="uid://dxp4p6pb07osf" path="res://img/testes/aryu.png" id="4_ywvi1"]
 
 [node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_uwgvi")]
 script = ExtResource("2_ywvi1")
@@ -22,6 +22,7 @@ glam_ball_offset = 22.0
 glam_trigger_radius = 75.0
 glam_dodge_distance = 160.0
 glam_dodge_time = 0.25
+glam_extra_dodges = 4
 glam_cooldown = 2
 star_area_margin = 120.0
 star_goal_gap = 40.0
@@ -42,4 +43,4 @@ visual_root = NodePath("SprPlayer")
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)
-texture = ExtResource("2_m11k7")
+texture = ExtResource("4_ywvi1")

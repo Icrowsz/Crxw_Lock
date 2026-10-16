@@ -1,9 +1,9 @@
 [gd_scene format=3 uid="uid://bbspfq1cfgcub"]
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_3kjtc"]
-[ext_resource type="Texture2D" uid="uid://cx1e1yyfw8305" path="res://img/icons/kaisericon.png" id="2_3j4hb"]
 [ext_resource type="Script" uid="uid://dc0ftsv6adbeq" path="res://scr/perso/kaiser.gd" id="2_12ngf"]
 [ext_resource type="Texture2D" uid="uid://bhbfbcraa58em" path="res://img/mvps/kaiser.jpg" id="3_12ngf"]
+[ext_resource type="Texture2D" uid="uid://h4o8rhulycnx" path="res://img/testes/kaiser.png" id="4_12ngf"]
 
 [node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_3kjtc")]
 script = ExtResource("2_12ngf")
@@ -42,4 +42,4 @@ visual_root = NodePath("SprPlayer")
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)
-texture = ExtResource("2_3j4hb")
+texture = ExtResource("4_12ngf")

@@ -2,8 +2,8 @@
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_e18gt"]
 [ext_resource type="Script" uid="uid://5ywp3s1bscqu" path="res://scr/perso/yukimiya.gd" id="2_1clbs"]
-[ext_resource type="Texture2D" uid="uid://bpj52nrwe4qvg" path="res://img/icons/yukimiyaicon.png" id="2_or71m"]
 [ext_resource type="Texture2D" uid="uid://vb61hyg8okjv" path="res://img/mvps/yukimiya.jpg" id="3_qgf87"]
+[ext_resource type="Texture2D" uid="uid://2o7mpenngcn0" path="res://img/testes/yukimiya.png" id="4_qgf87"]
 
 [node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_e18gt")]
 script = ExtResource("2_1clbs")
@@ -33,10 +33,11 @@ goal_curve_time = 0.2
 goal_curve_deg = 30.0
 kick_fx = null
 kick_fx_blind = null
+skill_icons = {}
 display_name = "Yukimiya Kenyu"
 mvp_image = ExtResource("3_qgf87")
 visual_root = NodePath("SprPlayer")
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)
-texture = ExtResource("2_or71m")
+texture = ExtResource("4_qgf87")

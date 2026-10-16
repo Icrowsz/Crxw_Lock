@@ -36,7 +36,6 @@ func _init() -> void:
 
 	# Falas de exemplo: troque pelas que você quiser (a ordem é a da cutscene)
 	_say("reo", "We followed different paths.")
-	_say("base", "I was frustated.")
 	_say("reo", "I was frustated.")
 	_say("reo", "But maybe all of that...")
 	_say("reo", "Was all for this moment.")
@@ -66,7 +65,7 @@ func find_partner(trigger: Player) -> Player:
 
 	# 2) O passe foi na rodada anterior (a bola chega no começo do turno deste time)
 	var dream: Dictionary = reo.last_our_dream
-	if m.round_number != int(dream.get("round", -999)) + 1:
+	if m.round_number != int(dream.get("round", -999)) + 0:
 		return null
 
 	# 3) A bola ainda está pairando e só o Reo (nenhum toque a mais) ou o Nagi (1 toque, o Trap) mexeu nela

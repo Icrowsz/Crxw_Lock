@@ -1,0 +1,55 @@
+[gd_scene format=3 uid="uid://cw0o03krj0gwq"]
+
+[ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_13b2s"]
+[ext_resource type="Texture2D" uid="uid://0o6bobu2tyca" path="res://img/mvps/teddy.png" id="2_a1qud"]
+[ext_resource type="Script" uid="uid://20o5fgka0s1u" path="res://scr/perso/teddy.gd" id="2_nrc47"]
+[ext_resource type="Texture2D" uid="uid://dvq0cobk1dc6" path="res://img/testes/teddy.png" id="4_nrc47"]
+
+[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_13b2s")]
+script = ExtResource("2_nrc47")
+cuts_charges = 4
+cuts_short_distance = 130.0
+cuts_long_distance = 260.0
+cuts_short_time = 0.16
+cuts_long_time = 0.22
+cuts_step_back = 45.0
+cuts_cooldown = 2
+chance_ego = 0.45
+ego_force_mult = 1.6
+curve_deg_per_sec = 30.0
+curve_duration = 0.9
+array_range = 450.0
+array_bonus = 0.03
+array_cooldown = 2
+array_duration = 3
+array_ally_access_rounds = 3
+array_return_mult = 2.0
+array_outside_ratio = 1.0
+array_keep_range = 120.0
+pierce_range = 300.0
+pierce_dash_time = 0.2
+pierce_rounds = 2
+pierce_run_speed_mult = 0.5
+guard_dash_distance = 280.0
+guard_dash_time = 0.25
+guard_hit_radius = 55.0
+deflect_power = 900.0
+deflect_lift = 250.0
+deflect_chance = 0.3
+eyes_rounds = 3
+eyes_cooldown = 2
+eyes_extra_cuts = 1
+eyes_shot_bonus = 0.06
+eyes_run_bonus = 0.35
+eyes_slide_bonus = 0.25
+eyes_array_bonus = 0.05
+trail_max_points = 26
+trail_width = 14.0
+skill_icons = {}
+display_name = "Teddy Knight"
+mvp_image = ExtResource("2_a1qud")
+visual_root = NodePath("SprPlayer")
+
+[node name="SprPlayer" parent="." index="1" unique_id=395354675]
+scale = Vector2(0.2, 0.2)
+texture = ExtResource("4_nrc47")

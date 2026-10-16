@@ -321,6 +321,8 @@ func _try_shot_contest() -> bool:
 	var chance: float = clampf(modify_shot_chance(base_chance, ball), 0.0, 1.0)
 	var beaten: bool = randf() < chance
 	on_shot_resolved(beaten)
+	if manager:
+		manager.record_shot_on_target(ball.shot_team)   # estatística da tela final
 	_announce_contest(base_chance, chance, beaten)
 
 	if beaten:
@@ -388,6 +390,8 @@ func _catch_ball() -> void:
 	ball.clear_touches()  # a posse recomeça do zero: próximo toque é de quem receber
 	ball.hold(self)
 	state = State.HOLDING
+	if manager:
+		manager.record_keeper_catch(team, _catch_forced, _keeper_label())   # estatística da tela final
 	_play_jump()
 	if not _catch_forced:
 		_say("%s saltou na bola!" % _keeper_label())
@@ -540,6 +544,13 @@ func _on_ball_reset() -> void:
 	global_position = _home_position()
 
 
+## Troca de lado: o goleiro vai para o gol novo e vira para o campo
+func refresh_side() -> void:
+	_cancel_all()
+	global_position = _home_position()
+	queue_redraw()
+
+
 func _on_match_ended(_winner: int) -> void:
 	_cancel_all()
 	set_physics_process(false)
@@ -557,8 +568,10 @@ func _cancel_all() -> void:
 
 # ---------- UTIL ----------
 
-## -1 para o time 0 (gol da esquerda), +1 para o time 1 (gol da direita)
+## -1 = defende o gol da esquerda, +1 = o da direita (vem do Field: muda na troca de lado)
 func _dir() -> int:
+	if field != null:
+		return field.defend_dir(team)
 	return -1 if team == 0 else 1
 
 
@@ -575,7 +588,7 @@ func _home_position() -> Vector2:
 ## linha de fundo não cresce. Sem extras, é exatamente a grande área do Field.
 func _defense_rect() -> Rect2:
 	var rect: Rect2 = field.get_penalty_area_rect(team)
-	if team == 0:
+	if _dir() < 0:
 		return rect.grow_individual(0.0, area_extra_side, area_extra_depth, area_extra_side)
 	return rect.grow_individual(area_extra_depth, area_extra_side, 0.0, area_extra_side)
 
@@ -681,7 +694,7 @@ func _draw_art(team_color: Color) -> void:
 	var tex_size: Vector2 = art_texture.get_size()
 	var h: float = art_height
 	var w: float = h * tex_size.x / maxf(tex_size.y, 1.0)
-	var flip: bool = (team == 0) != art_faces_right   # o time 0 olha para a direita
+	var flip: bool = (_dir() < 0) != art_faces_right   # quem defende a esquerda olha para a direita
 	if flip:
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2(-1.0, 1.0))
 	draw_texture_rect(art_texture, Rect2(-w * 0.5, -height - h, w, h), false)
