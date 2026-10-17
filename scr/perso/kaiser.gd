@@ -26,6 +26,12 @@ extends Player
 ## de usar o Alohomora no Kaiser e há um inimigo perto, o Kaiser Impact vira o Emperor Impact:
 ## cutscene, mais forte e rápido, 75% de chance e uma rosa azul gigante no chute.
 ##
+## Reação Química SUPERSTAR (com a Kiyora, veja reaction_superstar.gd): se a Kiyora (Servo Garçom) acabou
+## de usar o Borderline / Even the Gods e a bola veio para o Kaiser, o chute dele vira o BE LOVED:
+## um Magnus mais forte, com 85% de chance de gol e uma trilha de rosas azuis. Com a
+## reação de pé o Be Loved vale com a bola em qualquer altura que ele alcance (o passe alto sempre
+## entrega a bola Suspensa). Recarga da reação: 12 rodadas.
+##
 ## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
 ## -> renomeie o nó raiz para "Kaiser".
 ##
@@ -39,6 +45,9 @@ const SKILL_EMPIRE: StringName = &"empire"
 const SKILL_KNEE: StringName = &"auf_die_knee"
 const SKILL_PREDATOR: StringName = &"predator"
 const SKILL_META: StringName = &"meta"
+
+## id da reação Superstar (reaction_superstar.gd)
+const SUPERSTAR_ID: StringName = &"superstar"
 
 ## Grupos de recarga (as 3 variantes do chute compartilham o mesmo)
 const CD_SHOT: StringName = &"cd_shot"
@@ -56,7 +65,9 @@ enum ServantType { WAITER, CLOWN }
 ## Magnus: a bola sai desviada deste ângulo e vai curvando de volta, cruzando a linha da mira
 @export var magnus_bend_deg: float = 28.0
 ## +1 / -1 escolhe para que lado a bola faz a curva
-@export var magnus_bend_sign: float = 1.0
+@export var magnus_bend_sign: float = -1.0
+## Tamanho máximo da linha tracejada da mira do Magnus (px)
+@export var magnus_preview_length: float = 600.0
 ## Quanto tempo a bola é conduzida (curva + subida até o nível Suspenso); depois cai normal
 @export var magnus_flight_time: float = 0.9
 ## Kaiser Impact: multiplicador de força (rápido) e por quanto tempo a bola fica Suspensa
@@ -70,6 +81,14 @@ enum ServantType { WAITER, CLOWN }
 @export var emperor_rose_radius: float = 260.0             # tamanho da rosa gigante (px)
 ## Aura do chute. Vazio = usa o estilo padrão (veja _make_emperor_fx)
 @export var emperor_fx: KickFX
+
+@export_group("Be Loved (reação Superstar)")
+@export_range(0.0, 1.0) var chance_be_loved: float = 0.85   # chance de gol (já é o valor final)
+@export var be_loved_force_mult: float = 1.3               # mais forte que o Magnus (1.0)
+## Quanto tempo a bola é conduzida na curva (o Magnus usa magnus_flight_time)
+@export var be_loved_flight_time: float = 1.0
+## Aura do chute. Vazio = usa o estilo padrão (veja _make_be_loved_fx)
+@export var be_loved_fx: KickFX
 
 @export_group("Empire")
 @export var empire_range: float = 450.0             # alcance para marcar os servos
@@ -130,6 +149,8 @@ func _ready() -> void:
 		kick_fx = _make_kick_fx()
 	if emperor_fx == null:
 		emperor_fx = _make_emperor_fx()
+	if be_loved_fx == null:
+		be_loved_fx = _make_be_loved_fx()
 	_base_run_duration = run_duration
 	_base_slide_distance = slide_distance
 	_empire_uses_left = empire_starting_uses
@@ -172,6 +193,20 @@ func _make_emperor_fx() -> KickFX:
 	fx.scale_max = 0.5
 	fx.burst_amount = 36
 	fx.burst_speed = 360.0
+	return fx
+
+
+## Be Loved: azul elétrico com brilhos azul-claros, largo como o do Emperor Impact
+func _make_be_loved_fx() -> KickFX:
+	var fx := _make_emperor_fx()
+	fx.color = Color(0.28, 0.42, 1.0, 1.0)
+	fx.particle_color = Color(0.65, 0.88, 1.0, 1.0)
+	fx.swirl = 90.0
+	# Mais leve que o Emperor Impact (60 partículas / 0.8 s): o Be Loved já tem a trilha de rosas
+	# (superstar_fx.gd), e partículas demais durante a trajetória custavam FPS
+	fx.amount = 32
+	fx.lifetime = 0.6
+	fx.burst_amount = 24
 	return fx
 
 
@@ -223,7 +258,7 @@ func _is_servant(p: Player) -> bool:
 	return p in _waiters or p in _clowns
 
 
-## O jogador é um Servo Garçom do Empire? (a reação Herbivicus usa isto)
+## O jogador é um Servo Garçom do Empire? (as reações Herbivicus e Superstar usam isto)
 func is_waiter(p: Player) -> bool:
 	return p in _waiters
 
@@ -479,6 +514,11 @@ func get_shot_variant() -> ShotVariant:
 	if get_kick_type(ball) == KickType.NONE:
 		return ShotVariant.NONE
 
+	# Reação Superstar de pé: o chute vira o Be Loved (um Magnus especial) em qualquer altura que
+	# ele alcance, porque o passe alto da Kiyora entrega a bola Suspensa
+	if _find_superstar() != null:
+		return ShotVariant.MAGNUS
+
 	var ball_level: Heights.Level = ball.get_level()
 	if height_level == Heights.Level.GROUND:
 		if ball_level == Heights.Level.GROUND:
@@ -501,13 +541,36 @@ func _shot_skill_name() -> String:
 		ShotVariant.IMPACT:
 			# Reação Química disponível: o botão muda de nome
 			return "Emperor Impact" if _find_reaction() != null else "Kaiser Impact"
-	return "Magnus"
+	# Reação Química disponível: o botão muda de nome
+	return "Be Loved" if _find_superstar() != null else "Magnus"
 
 
-## Reação Química que o Kaiser pode usar agora (Herbivicus). null = nenhuma.
+## Reação Química do Kaiser Impact que ele pode usar agora (Herbivicus). null = nenhuma.
 func _find_reaction() -> ChemicalReaction:
+	return _find_available_reaction(false)
+
+
+## Reação Superstar (Be Loved) que ele pode usar agora. null = nenhuma.
+func _find_superstar() -> ChemicalReaction:
+	return _find_available_reaction(true)
+
+
+## As reações do Kaiser são separadas por chute: a Superstar vale para o Magnus (Be Loved) e as
+## outras (Herbivicus) para o Kaiser Impact. Cada busca ignora as reações do outro grupo.
+func _find_available_reaction(want_superstar: bool) -> ChemicalReaction:
+	if not is_inside_tree():
+		return null
 	var rm: ReactionManager = ReactionManager.get_for(self)
-	return rm.find_available(self) if rm != null else null
+	if rm == null:
+		return null
+	for reaction in rm.reactions:
+		if (reaction.id == SUPERSTAR_ID) != want_superstar:
+			continue
+		if reaction.trigger_id != character_id or not rm.is_ready(reaction, team):
+			continue
+		if reaction.find_partner(self) != null:
+			return reaction
+	return null
 
 
 func _use_shot_skill() -> bool:
@@ -545,6 +608,21 @@ func _use_shot_skill() -> bool:
 				if m.match_over:
 					return false
 
+	# Reação Química (Superstar): só vale para o Magnus (vira o Be Loved). Mesma ideia: a partida
+	# congela, roda a cutscene e SÓ DEPOIS DO DIÁLOGO o chute acontece.
+	var superstar: ChemicalReaction = null
+	if variant == ShotVariant.MAGNUS:
+		superstar = _find_superstar()
+		if superstar != null:
+			var star_partner: Player = superstar.find_partner(self)
+			var star_rm: ReactionManager = ReactionManager.get_for(self)
+			if star_partner == null or star_rm == null:
+				superstar = null
+			else:
+				await star_rm.play(superstar, self, star_partner)
+				if m.match_over:
+					return false
+
 	var kind: KickType = KickType.GROUND
 	var anim: StringName = &"magnus"
 	var base_chance: float = chance_magnus
@@ -557,6 +635,10 @@ func _use_shot_skill() -> bool:
 			# Sai desviado e vai curvando de volta; a bola é conduzida logo depois do chute
 			dir = _magnus_heading(aim.angle(), 0.0)
 			on_kick = _launch_magnus.bind(aim)
+			if superstar != null:   # Be Loved: mesmo conceito, mais forte, e com a trilha de rosas
+				anim = _be_loved_anim()
+				base_chance = chance_be_loved
+				on_kick = _launch_be_loved.bind(aim)
 		ShotVariant.BEINSCHUSS:
 			kind = KickType.FLYING
 			anim = &"beinschuss"
@@ -579,10 +661,18 @@ func _use_shot_skill() -> bool:
 	if variant == ShotVariant.IMPACT:
 		# rápido (gasto dentro do kick_ball)
 		next_kick_force_mult *= emperor_force_mult if reaction != null else impact_force_mult
+	elif superstar != null:
+		next_kick_force_mult *= be_loved_force_mult
 
 	# Emperor Impact: os 75% são o valor final (sem somar Garçom/Predator). Os outros chutes somam.
-	var chance: float = base_chance if reaction != null else minf(base_chance + _shot_bonus(), 1.0)
-	var fx: KickFX = emperor_fx if reaction != null else kick_fx
+	# Be Loved: os 85% também são o valor final (sem somar Garçom/Predator)
+	var final_value: bool = reaction != null or superstar != null
+	var chance: float = base_chance if final_value else minf(base_chance + _shot_bonus(), 1.0)
+	var fx: KickFX = kick_fx
+	if reaction != null:
+		fx = emperor_fx
+	elif superstar != null:
+		fx = be_loved_fx
 	# Errou o QTE = chute fraquinho, sem aura
 	await kick_ball(ball, dir, kind, qte_ok, chance, false,
 		fx if qte_ok else null, anim, on_kick)
@@ -613,6 +703,20 @@ func _launch_emperor(ball: Ball, _dir: Vector2, _speed: float) -> void:
 	HerbivicusFX.emperor_burst(self, global_position + Vector2(0.0, -height), ball, emperor_rose_radius)
 
 
+## Be Loved: a mesma condução curva do Magnus, só que mais longa, partindo da altura em que a bola
+## estiver (a bola do passe alto chega Suspensa) e com a trilha de rosas azuis e rosas
+func _launch_be_loved(ball: Ball, _dir: Vector2, speed: float, aim: Vector2) -> void:
+	_drive_ball(ball, be_loved_flight_time, _be_loved_step.bind(aim.angle(), speed, ball.height))
+	SuperstarFX.attach_roses(ball, be_loved_flight_time + 1.6)
+
+
+## Animação do Be Loved: usa a "be_loved" se o personagem tiver; senão, a do Magnus
+func _be_loved_anim() -> StringName:
+	if _has_art and animated_sprite.sprite_frames.has_animation(&"be_loved"):
+		return &"be_loved"
+	return &"magnus"
+
+
 ## Animação do Emperor Impact: usa a "emperor_impact" se o personagem tiver; senão, a do Kaiser Impact
 func _emperor_anim() -> StringName:
 	if _has_art and animated_sprite.sprite_frames.has_animation(&"emperor_impact"):
@@ -625,6 +729,13 @@ func _magnus_step(b: Ball, u: float, delta: float, aim_angle: float, speed: floa
 	b.velocity = _magnus_heading(aim_angle, u) * speed * lerpf(1.0, 0.85, u)
 	b.height = Heights.SUSPENDED_HEIGHT * smoothstep(0.0, 1.0, u)
 	b.vel_z = b.gravity * delta   # cancela a gravidade deste frame: a altura é conduzida aqui
+
+
+## Um passo do Be Loved: igual ao do Magnus, mas a altura parte de onde a bola estava
+func _be_loved_step(b: Ball, u: float, delta: float, aim_angle: float, speed: float, start_height: float) -> void:
+	b.velocity = _magnus_heading(aim_angle, u) * speed * lerpf(1.0, 0.85, u)
+	b.height = lerpf(start_height, Heights.SUSPENDED_HEIGHT, smoothstep(0.0, 1.0, u))
+	b.vel_z = b.gravity * delta
 
 
 ## Um passo do Kaiser Impact: segura a bola no nível Suspenso (a velocidade fica como saiu do chute)
@@ -731,7 +842,13 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 			title = _shot_skill_name()
 			match get_shot_variant():
 				ShotVariant.MAGNUS:
-					text = "Chute curvo que sobe durante o trajeto. %d%% de chance de gol." % _pct(chance_magnus)
+					var star: ChemicalReaction = _find_superstar()
+					if star != null:
+						title = "Be Loved"
+						text = "Reação Química Superstar com a Kiyora: um Magnus mais forte, com uma trilha de rosas azuis. %d%% de chance de gol.\nA reação recarrega em %d rodadas." % [
+							_pct(chance_be_loved), star.cooldown_rounds]
+					else:
+						text = "Chute curvo que sobe durante o trajeto. %d%% de chance de gol." % _pct(chance_magnus)
 				ShotVariant.BEINSCHUSS:
 					text = "Bicicleta no ar. %d%% de chance de gol." % _pct(chance_beinschuss)
 				ShotVariant.IMPACT:
@@ -815,18 +932,51 @@ func _draw() -> void:
 				draw_arc(center, ring, a0, a1, 6, blue, 3.0)
 		draw_arc(center, ring - 5.0, 0.0, TAU, 40, Color(gold, 0.6), 1.5)
 
-	# Magnus: curva dourada = o caminho real da bola (a seta laranja do Player é a linha da mira)
+	# Magnus: linha tracejada = o caminho real da bola (a seta laranja do Player é a linha da mira)
 	if is_aiming and _aiming_magnus:
-		var steps: int = 24
-		var step_len: float = (placeholder_radius + aim_range * 2.0) / float(steps)
-		var a: float = aim_direction.angle()
-		var pos := Vector2.ZERO
-		var pts := PackedVector2Array([pos])
-		for i in steps:
-			pos += _magnus_heading(a, float(i) / float(steps)) * step_len
-			pts.append(pos)
-		draw_polyline(pts, gold, 3.0)
-		draw_circle(pos, 5.0, gold)
+		_draw_magnus_preview()
+
+
+## Previsão do Magnus (estilo do Rin): simula a MESMA condução do _drive_ball (velocidade que
+## vira com o tempo e vai perdendo 15%), e depois a bola seguindo reta no rumo final.
+func _draw_magnus_preview() -> void:
+	var ball: Ball = _get_ball()
+	if ball == null:
+		return
+	var start: Vector2 = to_local(ball.global_position)   # sai da bola, não do pé dele
+	var a: float = aim_direction.angle()
+	var speed: float = kick_force_ground * kick_force_to_speed
+	if _find_superstar() != null:
+		speed *= be_loved_force_mult   # Be Loved: mais forte, então a linha vai mais longe
+	var dt: float = 1.0 / 60.0
+	var air_factor: float = maxf(0.0, 1.0 - ball.air_drag * dt)
+	var pos: Vector2 = start
+	var elapsed: float = 0.0
+	var travelled: float = 0.0
+	var steps: int = 0
+	var last_dir: Vector2 = Vector2.from_angle(a)
+	var color := Color(0.35, 0.58, 1.0, 0.95)
+	var flight: float = be_loved_flight_time if _find_superstar() != null else magnus_flight_time
+	while steps < 300 and travelled < magnus_preview_length and speed > 20.0:
+		var cur: float = speed
+		var dir: Vector2 = last_dir
+		if elapsed < flight:
+			var u: float = clampf(elapsed / maxf(flight, 0.05), 0.0, 1.0)
+			dir = _magnus_heading(a, u)
+			cur = speed * lerpf(1.0, 0.85, u)
+		else:
+			speed *= air_factor   # depois da condução só o ar freia a bola
+			cur = speed * 0.85
+		last_dir = dir
+		var seg: Vector2 = dir * cur * air_factor * dt
+		if steps % 2 == 0:
+			draw_line(pos, pos + seg, color, 4.0)
+		pos += seg
+		travelled += seg.length()
+		steps += 1
+		elapsed += dt
+	draw_circle(pos, 6.0, color)
+	draw_arc(pos, 10.0, 0.0, TAU, 20, Color(color, 0.6), 2.0)
 
 
 ## Flor que fica em cima de um servo (dourada = Garçom, azul-escura = Palhaço).

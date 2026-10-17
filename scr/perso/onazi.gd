@@ -5,7 +5,8 @@ extends Player
 ##
 ## 1. Aerial Strike (ação de habilidade; recarga de 2 rodadas): chute comum MIRADO, com 45% de
 ##      chance de gol. Funciona com o Onazi e a bola em QUALQUER estado (chão, suspenso, voando),
-##      desde que a bola esteja perto (kick_range). O tipo de chute e o QTE são os do chute comum
+##      desde que a bola esteja a até strike_leap_range. Se a bola está em outra altura ou além do
+##      alcance do chute, o Onazi SALTA até ela (posição e altura) e chuta do nível dela. O tipo de chute e o QTE são os do chute comum
 ##      daquela situação (bola e Onazi no chão = sem QTE; o resto = QTE).
 ## 2. Unlimited Mobility / Hunter (mesmo botão, recarga de 3 rodadas compartilhada; a variante é
 ##      escolhida sozinha). Só com o Onazi no chão:
@@ -54,6 +55,8 @@ const GUIDANCE_PEAK: float = 70.0
 @export_group("Aerial Strike")
 @export_range(0.0, 1.0) var strike_chance: float = 0.45
 @export var strike_cooldown: int = 2
+@export var strike_leap_range: float = 160.0       # distância máxima até a bola (ele salta até ela)
+@export var strike_leap_time: float = 0.3          # duração do salto até a bola (s)
 
 @export_group("Unlimited Mobility / Hunter")
 @export var near_range: float = 90.0               # "bola próxima": decide entre Unlimited Mobility e Hunter
@@ -214,9 +217,30 @@ func _strike_kind(ball: Ball) -> KickType:
 	return KickType.FLYING if ball_level == Heights.Level.FLYING else KickType.VOLLEY
 
 
+## A bola está solta e ao alcance do salto? (o tipo de chute só é decidido depois do salto)
+func _strike_possible(ball: Ball) -> bool:
+	if ball == null or is_down or ball.is_held() or ball.is_locked_for(team):
+		return false
+	return global_position.distance_to(ball.global_position) <= maxf(strike_leap_range, kick_range)
+
+
+## Onazi salta até a bola (posição e altura) e fica no nível dela
+func _leap_to(ball: Ball) -> void:
+	var level: Heights.Level = ball.get_level()
+	height_level = level
+	face_towards(ball.global_position - global_position)
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(self, "global_position", ball.global_position, strike_leap_time) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(self, "height", Heights.to_height(level), strike_leap_time) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	await tw.finished
+	global_position = ball.global_position   # a bola pode ter andado durante o salto
+
+
 func _use_strike() -> bool:
 	var m: MatchManager = _get_manager()
-	if m == null or _strike_kind(_get_ball()) == KickType.NONE:
+	if m == null or not _strike_possible(_get_ball()):
 		return false
 
 	# Primeiro mira; cancelar não gasta a ação
@@ -226,7 +250,15 @@ func _use_strike() -> bool:
 
 	# A bola pode ter rolado enquanto ele mirava: confere de novo
 	var ball: Ball = _get_ball()
-	var kind: KickType = _strike_kind(ball)
+	if not _strike_possible(ball):
+		return false
+
+	# Bola em outra altura ou longe demais para o chute: salta até ela e chuta do nível dela
+	if height_level != ball.get_level() or global_position.distance_to(ball.global_position) > kick_range:
+		await _leap_to(ball)
+		ball = _get_ball()
+
+	var kind: KickType = _strike_kind(ball)   # decidido DEPOIS do salto
 	if kind == KickType.NONE:
 		return false
 
@@ -646,7 +678,7 @@ func can_use_skill(skill_id: StringName = &"default") -> bool:
 		return false
 	match skill_id:
 		SKILL_STRIKE:
-			return not is_on_cooldown(CD_STRIKE) and _strike_kind(_get_ball()) != KickType.NONE
+			return not is_on_cooldown(CD_STRIKE) and _strike_possible(_get_ball())
 		SKILL_MOBILITY:
 			return not is_on_cooldown(CD_MOBILITY) and get_mobility_variant() != MobilityVariant.NONE
 		SKILL_HERE:
@@ -680,7 +712,7 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	match skill_id:
 		SKILL_STRIKE:
 			title = "Aerial Strike"
-			text = "Chute comum com mira, com Onazi e a bola em qualquer estado. %d%% de chance de gol.\nRecarga: %d rodadas." % [
+			text = "Chute comum com mira, com Onazi e a bola em qualquer estado: ele salta até a bola e chuta. %d%% de chance de gol.\nRecarga: %d rodadas." % [
 				_pct(strike_chance), strike_cooldown]
 		SKILL_MOBILITY:
 			var um_text: String = "Sem bola próxima, Onazi corre mais curto, porém mais rápido. Se encontrar a bola, toca e a levanta (Suspensa) e ganha %d ação de habilidade extra." % um_extra_skills

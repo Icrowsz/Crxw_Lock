@@ -69,6 +69,17 @@ var display_name: String = ""
 ## Quanto ela cresce para os lados (px)
 @export var area_extra_side: float = 0.0
 
+@export_group("Balanço (visual)")
+## Parado, o goleiro só inclina bem de leve (rotação; só visual, não muda a posição dele)
+@export var sway_enabled: bool = true
+@export var sway_degrees: float = 1.0
+@export var sway_period: float = 3.6
+
+@export_group("Time (visual)")
+## Base do time no chão e marcador em cima da cabeça (identifica o time sem pintar a imagem)
+@export var team_base_enabled: bool = true
+@export var team_tag_enabled: bool = true
+
 @export_group("Visual")
 @export var body_radius: float = 20.0
 @export var keeper_color: Color = Color(1.0, 1.0, 1.0, 1.0)
@@ -199,6 +210,29 @@ func _physics_process(delta: float) -> void:
 			_process_holding(delta)
 		State.THROWING:
 			pass  # a corrotina _throw_ball controla a bola
+
+
+var _sway_time: float = randf() * 10.0
+var _sway_amount: float = 0.0
+var _sway_dirty: bool = false
+var _sway_rot: float = 0.0
+
+
+## Balanço natural: só enquanto ele espera (parado, se preparando ou segurando a bola)
+func _process(delta: float) -> void:
+	if team_tag_enabled:
+		queue_redraw()   # a seta do time sobe e desce
+	if not sway_enabled:
+		return
+	var calm: bool = state == State.IDLE or state == State.PREPARING or state == State.HOLDING
+	_sway_amount = move_toward(_sway_amount, 1.0 if calm else 0.0, delta * 3.0)
+	if _sway_amount <= 0.0 and not _sway_dirty:
+		return
+	_sway_time += delta
+	var phase: float = _sway_time * TAU / maxf(sway_period, 0.1)
+	_sway_rot = deg_to_rad(sway_degrees) * sin(phase) * _sway_amount
+	_sway_dirty = _sway_amount > 0.0
+	queue_redraw()
 
 
 func _process_idle(delta: float) -> void:
@@ -666,6 +700,20 @@ func _draw() -> void:
 		draw_arc(Vector2.ZERO, range_preview, 0.0, TAU, 96, Color(1, 1, 1, 0.4), 2.0)
 
 
+## Marcador do time em cima da cabeça: triângulo com contorno escuro
+func _draw_team_tag(team_color: Color) -> void:
+	if not team_tag_enabled:
+		return
+	# Seta do time: sobe e desce devagar (cada um num ritmo)
+	var bob: float = sin(Time.get_ticks_msec() * 0.001 * 4.2 + float(get_instance_id() % 1000) * 0.0063) * 2.5
+	var tip := Vector2(0.0, -_visual_top() - 12.0 - height + bob)
+	draw_colored_polygon(PackedVector2Array([
+			tip + Vector2(0.0, 3.0), tip + Vector2(-12.0, -15.0), tip + Vector2(12.0, -15.0)]),
+			Color(0, 0, 0, 0.6))
+	draw_colored_polygon(PackedVector2Array([
+			tip, tip + Vector2(-9.0, -12.0), tip + Vector2(9.0, -12.0)]), team_color)
+
+
 func _draw_placeholder(team_color: Color) -> void:
 	draw_circle(Vector2.ZERO, body_radius, Color(0, 0, 0, 0.3))  # sombra no chão
 	var center := Vector2(0, -height)
@@ -682,7 +730,13 @@ func _draw_art(team_color: Color) -> void:
 	# No chão (achatados, como no Player): sombra, anel do time e anéis de estado
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.45))
 	draw_circle(Vector2.ZERO, body_radius, Color(0, 0, 0, 0.3))
-	draw_arc(Vector2.ZERO, body_radius + 2.0, 0.0, TAU, 32, Color(team_color, 0.9), 3.0)
+	if team_base_enabled:
+		var base_r: float = body_radius + 7.0
+		draw_circle(Vector2.ZERO, base_r, Color(team_color, 0.40))
+		draw_arc(Vector2.ZERO, base_r, 0.0, TAU, 40, team_color.lightened(0.15), 4.0)
+		draw_arc(Vector2.ZERO, base_r + 5.0, 0.0, TAU, 40, Color(team_color, 0.35), 2.0)
+	else:
+		draw_arc(Vector2.ZERO, body_radius + 2.0, 0.0, TAU, 32, Color(team_color, 0.9), 3.0)
 	match state:
 		State.PREPARING:
 			draw_arc(Vector2.ZERO, body_radius + 8.0, 0.0, TAU, 32, Color(1, 1, 1, 0.9), 2.0)
@@ -695,7 +749,8 @@ func _draw_art(team_color: Color) -> void:
 	var h: float = art_height
 	var w: float = h * tex_size.x / maxf(tex_size.y, 1.0)
 	var flip: bool = (_dir() < 0) != art_faces_right   # quem defende a esquerda olha para a direita
-	if flip:
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2(-1.0, 1.0))
+	# Pés no chão: o balanço gira em volta dos pés
+	draw_set_transform(Vector2.ZERO, _sway_rot, Vector2(-1.0, 1.0) if flip else Vector2.ONE)
 	draw_texture_rect(art_texture, Rect2(-w * 0.5, -height - h, w, h), false)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+	_draw_team_tag(team_color)

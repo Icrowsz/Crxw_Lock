@@ -51,6 +51,8 @@ func _register_reactions() -> void:
 	register(ReactionOneMoreTime.new())
 	register(ReactionFeeding.new())
 	register(ReactionCruel.new())
+	register(ReactionSuperstar.new())
+	register(ReactionSacrifice.new())
 
 
 func register(reaction: ChemicalReaction) -> void:

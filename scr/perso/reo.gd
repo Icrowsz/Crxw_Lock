@@ -45,6 +45,7 @@ const SKILL_DREAM: StringName = &"our_dream"
 
 const CD_COPY: StringName = &"cd_copy"
 const CD_ROLE: StringName = &"cd_role"
+const CD_DREAM: StringName = &"cd_dream"
 
 enum Zone { DEFENSE, SUPPORT, OFFENSIVE }
 
@@ -73,6 +74,7 @@ signal popup_done(index: int)
 @export var chance_header: float = -1.0               # -1 = a chance padrão do tipo de chute
 
 @export_group("Our Dream (Reação Miracle)")
+@export var dream_cooldown: int = 3                    # recarga do Our Dream (rodadas), além da recarga da Reação Miracle
 @export var dream_range: float = 500.0                # alcance do passe (px, medido a partir do Reo)
 @export_range(0.0, 0.6) var dream_curve: float = 0.25 # o quanto a bola curva (fração da distância; 0.25 = desvio de 25%)
 @export var dream_bend_sign: float = 1.0              # +1 / -1 = para qual lado a bola curva
@@ -798,7 +800,7 @@ func _dream_label() -> String:
 	var left: int = _miracle_rounds_left()
 	if dream_only_when_reaction_ready and left > 0:
 		return "Our Dream (reação em recarga %d)" % left
-	return "Our Dream"
+	return skill_label("Our Dream", CD_DREAM)   # mostra a recarga própria do Our Dream, se houver
 
 
 ## O Our Dream só deixa de gastar ação de habilidade se dream_is_free estiver ligado
@@ -841,6 +843,7 @@ func _use_dream() -> bool:
 	await arrive.finished
 	m.register_skill_pass(team, null)
 	MiracleFX.attach(self, 3.0)   # camaleão roxo translúcido em volta do Reo
+	start_cooldown(CD_DREAM, dream_cooldown)
 	last_our_dream = {
 		"point": point,
 		"round": get_current_round(),
@@ -913,7 +916,7 @@ func can_use_skill(skill_id: StringName = &"default") -> bool:
 			_sync_ghost_from_reo()
 			return _copy_ghost.can_use_skill(_copy_skill_id)
 		SKILL_DREAM:
-			return _dream_available()
+			return not is_on_cooldown(CD_DREAM) and _dream_available()
 	return false
 
 
@@ -979,7 +982,8 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 		SKILL_DREAM:
 			title = "Our Dream"
 			text = ("Passe alto curvo (alcance %d): você escolhe onde a bola vai chegar. Ela pousa Suspensa nesse ponto na mesma rodada.\n"
-				+ "Se o Nagi pegar a bola e usar o Fake Volley com um inimigo perto, nasce a Reação Química Miracle.") % int(dream_range)
+				+ "Se o Nagi pegar a bola e usar o Fake Volley com um inimigo perto, nasce a Reação Química Miracle.\n"
+				+ "Recarga: %d rodadas.") % [int(dream_range), dream_cooldown]
 			if dream_only_when_reaction_ready and _miracle_rounds_left() > 0:
 				text += "\nReação Miracle em recarga: %d rodada(s)." % _miracle_rounds_left()
 		_:

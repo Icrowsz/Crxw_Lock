@@ -30,6 +30,12 @@ extends Player
 ##      - Karasu suspenso + bola Suspensa ou Voando por perto -> Silent Steal: ele alcança a
 ##          bola, domina e os dois descem até o chão.
 ##
+## Reação Química SACRIFICE (com o Hiori, veja reaction_sacrifice.gd): o Karasu faz um passe para o
+## Hiori e DEPOIS usa o Wings Block; com a Coldest Metavision do Hiori ativa, o Cryo Shot dele vira o
+## Loud Crow. Este script só registra o último passe (last_pass_info), se o Wings Block veio depois e
+## se ainda segura inimigos (is_grabbing). As asas longas do Wings Block são desenhadas aqui
+## (sacrifice_fx.gd).
+##
 ## Como montar a cena: igual aos outros — Nova Cena Herdada de player.tscn -> anexe este
 ## script ao nó raiz -> renomeie o nó raiz para "Karasu".
 ##
@@ -114,6 +120,13 @@ var _raven_contact: bool = false
 
 ## Inimigos agarrados pelo Wings Block
 var _grabbed: Array[Player] = []
+## Quando o Wings Block agarrou (ms): as asas crescem num "pop" a partir daí
+var _grab_started_ms: int = 0
+
+## Último passe do Karasu (a reação Sacrifice lê isto):
+## {"target": quem recebeu, "touches": toques na bola logo depois do passe, "wings": usou o Wings Block depois?}
+var last_pass_info: Dictionary = {}
+var _pass_seq: int = 0
 
 
 func _init() -> void:
@@ -155,6 +168,7 @@ func _hook_manager() -> void:
 	if m:
 		m.round_started.connect(_on_round_started)
 		m.turn_ended.connect(_on_turn_ended)
+		m.pass_completed.connect(_on_pass_completed)
 	var ball: Ball = _get_ball()
 	if ball:
 		ball.was_reset.connect(_on_ball_reset)
@@ -168,6 +182,34 @@ func _on_turn_ended(ended_team: int) -> void:
 
 func _on_ball_reset() -> void:
 	_end_feint_hold(false)   # gol / reposição: a bola já foi solta pelo próprio Ball
+	last_pass_info = {}
+
+
+## Registra o passe do Karasu (qualquer tipo). Dois quadros depois, anota quantos toques a bola tem:
+## é a partir dali que "ninguém tocou na bola depois do passe" vale (o contato do alvo com a bola
+## na chegada não conta). Se outro jogador (um inimigo) já pegou a bola, o passe não vale.
+func _on_pass_completed(passer: Player, target: Player) -> void:
+	if passer != self:
+		return
+	_pass_seq += 1
+	var seq: int = _pass_seq
+	last_pass_info = {"target": target, "touches": -1, "wings": false}
+	var ball: Ball = _get_ball()
+	if ball == null:
+		return
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	if seq != _pass_seq or not is_instance_valid(ball) or last_pass_info.is_empty():
+		return
+	if ball.last_toucher != self and ball.last_toucher != target:
+		last_pass_info = {}
+		return
+	last_pass_info["touches"] = ball.interaction_count
+
+
+## Ainda está segurando algum inimigo com o Wings Block? (a reação Sacrifice exige)
+func is_grabbing() -> bool:
+	return not _grabbed.is_empty()
 
 
 func _on_round_started(new_round: int) -> void:
@@ -690,6 +732,11 @@ func _use_wings_block() -> bool:
 	for e: Player in targets:
 		e.apply_lock(self, wings_rounds, true)
 		_grabbed.append(e)
+	_grab_started_ms = Time.get_ticks_msec()
+	# Sacrifice: o Wings Block veio DEPOIS do último passe dele
+	if not last_pass_info.is_empty():
+		last_pass_info["wings"] = true
+	SacrificeFX.wings_burst(self, global_position + Vector2(0.0, -height))
 	start_cooldown(CD_WINGS, wings_cooldown)
 	queue_redraw()
 	return true
@@ -866,6 +913,8 @@ func reset_for_new_match() -> void:
 	_raven_contact = false
 	_release_stuck_ball()
 	_release_grabs()
+	last_pass_info = {}
+	_pass_seq += 1
 	run_duration = _base_run_duration
 	queue_redraw()
 
@@ -894,11 +943,15 @@ func _draw() -> void:
 	if _feint_state == FeintState.HOLDING:
 		_draw_wings(center)
 
-	# Ligação roxa até cada inimigo agarrado pelo Wings Block
+	# Wings Block: asas longas e roxas de corvo, cada uma segurando um inimigo agarrado
+	var held: Array[Vector2] = []
 	for e: Player in _grabbed:
 		if is_instance_valid(e):
-			var end: Vector2 = to_local(e.global_position) + Vector2(0.0, -e.height)
-			draw_line(center, end, Color(0.6, 0.25, 0.95, 0.75), 3.0)
+			held.append(to_local(e.global_position) + Vector2(0.0, -e.height))
+	if not held.is_empty():
+		var now_ms: int = Time.get_ticks_msec()
+		SacrificeFX.draw_grab_wings(self, center, held, placeholder_radius,
+			float(now_ms - _grab_started_ms) / 350.0, float(now_ms) / 1000.0)
 
 
 ## Duas asas de corvo (espelhadas) com "penas" na borda de baixo, batendo de leve

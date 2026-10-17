@@ -42,6 +42,16 @@ const DEFAULT_SHOT_CHANCE: float = 0.30
 @export var max_shadow_height: float = 300.0
 @export var rotate_with_speed: bool = true
 
+## BALANÇO NATURAL (só visual): bola parada no chão inclina bem de leve (só rotação).
+## Não muda a posição dela.
+@export_group("Balanço (visual)")
+@export var sway_enabled: bool = true
+@export var sway_degrees: float = 4.0    # quanto inclina de um lado para o outro
+@export var sway_period: float = 3.2     # segundos de um balanço completo
+var _sway_amount: float = 0.0
+var _sway_time: float = 0.0
+var _sway_rock: float = 0.0              # quanto de rotação do balanço está somado no sprite agora
+
 var height: float = 0.0
 var vel_z: float = 0.0
 var velocity: Vector2 = Vector2.ZERO
@@ -94,6 +104,34 @@ var fx_during_hover: bool = false
 @export_group("Rastro")
 @export var trail_length: int = 12
 var trail_enabled: bool = false
+## O rastro dos passes usa a cor do time de quem tocou na bola por último
+@export var trail_team_color: bool = true
+var _trail_color: Color = Color.WHITE
+
+## QUIQUE (só visual): a bola achata ao bater no chão e estica enquanto sobe/desce rápido
+@export_group("Quique (visual)")
+@export var squash_enabled: bool = true
+@export var squash_amount: float = 0.28      # quanto achata no quique mais forte (0.28 = 28%)
+@export var stretch_amount: float = 0.12     # quanto estica na velocidade vertical máxima
+var _squash: float = 0.0
+var _sprite_base_scale: Vector2 = Vector2.ONE
+
+## VENTO (visual, bem exagerado): riscos de vento atrás da bola quando ela pega velocidade,
+## riscos na vertical quando sobe/cai rápido e, ao cair, uma onda no chão + nuvenzinha de poeira
+@export_group("Vento (visual)")
+@export var wind_enabled: bool = true
+@export var wind_min_speed: float = 250.0    # abaixo desta velocidade não tem vento
+@export var wind_full_speed: float = 800.0   # nesta velocidade o vento fica no máximo
+@export var wind_streaks: int = 7            # quantos riscos de vento no chão
+@export var wind_length: float = 170.0       # comprimento máximo dos riscos (px)
+var _wind: float = 0.0          # 0..1: velocidade no chão
+var _wind_v: float = 0.0        # 0..1: velocidade vertical (subindo/caindo)
+var _wind_vdir: float = -1.0    # +1 subindo, -1 caindo
+var _wind_dir: Vector2 = Vector2.RIGHT
+var _wind_prev: Vector2 = Vector2.ZERO
+var _land_t: float = 99.0       # tempo desde a última batida no chão (a onda dura 0.5 s)
+var _land_power: float = 0.0
+var _puff: CPUParticles2D
 var _trail: Array[Vector2] = []
 var _hover_time: float = 0.0
 var _prev_global: Vector2 = Vector2.ZERO
@@ -117,6 +155,7 @@ var _fx_burst: CPUParticles2D
 
 func _ready() -> void:
 	add_to_group("ball")  # o carrinho (e outras ações) encontram a bola por este grupo
+	_sprite_base_scale = sprite.scale   # tamanho normal (o quique achata/estica a partir dele)
 	_prev_global = global_position
 
 
@@ -146,9 +185,52 @@ func _apply_vertical(delta: float) -> void:
 				if bounces_left > 0:
 					bounces_left -= 1
 				bounced.emit(impact)
+				_on_land(impact, true)   # achata, onda no chão e poeira
 			else:
+				if impact > 80.0:
+					_on_land(impact, false)   # pousou: achatadinha leve
 				vel_z = 0.0
 				bounces_left = -1   # acabou o voo: o limite não vale para o próximo
+
+
+## Bateu no chão: achata o sprite, dispara a onda de vento e solta uma nuvenzinha de poeira
+func _on_land(impact: float, bounced_up: bool) -> void:
+	_squash = clampf(impact / 600.0, 0.25 if bounced_up else 0.0, 1.0 if bounced_up else 0.6)
+	if wind_enabled and impact > 150.0:
+		_land_t = 0.0
+		_land_power = clampf(impact / 600.0, 0.3, 1.0)
+		_ensure_puff()
+		_puff.initial_velocity_max = 90.0 + 170.0 * _land_power
+		_puff.restart()
+
+
+func _ensure_puff() -> void:
+	if _puff != null:
+		return
+	_puff = CPUParticles2D.new()
+	_puff.emitting = false
+	_puff.one_shot = true
+	_puff.explosiveness = 1.0
+	_puff.amount = 18
+	_puff.lifetime = 0.6
+	_puff.local_coords = false
+	_puff.texture = Player._get_dust_texture()
+	_puff.direction = Vector2.UP
+	_puff.spread = 180.0
+	_puff.gravity = Vector2.ZERO
+	_puff.initial_velocity_min = 60.0
+	_puff.initial_velocity_max = 170.0
+	_puff.damping_min = 80.0
+	_puff.damping_max = 120.0
+	_puff.scale_amount_min = 0.8
+	_puff.scale_amount_max = 1.7
+	_puff.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+	_puff.emission_sphere_radius = 6.0
+	var ramp := Gradient.new()
+	ramp.offsets = PackedFloat32Array([0.0, 1.0])
+	ramp.colors = PackedColorArray([Color(0.95, 0.92, 0.8, 0.85), Color(0.95, 0.92, 0.8, 0.0)])
+	_puff.color_ramp = ramp
+	add_child(_puff)
 
 
 ## Rastro: guarda onde a bola esteve nos últimos frames; desligado, ele vai sumindo
@@ -164,11 +246,54 @@ func _update_trail() -> void:
 
 
 func _draw() -> void:
+	# Rastro na cor do time de quem tocou por último (guarda a última cor para ele não piscar)
+	if trail_team_color and last_toucher != null and is_instance_valid(last_toucher):
+		_trail_color = TeamStyle.color_of(last_toucher.team).lightened(0.35)
 	var n: int = _trail.size()
 	for i in range(1, n):
 		var t: float = float(i) / float(n)
 		draw_line(to_local(_trail[i - 1]), to_local(_trail[i]),
-			Color(1.0, 1.0, 1.0, 0.45 * t), 1.0 + 4.0 * t)
+			Color(_trail_color, 0.5 * t), 1.0 + 4.0 * t)
+	if wind_enabled:
+		_draw_wind()
+
+
+## Efeitos de vento da bola (riscos no chão, riscos na vertical e a onda da batida)
+func _draw_wind() -> void:
+	var center := Vector2(0.0, -height - ball_radius)
+	# 1) Velocidade no chão: riscos para trás, de tamanhos e brilhos que tremem a cada frame
+	if _wind > 0.02:
+		var back: Vector2 = -_wind_dir
+		var perp: Vector2 = back.orthogonal()
+		for i in wind_streaks:
+			var lane: float = (float(i) / float(maxi(wind_streaks - 1, 1)) - 0.5) * 2.0   # -1..1
+			var jitter: float = randf_range(0.6, 1.0)
+			var origin: Vector2 = center + perp * lane * ball_radius * 2.2 \
+					+ back * (ball_radius + randf_range(2.0, 14.0))
+			var length: float = wind_length * _wind * jitter * (1.0 - absf(lane) * 0.35)
+			draw_line(origin, origin + back * length, Color(1, 1, 1, 0.6 * _wind * jitter),
+					lerpf(3.5, 1.5, absf(lane)))
+	# 2) Subindo/caindo rápido: riscos na vertical (acima da bola se cai, abaixo se sobe)
+	if _wind_v > 0.02:
+		var vdir := Vector2(0.0, -1.0) if _wind_vdir < 0.0 else Vector2(0.0, 1.0)
+		for i in 5:
+			var lane: float = (float(i) / 4.0 - 0.5) * 2.0
+			var jitter: float = randf_range(0.6, 1.0)
+			var origin: Vector2 = center + Vector2(lane * ball_radius * 1.8, 0.0) \
+					+ vdir * (ball_radius + randf_range(2.0, 12.0))
+			draw_line(origin, origin + vdir * (130.0 * _wind_v * jitter),
+					Color(1, 1, 1, 0.55 * _wind_v * jitter), lerpf(3.0, 1.5, absf(lane)))
+	# 3) Batida no chão: duas ondas que se abrem e somem (achatadas, como a sombra)
+	if _land_t < 0.5:
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.5))
+		for ring in 2:
+			var t: float = (_land_t - 0.08 * ring) / 0.4
+			if t <= 0.0 or t >= 1.0:
+				continue
+			var radius: float = lerpf(12.0, 35.0 + 95.0 * _land_power, ease(t, 0.4))
+			draw_arc(Vector2.ZERO, radius, 0.0, TAU, 40,
+					Color(1, 1, 1, (1.0 - t) * 0.8 * _land_power), lerpf(5.0, 1.0, t))
+		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 ## Colisão círculo x círculo com os jogadores que estão no MESMO nível de altura
@@ -245,6 +370,54 @@ func _update_visuals(delta: float) -> void:
 			vx = (global_position.x - _prev_global.x) / delta  # gira também quando voa pelo tween
 		sprite.rotation += vx * delta * 0.05
 	_prev_global = global_position
+
+	# Parada no chão: inclina bem de leve de um lado para o outro (só visual). O balanço é somado
+	# à rotação do rolamento e subtraído de novo no frame seguinte, então não atrapalha o giro.
+	var resting: bool = sway_enabled and not hovering and held_by == null and height <= 0.5 \
+			and velocity.length() < 12.0
+	_sway_amount = move_toward(_sway_amount, 1.0 if resting else 0.0, delta * 3.0)
+	var rock: float = 0.0
+	if _sway_amount > 0.0:
+		_sway_time += delta
+		rock = deg_to_rad(sway_degrees) * sin(_sway_time * TAU / maxf(sway_period, 0.1)) * _sway_amount
+	sprite.rotation += rock - _sway_rock
+	_sway_rock = rock
+
+	# Quique: achata ao bater no chão e estica no ar. A base do sprite fica colada no chão.
+	if squash_enabled:
+		_squash = move_toward(_squash, 0.0, delta * 5.0)
+		var stretch: float = 0.0
+		if height > 4.0 and not hovering:
+			stretch = clampf(absf(vel_z) / 900.0, 0.0, 1.0) * stretch_amount
+		var sq: float = _squash * squash_amount
+		var fx_scale: float = 1.0 + sq - stretch * 0.5
+		var fy_scale: float = 1.0 - sq + stretch
+		sprite.scale = _sprite_base_scale * Vector2(fx_scale, fy_scale)
+		sprite.position.y += ball_radius * (1.0 - fy_scale)
+
+	# Vento: mede a velocidade no chão (também quando a bola voa pelo tween) e na vertical
+	if wind_enabled:
+		var moved: Vector2 = (global_position - _wind_prev) / maxf(delta, 0.0001)
+		_wind_prev = global_position
+		if moved.length() > 3000.0:
+			moved = Vector2.ZERO   # a bola foi "teletransportada" (reset): não conta como vento
+		var ground_v: Vector2 = velocity if velocity.length() > moved.length() else moved
+		if held_by != null:
+			ground_v = Vector2.ZERO
+		var spd: float = ground_v.length()
+		var w_target: float = clampf((spd - wind_min_speed) / maxf(wind_full_speed - wind_min_speed, 1.0), 0.0, 1.0)
+		_wind = move_toward(_wind, w_target, delta * (6.0 if w_target > _wind else 3.0))
+		if spd > 5.0:
+			_wind_dir = ground_v / spd
+		var vz: float = absf(vel_z) if (height > 4.0 and held_by == null) else 0.0
+		var v_target: float = clampf((vz - 250.0) / 600.0, 0.0, 1.0)
+		_wind_v = move_toward(_wind_v, v_target, delta * (8.0 if v_target > _wind_v else 4.0))
+		if vz > 0.0:
+			_wind_vdir = signf(vel_z)
+		if _land_t < 0.6:
+			_land_t += delta
+		if _wind > 0.01 or _wind_v > 0.01 or _land_t < 0.6:
+			queue_redraw()
 
 	# Profundidade: quem está mais embaixo na tela fica na frente
 	z_index = int(global_position.y)

@@ -47,7 +47,7 @@ func _build_scoreboard() -> void:
 	var panel := PanelContainer.new()
 	panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	panel.offset_top = 58
+	panel.offset_top = 8   # o placar fica no topo; "Rodada N" (ActionMenu) vem logo abaixo
 	panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_theme_stylebox_override("panel", UiStyle.panel_style(UiStyle.PANEL_BORDER, 20.0, 4.0))
 	add_child(panel)
@@ -84,7 +84,7 @@ func _build_event_label() -> void:
 	_event_label = UiStyle.make_label("", 20)
 	_event_label.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_event_label.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_event_label.offset_top = 112
+	_event_label.offset_top = 128
 	_event_label.visible = false
 	add_child(_event_label)
 
@@ -93,7 +93,7 @@ func _build_banner() -> void:
 	_banner = PanelContainer.new()
 	_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	_banner.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	_banner.offset_top = 160
+	_banner.offset_top = 176
 	_banner.mouse_filter = Control.MOUSE_FILTER_IGNORE  # não atrapalha cliques no jogo
 	_banner.visible = false
 	UiStyle.style_panel(_banner)
@@ -354,6 +354,19 @@ func _refresh_scores() -> void:
 		if manager.scores[t] != _last_scores[t]:
 			_last_scores[t] = manager.scores[t]
 			UiStyle.pop(_score_labels[t], 1.4, 0.3)
+			_flash_score(_score_labels[t])
+
+
+## Gol: além do pulinho, o placar brilha e dá uma balançadinha de lado
+func _flash_score(label: Label) -> void:
+	label.pivot_offset = label.get_combined_minimum_size() * 0.5
+	label.modulate = Color(2.0, 2.0, 2.0)
+	var tw := label.create_tween().set_parallel(true)
+	tw.tween_property(label, "modulate", Color.WHITE, 0.6) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	label.rotation = deg_to_rad(6.0)
+	tw.tween_property(label, "rotation", 0.0, 0.6) \
+			.set_trans(Tween.TRANS_ELASTIC).set_ease(Tween.EASE_OUT)
 
 
 # ---------- UTIL ----------

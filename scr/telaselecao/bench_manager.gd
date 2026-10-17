@@ -122,15 +122,15 @@ func can_pause(team: int) -> bool:
 	return manager.pause_window() != &""
 
 
-# ---------- BOTÕES DE PAUSA (canto inferior direito) ----------
+# ---------- BOTÕES DE PAUSA (canto superior direito) ----------
 
 func _build_buttons() -> void:
 	var box := VBoxContainer.new()
-	box.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+	box.set_anchors_preset(Control.PRESET_TOP_RIGHT)
 	box.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	box.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	box.grow_vertical = Control.GROW_DIRECTION_END
 	box.offset_right = -10
-	box.offset_bottom = -10
+	box.offset_top = 10
 	box.add_theme_constant_override("separation", 4)
 	add_child(box)
 	for t in manager.team_count:

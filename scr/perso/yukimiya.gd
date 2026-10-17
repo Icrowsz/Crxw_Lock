@@ -21,6 +21,11 @@ extends Player
 ##      - Bola suspensa perto do Yuki e 2+ inimigos perto dele -> Goal in Time: chute curvo
 ##        para a direita (a curva vira para a direita de quem chuta).
 ##
+## Ao mirar o Gyro Shot, o Sword Screw ou o Goal in Time aparece a TRAJETÓRIA do chute (a bola é simulada
+## como o Ball faz). As curvas "improváveis" do Gyro Shot são sorteadas ANTES da mira e o chute usa exatamente
+## essas curvas, então o desenho mostra o caminho de verdade. Precisa do ball_path_preview.gd.
+## Liga/desliga em show_trajectory.
+##
 ## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
 ## -> renomeie o nó raiz para "Yukimiya".
 ## Animações opcionais (nomes na SpriteFrames): gyro_shot, sword_screw, street_dribble,
@@ -38,6 +43,8 @@ const CD_EMPEROR: StringName = &"cd_emperor"
 
 enum ShotVariant { NONE, GYRO, SWORD }
 enum EmperorVariant { NONE, EMPEROR, GOAL }
+## Qual trajetória está sendo mirada agora (NONE = nenhuma na tela)
+enum Preview { NONE, GYRO, SWORD, GOAL }
 
 const COLOR_ORANGE := Color(1.0, 0.55, 0.1)
 const COLOR_BROWN := Color(0.55, 0.32, 0.12)
@@ -55,6 +62,10 @@ const COLOR_PURPLE := Color(0.65, 0.3, 0.95)
 ## Sword Screw: duração de cada subida/descida (s), velocidade (fração da força do voleio)
 @export var screw_leg_time: float = 0.4
 @export var screw_speed_mult: float = 0.7
+
+@export_group("Trajetória do chute")
+@export var show_trajectory: bool = true              # mostra o caminho da bola enquanto mira
+@export var trajectory_length: float = 650.0          # tamanho máximo do desenho (px)
 
 @export_group("Street Dribble / Predator Blind")
 @export var dribble_runs: int = 2                     # quantas corridas curtas seguidas
@@ -96,6 +107,9 @@ var _emperor_bonus_used: bool = false
 var _threat_seen: Array[Player] = []
 
 var _curve_token: int = 0               # muda a cada efeito de trajetória novo (cancela o anterior)
+
+var _preview: Preview = Preview.NONE
+var _gyro_plan: Array = []              # curvas do Gyro Shot (radianos, com sinal), sorteadas antes da mira
 
 
 func _init() -> void:
@@ -192,13 +206,19 @@ func _ball_follows_my_shot(ball: Ball) -> bool:
 ## Curvas: gira a direção da bola aos poucos, alternando o lado a cada trecho.
 ## first_sign: +1 = começa virando para a direita (sentido horário na tela), -1 = esquerda,
 ## 0 = sorteia (as curvas "improváveis" do Gyro Shot).
+## plan: se dado, usa estas curvas (radianos, com sinal, uma por trecho) em vez de sortear
+## (é como o Gyro Shot usa as curvas que a trajetória já mostrou na mira).
 func _curve_ball(ball: Ball, segments: int, seg_time: float, min_deg: float, max_deg: float,
-		first_sign: float = 0.0) -> void:
+		first_sign: float = 0.0, plan: Array = []) -> void:
 	_curve_token += 1
 	var token: int = _curve_token
 	var side: float = first_sign if first_sign != 0.0 else (1.0 if randf() < 0.5 else -1.0)
+	if not plan.is_empty():
+		segments = plan.size()
 	for i in segments:
 		var total: float = deg_to_rad(randf_range(min_deg, max_deg)) * side
+		if not plan.is_empty():
+			total = float(plan[i])
 		var t: float = 0.0
 		while t < seg_time:
 			await get_tree().physics_frame
@@ -255,6 +275,89 @@ func _screw_ball(ball: Ball, dir: Vector2, extra_bounces: int) -> void:
 		ball.fx_during_hover = false
 
 
+# ---------- TRAJETÓRIA DO CHUTE (pré-visualização) ----------
+
+## Sorteia as curvas do Gyro Shot (alternando o lado a cada trecho, como o _curve_ball fazia)
+func _roll_gyro_plan(blind: bool) -> Array:
+	var segments: int = gyro_segments + (blind_extra_segments if blind else 0)
+	var side: float = 1.0 if randf() < 0.5 else -1.0
+	var plan: Array = []
+	for i in segments:
+		plan.append(deg_to_rad(randf_range(gyro_curve_min_deg, gyro_curve_max_deg)) * side)
+		side = -side
+	return plan
+
+
+## O caminho que a bola vai fazer com a mira atual, conforme o chute que está sendo mirado
+func _trajectory_data() -> Dictionary:
+	var ball: Ball = _get_ball()
+	if ball == null or _preview == Preview.NONE:
+		return {}
+	var dir: Vector2 = aim_direction.normalized()
+	match _preview:
+		Preview.GYRO:
+			# Voleio com as curvas sorteadas (elas continuam depois do chute, mesmo com a bola quicando)
+			var launch: Dictionary = BallPathPreview.launch_for(self, ball, KickType.VOLLEY)
+			return BallPathPreview.simulate(ball, ball.global_position, ball.height,
+				dir * float(launch["speed"]), float(launch["lift"]),
+				_gyro_plan, gyro_segment_time, false, trajectory_length)
+		Preview.GOAL:
+			# Um chute comum com uma curva só, para a direita de quem chuta
+			var kind: KickType = get_kick_type(ball)
+			if kind == KickType.NONE:
+				return {}
+			var launch2: Dictionary = BallPathPreview.launch_for(self, ball, kind)
+			return BallPathPreview.simulate(ball, ball.global_position, ball.height,
+				dir * float(launch2["speed"]), float(launch2["lift"]),
+				[deg_to_rad(goal_curve_deg)], goal_curve_time, false, trajectory_length)
+		Preview.SWORD:
+			return _screw_trajectory(ball, dir)
+	return {}
+
+
+## Sword Screw: reta, com a altura subindo e descendo por trechos (igual ao _screw_ball), e a queda no fim
+func _screw_trajectory(ball: Ball, dir: Vector2) -> Dictionary:
+	var speed: float = kick_force_volley * kick_force_to_speed * screw_speed_mult
+	var blind: bool = _blind_shots_left > 0
+	var waypoints: Array[float] = [Heights.FLYING_HEIGHT, Heights.GROUND_HEIGHT]
+	for i in (blind_extra_bounces if blind else 0):
+		waypoints.append(Heights.SUSPENDED_HEIGHT)
+		waypoints.append(Heights.GROUND_HEIGHT)
+	waypoints.append(Heights.SUSPENDED_HEIGHT)
+
+	var step: float = BallPathPreview.STEP
+	var pos: Vector2 = ball.global_position
+	var h: float = ball.height
+	var points: Array[Vector2] = [pos]
+	var heights: Array[float] = [h]
+	var bounces: Array[Vector2] = []
+	var length: float = 0.0
+	var frame: int = 0
+	for target_h in waypoints:
+		var from_h: float = h
+		var t: float = 0.0
+		while t < screw_leg_time and length < trajectory_length:
+			t += step
+			var k: float = clampf(t / screw_leg_time, 0.0, 1.0)
+			h = lerpf(from_h, target_h, sin(k * PI * 0.5))
+			pos += dir * speed * step
+			length += speed * step
+			frame += 1
+			if frame % 3 == 0:
+				points.append(pos)
+				heights.append(h)
+		if target_h <= Heights.GROUND_HEIGHT:
+			bounces.append(pos)   # toca o chão aqui
+	# No fim a bola é solta (cai e quica) com metade da velocidade
+	if length < trajectory_length:
+		var tail: Dictionary = BallPathPreview.simulate(ball, pos, h, dir * speed * 0.5, 0.0,
+			[], 0.2, false, trajectory_length - length)
+		points.append_array(tail["points"])
+		heights.append_array(tail["heights"])
+		bounces.append_array(tail["bounces"])
+	return {"points": points, "heights": heights, "bounces": bounces}
+
+
 # ---------- GYRO SHOT / SWORD SCREW ----------
 
 func get_shot_variant() -> ShotVariant:
@@ -281,7 +384,13 @@ func _use_shot_skill() -> bool:
 	if m == null or get_shot_variant() == ShotVariant.NONE:
 		return false
 
+	# Trajetória na tela enquanto mira. As curvas do Gyro são sorteadas AGORA e o chute usa as mesmas
+	_preview = Preview.GYRO if get_shot_variant() == ShotVariant.GYRO else Preview.SWORD
+	if _preview == Preview.GYRO:
+		_gyro_plan = _roll_gyro_plan(_blind_shots_left > 0)
 	var aim: Vector2 = await m.aim_for_skill(self, kick_aim_range)
+	_preview = Preview.NONE
+	queue_redraw()
 	if aim == Vector2.ZERO:
 		return false   # cancelou: não gasta a ação
 
@@ -299,7 +408,9 @@ func _use_shot_skill() -> bool:
 		await kick_ball(ball, aim, KickType.VOLLEY, true, chance_gyro, false, fx, &"gyro_shot")
 		start_cooldown(CD_SHOT, shot_cooldown)
 		var segments: int = gyro_segments + (blind_extra_segments if blind else 0)
-		_curve_ball(ball, segments, gyro_segment_time, gyro_curve_min_deg, gyro_curve_max_deg)
+		if _gyro_plan.size() != segments:
+			_gyro_plan = _roll_gyro_plan(blind)   # o bônus mudou durante a mira: sorteia de novo
+		_curve_ball(ball, segments, gyro_segment_time, gyro_curve_min_deg, gyro_curve_max_deg, 0.0, _gyro_plan)
 	else:
 		await kick_ball(ball, aim, KickType.VOLLEY, true, chance_sword, false, fx, &"sword_screw")
 		start_cooldown(CD_SHOT, shot_cooldown)
@@ -424,7 +535,10 @@ func _use_goal_in_time() -> bool:
 	var m: MatchManager = _get_manager()
 	if m == null:
 		return false
+	_preview = Preview.GOAL
 	var aim: Vector2 = await m.aim_for_skill(self, kick_aim_range)
+	_preview = Preview.NONE
+	queue_redraw()
 	if aim == Vector2.ZERO:
 		return false
 	var ball: Ball = _get_ball()
@@ -607,6 +721,7 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 func reset_for_new_match() -> void:
 	super()
 	_curve_token += 1
+	_preview = Preview.NONE
 	_release_held_ball()
 	_blind_shots_left = 0
 	_predator_ready = false
@@ -646,6 +761,12 @@ func _physics_process(delta: float) -> void:
 func _draw() -> void:
 	super()
 	var center := Vector2(0.0, -height)
+
+	# Trajetória do chute enquanto mira (roxa com o Predator Blind ativo, laranja sem ele)
+	if show_trajectory and is_aiming and _preview != Preview.NONE:
+		var data: Dictionary = _trajectory_data()
+		if not data.is_empty():
+			BallPathPreview.draw(self, data, COLOR_PURPLE if _blind_shots_left > 0 else COLOR_ORANGE)
 
 	# Laranja: com a bola segura (Vs Emperor); marrom tracejado enquanto o complemento espera
 	if _emperor_active:

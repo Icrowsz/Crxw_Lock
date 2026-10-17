@@ -47,6 +47,12 @@ extends Player
 ## o último uso em last_ultrasadist (a reação lê isto) e, quando cumpre as condições da reação,
 ## sai brilhando e congelando o chão por onde a bola passa (charged_fx + one_more_time_fx.gd).
 ##
+## Reação Química SACRIFICE (com o Karasu, veja reaction_sacrifice.gd): se o Karasu passou para o
+## Hiori e depois usou o Wings Block, e a Coldest Metavision está ativa no lado do ataque, o Cryo
+## Shot vira o LOUD CROW. Mirando NO KARASU: cutscene, chute mais forte com 90% de chance de gol e a
+## bola ignora a colisão do Karasu e dos inimigos (passa por cima deles), com gelo e vidro quebrando
+## no trajeto (sacrifice_fx.gd). Mirando para outro lado sai o Cryo Shot normal e a reação não é gasta.
+##
 ## Como montar a cena: igual ao Isagi/Rin/Charles — Nova Cena Herdada de player.tscn ->
 ## anexe este script ao nó raiz -> renomeie o nó raiz para "Hiori".
 
@@ -56,6 +62,9 @@ const SKILL_ULTRASADIST: StringName = &"ultrasadist"
 const SKILL_METAVISION: StringName = &"coldest_metavision"
 const SKILL_FROST_GUARD: StringName = &"frost_guard"
 const SKILL_CRYO_SHOT: StringName = &"cryo_shot"
+
+## id da reação Sacrifice (reaction_sacrifice.gd)
+const SACRIFICE_ID: StringName = &"sacrifice"
 
 ## Grupos de recarga (as variantes/complementos de cada habilidade compartilham o mesmo)
 const CD_PASS: StringName = &"cd_pass"
@@ -96,6 +105,16 @@ enum PassVariant { NONE, CHILLING, NO_LOOK }
 @export_range(0.0, 1.0) var cryo_shot_chance: float = 0.30
 @export var cryo_shot_cooldown: int = 2
 
+@export_group("Loud Crow (reação Sacrifice)")
+@export_range(0.0, 1.0) var loud_crow_chance: float = 0.90      # chance de gol (valor base)
+@export var loud_crow_force_mult: float = 1.35                  # mais forte que o Cryo Shot (1.0)
+## Tolerância da mira no Karasu (px): a linha da mira precisa passar a esta distância do corpo dele
+@export var loud_crow_aim_tolerance: float = 36.0
+## Altura do "pulo" visual da bola por cima do Karasu e dos inimigos (px; o nível da bola não muda)
+@export var loud_crow_hop_height: float = 46.0
+## Aura do chute. Vazio = usa o estilo padrão (veja _make_loud_crow_fx)
+@export var loud_crow_fx: KickFX
+
 @export_group("Visual do chute")
 ## Aura + partículas dos chutes/passes de habilidade. Vazio = usa o estilo padrão (veja _make_kick_fx)
 @export var kick_fx: KickFX
@@ -122,6 +141,10 @@ var _coldest_run_bonus_pending: bool = false
 ## {"landing": local escolhido, "touches": toques na bola logo depois do passe}
 var last_ultrasadist: Dictionary = {}
 
+## Mirando o Loud Crow: o desenho destaca o Karasu e mostra se a mira está nele
+var _aiming_loud_crow: bool = false
+var _loud_crow_partner: Player = null
+
 
 func _init() -> void:
 	character_id = "hiori"   # o menu de formação usa isto para saber quem é quem
@@ -134,6 +157,8 @@ func _ready() -> void:
 		kick_fx = _make_kick_fx()
 	if charged_fx == null:
 		charged_fx = _make_charged_fx()
+	if loud_crow_fx == null:
+		loud_crow_fx = _make_loud_crow_fx()
 	_hook_manager.call_deferred()
 
 
@@ -173,6 +198,18 @@ func _make_charged_fx() -> KickFX:
 	fx.scale_max = 0.4
 	fx.burst_amount = 36
 	fx.burst_speed = 300.0
+	return fx
+
+
+## Loud Crow: gelo largo e brilhante, com lascas roxas (o corvo do Karasu)
+func _make_loud_crow_fx() -> KickFX:
+	var fx := _make_charged_fx()
+	fx.color = Color(0.62, 0.86, 1.0, 1.0)
+	fx.trail_width = 30.0
+	fx.particle_color = Color(0.82, 0.68, 1.0, 1.0)
+	fx.amount = 40
+	fx.lifetime = 0.7
+	fx.burst_amount = 30
 	return fx
 
 
@@ -439,6 +476,7 @@ func _use_frost_guard() -> bool:
 
 ## Cryo Shot: chute comum sem QTE, Hiori e bola no chão ou Suspensos (qualquer combinação
 ## dessas duas, nunca Voando), lado do ataque.
+## Reação Sacrifice (Loud Crow): se mirar no Karasu, a cutscene roda e o chute sai especial.
 func _use_cryo_shot() -> bool:
 	var m: MatchManager = _get_manager()
 	var ball: Ball = _get_ball()
@@ -449,18 +487,149 @@ func _use_cryo_shot() -> bool:
 	if kind == KickType.NONE or kind == KickType.FLYING:
 		return false
 
+	# Com a Sacrifice de pé, a mira destaca o Karasu
+	var star: ChemicalReaction = _find_sacrifice()
+	_loud_crow_partner = star.find_partner(self) if star != null else null
+	_aiming_loud_crow = _loud_crow_partner != null
+	queue_redraw()
 	var aim: Vector2 = await m.aim_for_skill(self, kick_aim_range)
+	_aiming_loud_crow = false
+	queue_redraw()
 	if aim == Vector2.ZERO:
+		_loud_crow_partner = null
 		return false   # cancelou: não gasta a ação
 
 	kind = get_kick_type(ball)   # a situação pode ter mudado durante a mira
 	if kind == KickType.NONE or kind == KickType.FLYING:
+		_loud_crow_partner = null
 		return false
 
-	# qte_success = true direto: Cryo Shot nunca tem QTE (nem errada, nem o knock_down do erro)
-	await kick_ball(ball, aim, kind, true, cryo_shot_chance, false, kick_fx, &"cryo_shot")
+	# Reação Química (Sacrifice): só vale se a mira passa pelo Karasu. A partida congela, roda a
+	# cutscene e SÓ DEPOIS DO DIÁLOGO o chute acontece.
+	var chance: float = cryo_shot_chance
+	var anim: StringName = &"cryo_shot"
+	var fx: KickFX = kick_fx
+	var on_kick: Callable = Callable()
+	var sacrifice: ChemicalReaction = _find_sacrifice() if _loud_crow_partner != null else null
+	var karasu: Player = sacrifice.find_partner(self) if sacrifice != null else null
+	_loud_crow_partner = null
+	if karasu != null and _aim_hits_partner(aim, karasu, ball):
+		var rm: ReactionManager = ReactionManager.get_for(self)
+		if rm != null:
+			await rm.play(sacrifice, self, karasu)
+			if m.match_over:
+				return false
+			chance = loud_crow_chance
+			anim = _loud_crow_anim()
+			fx = loud_crow_fx
+			next_kick_force_mult *= loud_crow_force_mult
+			on_kick = _launch_loud_crow.bind(karasu)
+
+	# qte_success = true direto: Cryo Shot / Loud Crow nunca têm QTE (nem errada, nem o knock_down do erro)
+	await kick_ball(ball, aim, kind, true, chance, false, fx, anim, on_kick)
 	start_cooldown(CD_CRYO_SHOT, cryo_shot_cooldown)
 	return true
+
+
+# ---------- LOUD CROW (reação Sacrifice) ----------
+
+## Reação Sacrifice que ele pode usar agora. null = nenhuma.
+func _find_sacrifice() -> ChemicalReaction:
+	if not is_inside_tree():
+		return null
+	var rm: ReactionManager = ReactionManager.get_for(self)
+	if rm == null:
+		return null
+	for reaction in rm.reactions:
+		if reaction.id != SACRIFICE_ID or reaction.trigger_id != character_id \
+				or not rm.is_ready(reaction, team):
+			continue
+		if reaction.find_partner(self) != null:
+			return reaction
+	return null
+
+
+## A linha da mira (saindo da bola) passa pelo corpo do Karasu, à frente do chute?
+func _aim_hits_partner(aim: Vector2, partner: Player, ball: Ball) -> bool:
+	if partner == null or not is_instance_valid(partner):
+		return false
+	var dir: Vector2 = aim.normalized()
+	var to_partner: Vector2 = partner.global_position - ball.global_position
+	if to_partner.dot(dir) <= 0.0:
+		return false
+	return absf(to_partner.cross(dir)) <= partner.body_radius + loud_crow_aim_tolerance
+
+
+## Animação do Loud Crow: usa a "loud_crow" se o personagem tiver; senão, a do Cryo Shot
+func _loud_crow_anim() -> StringName:
+	if _has_art and animated_sprite.sprite_frames.has_animation(&"loud_crow"):
+		return &"loud_crow"
+	return &"cryo_shot"
+
+
+## Chamado pelo kick_ball() logo depois que a bola sai (on_kick)
+func _launch_loud_crow(ball: Ball, dir: Vector2, _speed: float, karasu: Player) -> void:
+	SacrificeFX.loud_crow_burst(self, global_position + Vector2(0.0, -height), ball, karasu)
+	_ghost_flight(ball, dir)   # roda em segundo plano
+
+
+## Enquanto o chute dura, a bola NÃO colide com ninguém (Karasu, inimigos...) e, até passar dos
+## obstáculos, faz um pulo visual por cima deles. Acaba quando o chute acaba (o goleiro sorteou, ela
+## parou, foi reposta, pairou ou a partida terminou).
+func _ghost_flight(ball: Ball, dir: Vector2) -> void:
+	var m: MatchManager = _get_manager()
+	var touches: int = ball.interaction_count   # o chute do Hiori já foi contado
+	var origin: Vector2 = ball.global_position
+	var base_height: float = ball.height
+	var span: float = _ghost_span(origin, dir)
+	var state: Dictionary = {"abort": false}
+	var on_reset: Callable = func() -> void: state["abort"] = true
+	ball.was_reset.connect(on_reset, CONNECT_ONE_SHOT)
+	ball.collisions_paused = true
+
+	var hopping: bool = true
+	var elapsed: float = 0.0
+	while true:
+		await get_tree().physics_frame
+		if not is_instance_valid(ball) or state["abort"] or ball.hovering or ball.is_held() \
+				or ball.interaction_count != touches or (m != null and m.match_over):
+			break
+		var delta: float = get_physics_process_delta_time()
+		elapsed += delta
+		if elapsed > 5.0 or (elapsed > 0.25 and not ball.has_pending_shot()):
+			break
+		if hopping:
+			var u: float = clampf(origin.distance_to(ball.global_position) / span, 0.0, 1.0)
+			ball.height = base_height + loud_crow_hop_height * sin(PI * u)
+			ball.vel_z = ball.gravity * delta   # cancela a gravidade deste frame: a altura é conduzida aqui
+			if u >= 1.0:
+				hopping = false
+				ball.height = base_height
+				ball.vel_z = 0.0
+
+	if not is_instance_valid(ball):
+		return
+	if ball.was_reset.is_connected(on_reset):
+		ball.was_reset.disconnect(on_reset)
+	ball.collisions_paused = false
+	if hopping:
+		ball.vel_z = 0.0   # solta: a gravidade assume
+
+
+## Até onde (px, contados do chute) a bola precisa "pular": o obstáculo mais distante (o Karasu ou
+## um inimigo) perto da linha do chute, mais uma folga. Entre 260 e 480 px.
+func _ghost_span(origin: Vector2, dir: Vector2) -> float:
+	var far: float = 0.0
+	for p: Player in get_tree().get_nodes_in_group("players"):
+		if p == self or p.is_down:
+			continue
+		if p.team == team and not (p is Karasu):
+			continue
+		var off: Vector2 = p.global_position - origin
+		var along: float = off.dot(dir)
+		if along > 0.0 and absf(off.cross(dir)) <= 140.0:
+			far = maxf(far, along)
+	return clampf(far + 90.0, 260.0, 480.0)
 
 
 # ---------- SISTEMA DE HABILIDADES (menu) ----------
@@ -478,7 +647,8 @@ func get_skills() -> Array[Dictionary]:
 		if _is_on_defense_side():
 			list.append({"id": SKILL_FROST_GUARD, "name": skill_label("Frost Guard", CD_FROST_GUARD)})
 		else:
-			list.append({"id": SKILL_CRYO_SHOT, "name": skill_label("Cryo Shot", CD_CRYO_SHOT)})
+			var cryo_name: String = "Loud Crow" if _find_sacrifice() != null else "Cryo Shot"
+			list.append({"id": SKILL_CRYO_SHOT, "name": skill_label(cryo_name, CD_CRYO_SHOT)})
 	return list
 
 
@@ -573,9 +743,15 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 			title = "Frost Guard"
 			text = "Salta até a bola no ar e a rebate para a direção contrária.\nRecarga: %d rodadas." % frost_guard_cooldown
 		SKILL_CRYO_SHOT:
-			title = "Cryo Shot"
-			text = "Chute comum, sem QTE. %d%% de chance de gol.\nRecarga: %d rodadas." % [
-				_pct(cryo_shot_chance), cryo_shot_cooldown]
+			var star: ChemicalReaction = _find_sacrifice()
+			if star != null:
+				title = "Loud Crow"
+				text = "Reação Química Sacrifice com o Karasu: MIRE NO KARASU e o chute sai mais forte, com %d%% de chance de gol, e a bola passa por cima dele e dos inimigos. Mirando para outro lado, sai o Cryo Shot (%d%%).\nA reação recarrega em %d rodadas. Recarga: %d rodadas." % [
+					_pct(loud_crow_chance), _pct(cryo_shot_chance), star.cooldown_rounds, cryo_shot_cooldown]
+			else:
+				title = "Cryo Shot"
+				text = "Chute comum, sem QTE. %d%% de chance de gol.\nRecarga: %d rodadas." % [
+					_pct(cryo_shot_chance), cryo_shot_cooldown]
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D
@@ -591,6 +767,8 @@ func reset_for_new_match() -> void:
 	_assist_target = null
 	_coldest_run_bonus_pending = false
 	last_ultrasadist = {}
+	_aiming_loud_crow = false
+	_loud_crow_partner = null
 	queue_redraw()
 
 
@@ -609,3 +787,22 @@ func _draw() -> void:
 	# Anel branco-gelo enquanto o Ultrasadist está esperando ser usado
 	if _glacial_ready:
 		draw_arc(center, placeholder_radius + 14.0, 0.0, TAU, 20, Color(0.9, 0.98, 1.0, 0.95), 2.0)
+
+	# Loud Crow: destaca o Karasu enquanto mira (mais forte quando a mira passa por ele)
+	if is_aiming and _aiming_loud_crow:
+		_draw_loud_crow_hint()
+
+
+## Anel roxo em volta do Karasu: fraco = "mire nele"; forte e duplo = a mira passa por ele
+func _draw_loud_crow_hint() -> void:
+	var p: Player = _loud_crow_partner
+	var ball: Ball = _get_ball()
+	if p == null or not is_instance_valid(p) or ball == null:
+		return
+	var hit: bool = _aim_hits_partner(aim_direction, p, ball)
+	var c: Vector2 = to_local(p.global_position) + Vector2(0.0, -p.height)
+	var pulse: float = sin(Time.get_ticks_msec() / 1000.0 * 8.0) * 2.0
+	var col := Color(0.75, 0.5, 1.0, 0.95 if hit else 0.45)
+	draw_arc(c, p.body_radius + 16.0 + pulse, 0.0, TAU, 32, col, 4.0 if hit else 2.0)
+	if hit:
+		draw_arc(c, p.body_radius + 28.0 - pulse, 0.0, TAU, 32, Color(col, 0.55), 2.0)

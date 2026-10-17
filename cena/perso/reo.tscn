@@ -5,7 +5,7 @@
 [ext_resource type="Texture2D" uid="uid://bl1ryn270lxbj" path="res://img/mvps/reo.jpg" id="3_s0rjy"]
 [ext_resource type="Texture2D" uid="uid://db3veyhgvlpiy" path="res://img/testes/reo.png" id="4_7l457"]
 
-[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_2ayge")]
+[node name="Player" unique_id=1241627939 instance=ExtResource("1_2ayge")]
 script = ExtResource("2_qmuls")
 copy_range = 900.0
 copy_rounds = 4
@@ -20,6 +20,7 @@ duel_dash_time = 0.3
 header_range = 250.0
 header_jump_time = 0.3
 chance_header = -1.0
+dream_cooldown = 3
 dream_range = 500.0
 dream_curve = 0.25
 dream_bend_sign = 1.0
@@ -38,7 +39,6 @@ face_offset = 46.0
 skill_icons = {}
 display_name = "Reo Mikage"
 mvp_image = ExtResource("3_s0rjy")
-visual_root = NodePath("SprPlayer")
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

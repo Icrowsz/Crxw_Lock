@@ -11,7 +11,8 @@ extends Player
 ##      próximas 3 rodadas, as habilidades dele ficam melhores. A bola solta no fim do
 ##      próximo turno do adversário (ou quando alguém da equipe dele mexer nela).
 ## 2. Borderline (ação de habilidade, recarga de 2 rodadas, compartilhada com a variante):
-##      passe alto (bola no chão ou suspensa, Kiyora no chão) que sobe a Voando no caminho.
+##      passe alto (bola no chão ou suspensa, Kiyora no chão) que sobe a Voando no caminho e
+##      CHEGA NA MESMA RODADA, Suspensa no aliado.
 ##      O Kiyora escolhe DOIS aliados e a bola vai para o que tiver MENOS gols (empate = sorteio).
 ##    Even the Gods (com o Backspin ativo): igual, mas o Kiyora também escolhe a parte do campo
 ##      onde a bola cai (perto do aliado que vai receber).
@@ -22,6 +23,11 @@ extends Player
 ##        que a bola sobe a Voando e chega Suspensa
 ##      - Six-Step (bola longe): carrinho mais longo; se encontrar a bola, vira um passe rasteiro
 ##        simples para o aliado mais próximo
+##
+## Reação Química SUPERSTAR (com o Kaiser, veja reaction_superstar.gd): se a Kiyora é o Servo Garçom
+## do Empire do Kaiser e usa o Borderline / Even the Gods com ele entre os dois escolhidos, ela cria
+## uma BALANÇA DOURADA da justiça (superstar_fx.gd) que pende para quem recebe a bola. Se a bola
+## foi para o Kaiser, o Magnus dele vira o Be Loved.
 ##
 ## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
 ## -> renomeie o nó raiz para "Kiyora".
@@ -56,6 +62,8 @@ const TEAL_LIGHT := Color(0.28, 0.68, 0.64)
 
 @export_group("Borderline / Even the Gods")
 @export var border_cooldown: int = 2               # recarga, igual para as duas variantes
+## Reação Superstar: a balança dourada fica no chão AO LADO da Kiyora (false = em cima dela)
+@export var scale_beside: bool = true
 ## Even the Gods: a bola cai no máximo a esta distância do aliado que vai receber
 @export var gods_land_radius: float = 500.0
 
@@ -80,6 +88,10 @@ var _trap_touches: int = 0          # qualquer toque depois disto solta a bola
 var _trap_ring: TrapRing = null
 ## Muda a cada Dance Battle / partida nova: uma espera antiga percebe e para
 var _dance_token: int = 0
+## Último passe do Borderline / Even the Gods que foi para o Kaiser que a tem como Servo Garçom:
+## {"target": Kaiser, "touches": toques da bola logo depois do passe, "gods": bool}.
+## A reação Superstar lê isto (vazio = não há passe válido).
+var last_border_pass: Dictionary = {}
 ## Six-Step em andamento
 var _six_step_active: bool = false
 var _six_step_ball_found: bool = false
@@ -349,20 +361,71 @@ func _use_border() -> bool:
 		chosen.append(second)
 
 	var receiver: Player = _fewest_goals(m, chosen)
+	# Empire do Kaiser: se ele é um dos dois escolhidos, a balança da justiça pesa quem recebe
+	var master: Kaiser = get_empire_master()
+	var weigh: bool = master != null and master in chosen
+	var touches_before: int = ball.interaction_count
+	# Com a balança, o passe também ganha os efeitos dourados (fios até os aliados, rastro na bola...)
+	var pass_fx_players: Array[Player] = []
+	if weigh:
+		pass_fx_players = chosen
 
 	if not gods:
 		# Borderline: passe alto de habilidade até quem tem menos gols
-		await m.run_skill_high_pass(self, receiver, ball, high_range, &"borderline", kick_fx)
+		if weigh:
+			_show_justice_scale(m, chosen, receiver, master)
+		await _same_round_pass(m, ball, receiver, receiver.global_position, &"borderline", pass_fx_players)
 	else:
 		# Even the Gods: ele também escolhe onde a bola cai (perto de quem vai receber)
 		var point: Vector2 = await m.pick_point_for_skill(self, high_range)
 		if point == Vector2.INF or m.match_over:
 			return false
 		var offset: Vector2 = (point - receiver.global_position).limit_length(gods_land_radius)
-		await _gods_pass(m, ball, receiver.global_position + offset)
+		if weigh:
+			_show_justice_scale(m, chosen, receiver, master)
+		await _same_round_pass(m, ball, receiver, receiver.global_position + offset, &"even_the_gods",
+			pass_fx_players)
+
+	# Guarda o passe para a reação Superstar: só vale se o passe saiu de verdade (a bola foi tocada
+	# por ela agora) e quem recebe é o Kaiser do Empire
+	last_border_pass = {}
+	if master != null and receiver == master and ball.interaction_count > touches_before \
+			and ball.last_toucher == self:
+		last_border_pass = {"target": master, "touches": ball.interaction_count, "gods": gods}
 
 	start_cooldown(CD_BORDER, border_cooldown)
 	return true
+
+
+## O Kaiser do time que tem esta Kiyora como Servo Garçom do Empire (null = ela não está sob o efeito)
+func get_empire_master() -> Kaiser:
+	var m: MatchManager = _get_manager()
+	if m == null:
+		return null
+	for p: Player in m.get_team_players(team):
+		var kaiser := p as Kaiser
+		if kaiser != null and kaiser.is_waiter(self):
+			return kaiser
+	return null
+
+
+## Balança dourada da Superstar: cada prato é um dos dois aliados escolhidos (nome + gols) e o
+## prato de quem recebe a bola desce. Se quem recebe é o Kaiser, a Superstar está de pé.
+func _show_justice_scale(m: MatchManager, chosen: Array[Player], receiver: Player, master: Kaiser) -> void:
+	var left: Player = chosen[0]
+	var right: Player = chosen[1] if chosen.size() > 1 else null
+	var right_info: Dictionary = _scale_info(m, right) if right != null else {}
+	# Ao lado dela, do lado OPOSTO ao passe (para não cobrir a bola indo embora)
+	var side: float = 0.0
+	if scale_beside:
+		var dx: float = receiver.global_position.x - global_position.x
+		side = -signf(dx) if absf(dx) > 8.0 else -(1.0 if facing >= 0.0 else -1.0)
+	SuperstarFX.attach_scale(self, _scale_info(m, left), right_info, receiver == left,
+		receiver == master, 3.4, side)
+
+
+func _scale_info(m: MatchManager, p: Player) -> Dictionary:
+	return {"name": p.get_display_name(), "goals": int(m._stats_for(p)["goals"])}
 
 
 ## Quem tem menos gols entre os escolhidos (empate = sorteio entre os empatados)
@@ -379,19 +442,33 @@ func _fewest_goals(m: MatchManager, players: Array[Player]) -> Player:
 	return best.pick_random()
 
 
-## Passe alto que pousa num PONTO do campo (mesmo fluxo do passe alto comum): a bola sobe a
-## Voando no meio do caminho e, quando o turno do time volta, desce até o ponto, Suspensa.
-func _gods_pass(m: MatchManager, ball: Ball, point: Vector2) -> void:
+## Passe alto que CHEGA NA MESMA RODADA (Borderline e Even the Gods): a bola sobe a Voando no
+## meio do caminho e já desce até o ponto de chegada, Suspensa, sem esperar o turno voltar.
+## Depois fica pairando ali (igual ao Puppets): se ninguém tocar até o fim do turno, ela cai.
+func _same_round_pass(m: MatchManager, ball: Ball, receiver: Player, point: Vector2,
+		anim: StringName, fx_players: Array[Player] = []) -> void:
 	face_towards(point - global_position)
-	if not await play_action(&"even_the_gods", ANIM_PASS_HIGH):
+	if not await play_action(anim, ANIM_PASS_HIGH):
 		return   # ação cancelada (ex: a partida reiniciou)
+	m.clear_pending_pass()
 	ball.register_touch(self)   # o passe alto não usa kick(), então registra o toque aqui
-	var midpoint: Vector2 = (ball.global_position + point) * 0.5
-	var tween: Tween = ball.hover_to(midpoint, Heights.FLYING_HEIGHT, m.high_pass_flight_time)
-	ball.play_fx(kick_fx)
-	await tween.finished
-	m.begin_point_pass(team, point)
 	m._spawn_pass_marker(team, point, ball)   # a marca no chão mostra onde a bola vai cair
+	var midpoint: Vector2 = (ball.global_position + point) * 0.5
+	var up: Tween = ball.hover_to(midpoint, Heights.FLYING_HEIGHT, m.high_pass_flight_time)
+	ball.play_fx(kick_fx)
+	if not fx_players.is_empty():
+		SuperstarFX.attach_pass(self, ball, fx_players, receiver)   # efeitos dourados do passe
+	await up.finished
+	if m.match_over or not is_instance_valid(ball) or not ball.hovering:
+		m._remove_pass_marker()
+		return   # alguém mexeu na bola no meio do caminho
+	var down: Tween = ball.hover_to(point, Heights.SUSPENDED_HEIGHT, m.high_pass_arrive_time)
+	await down.finished
+	m._remove_pass_marker()
+	if not is_instance_valid(ball) or not ball.hovering:
+		return
+	m.register_skill_pass(team, receiver)   # Suspensa no ponto até alguém tocar ou o turno acabar
+	m.pass_completed.emit(self, receiver)
 
 
 # ---------- WINDMILL / TWISTER / SIX-STEP ----------
@@ -550,10 +627,10 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 		SKILL_BORDER:
 			if get_pass_skill() == PassSkill.GODS:
 				title = "Even the Gods"
-				text = "Passe alto entre dois aliados: a bola vai para quem tiver menos gols, e você escolhe onde ela cai."
+				text = "Passe alto entre dois aliados que chega na mesma rodada: a bola vai para quem tiver menos gols, e você escolhe onde ela cai."
 			else:
 				title = "Borderline"
-				text = "Passe alto entre dois aliados: a bola vai para quem tiver menos gols."
+				text = "Passe alto entre dois aliados que chega na mesma rodada: a bola vai para quem tiver menos gols."
 			text += "\nRecarga: %d rodadas." % border_cooldown
 		SKILL_WIND:
 			title = _wind_skill_name()
@@ -580,6 +657,7 @@ func reset_for_new_match() -> void:
 	_dance_token += 1   # uma espera de Dance Battle em andamento percebe e para
 	_end_trap(true)
 	_backspin_until_round = -1
+	last_border_pass = {}
 	if _six_step_active:
 		_six_step_active = false
 	queue_redraw()

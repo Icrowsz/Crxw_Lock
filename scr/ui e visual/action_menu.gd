@@ -4,13 +4,20 @@ extends CanvasLayer
 ## Visual compartilhado (cores neutras, contorno, painéis, botões) vem do UiStyle.
 
 @export var manager: MatchManager
+## true = lista de habilidades na direita da tela; false = na esquerda (no meio da altura)
+@export var skills_on_right: bool = true
+## Distância do painel "Rodada N" até o topo da tela (ele fica logo abaixo do placar)
+@export var turn_top_offset: float = 78.0
 
 var turn_label: Label
 var info_label: Label
 var general_buttons: Dictionary = {}  # MatchManager.GeneralAction -> Button
-var skill_box: HBoxContainer          # botões de habilidade (mudam conforme quem está agindo)
+var skill_box: VBoxContainer          # botões de habilidade (mudam conforme quem está agindo)
 var _skill_buttons: Array[Button] = []
 var _skill_ids: Array[StringName] = []
+var _skill_chips: Array[Label] = []   # "recarga N" de cada botão de habilidade
+var _skill_bars: Array[Control] = []  # barrinha de progresso da recarga de cada botão
+var _skill_block: PanelContainer      # bloco da lista de habilidades
 var end_turn_button: Button
 var pass_box: HBoxContainer
 var pass_variant_buttons: Dictionary = {}  # MatchManager.PassVariant -> Button
@@ -19,6 +26,17 @@ var _turn_style: StyleBoxFlat   # a borda do painel do topo leva a cor do time d
 var _last_team: int = -1
 var _last_team_color: Color = Color.TRANSPARENT
 var _color_tween: Tween
+
+# Troca de turno: vinheta suave na cor do time + painéis balançando em cascata
+const VIGNETTE_REST: float = 0.10    # brilho da vinheta no dia a dia (dá para perceber)
+const VIGNETTE_PEAK: float = 1.0     # brilho no instante da troca de turno
+var _vignette: TextureRect
+var _vignette_tween: Tween
+var _turn_panel: PanelContainer
+var _actions_block: PanelContainer
+# "Habilidade pronta": recarga restante vista da última vez ("idJogador:idHabilidade" -> int)
+var _recharge_seen: Dictionary = {}
+var _recharge_total: Dictionary = {}   # maior recarga vista de cada habilidade (a barrinha usa)
 
 ## Pasta com as imagens das ações gerais (run.png, jump.png, slide.png, shoot.png, pass.png,
 ## stand_up.png). Imagem que não existir é só pulada: o balão aparece sem figura.
@@ -51,38 +69,119 @@ func _ready() -> void:
 	_refresh()
 
 
+## Vinheta: escurece/colore só as bordas da tela. A cor vem do modulate (cor do time da vez).
+func _build_vignette() -> void:
+	var grad := Gradient.new()
+	# Só nas PONTAS (cantos) da tela: o meio das bordas fica limpo
+	grad.offsets = PackedFloat32Array([0.0, 0.74, 1.0])
+	grad.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 0), Color(1, 1, 1, 0.85)])
+	var tex := GradientTexture2D.new()
+	tex.gradient = grad
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.0, 1.0)   # raio até o canto: o gradiente só "pega" nos cantos
+	tex.width = 256
+	tex.height = 256
+	_vignette = TextureRect.new()
+	_vignette.texture = tex
+	_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_vignette.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	_vignette.stretch_mode = TextureRect.STRETCH_SCALE
+	_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_vignette.modulate = Color(1, 1, 1, 0)
+	add_child(_vignette)   # primeiro filho: fica por baixo de todos os painéis
+
+
+## Efeito da troca de turno: a vinheta acende na cor do time e some devagar; os painéis dão
+## um balanço em cascata (a gelatina do UiStyle)
+func _play_turn_change(color: Color) -> void:
+	_vignette.modulate = Color(color.r, color.g, color.b, _vignette.modulate.a)
+	if _vignette_tween and _vignette_tween.is_valid():
+		_vignette_tween.kill()
+	_vignette_tween = create_tween()
+	_vignette_tween.tween_property(_vignette, "modulate:a", VIGNETTE_PEAK, 0.12)
+	_vignette_tween.tween_property(_vignette, "modulate:a", VIGNETTE_REST, 0.9) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+	UiStyle.jelly_chain([_turn_panel, _actions_block, _skill_block], 1.05, 0.06)
+
+
+## Barrinha fina no pé do botão de habilidade: enche conforme a recarga passa
+func _make_recharge_bar(b: Button) -> Control:
+	var bar := Control.new()
+	bar.set_anchors_preset(Control.PRESET_BOTTOM_WIDE)
+	bar.offset_left = 24
+	bar.offset_right = -24
+	bar.offset_top = -11
+	bar.offset_bottom = -6
+	bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	bar.visible = false
+	for fill in [false, true]:
+		var panel := Panel.new()
+		panel.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+		panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		var sb := StyleBoxFlat.new()
+		sb.set_corner_radius_all(3)
+		sb.bg_color = UiStyle.ACCENT_COLOR if fill else Color(1, 1, 1, 0.16)
+		panel.add_theme_stylebox_override("panel", sb)
+		bar.add_child(panel)
+	b.add_child(bar)
+	return bar
+
+
+## fraction 0..1 = quanto da recarga já passou; visible_bar = false esconde a barrinha
+func _set_recharge_bar(bar: Control, fraction: float, visible_bar: bool) -> void:
+	bar.visible = visible_bar
+	if visible_bar:
+		(bar.get_child(1) as Control).anchor_right = clampf(fraction, 0.0, 1.0)
+
+
+## Habilidade que acabou de ficar disponível: brilho dourado único + gelatina
+func _flash_ready(b: Button) -> void:
+	UiStyle.jelly(b, 1.12, 0.5)
+	b.modulate = Color(1.9, 1.7, 1.0)
+	var tw := b.create_tween()
+	tw.tween_property(b, "modulate", Color.WHITE, 0.7) \
+			.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_OUT)
+
+
 func _build_ui() -> void:
+	_build_vignette()
 	# Topo: rodada e time da vez. O texto é neutro; quem indica o time é a borda do painel.
 	var turn_panel := PanelContainer.new()
 	turn_panel.set_anchors_preset(Control.PRESET_CENTER_TOP)
 	turn_panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	turn_panel.offset_top = 8
+	turn_panel.offset_top = turn_top_offset
 	turn_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_turn_style = UiStyle.style_panel(turn_panel)
 	_turn_style.set_border_width_all(3)
 	add_child(turn_panel)
+	_turn_panel = turn_panel
 
-	turn_label = UiStyle.make_label("", 24)
+	turn_label = UiStyle.make_label("", 20)
 	turn_panel.add_child(turn_label)
 
-	# Rodapé: informações e botões
-	var panel := PanelContainer.new()
-	panel.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	panel.offset_bottom = -16
-	UiStyle.style_panel(panel)
-	add_child(panel)
+	# Bloco das AÇÕES (embaixo, à esquerda): informações + botões cilíndricos em linha
+	var actions_block := PanelContainer.new()
+	actions_block.set_anchors_preset(Control.PRESET_BOTTOM_LEFT)
+	actions_block.grow_horizontal = Control.GROW_DIRECTION_END
+	actions_block.grow_vertical = Control.GROW_DIRECTION_BEGIN
+	actions_block.offset_left = 16
+	actions_block.offset_bottom = -16
+	actions_block.add_theme_stylebox_override("panel", _block_style())
+	add_child(actions_block)
+	_actions_block = actions_block
 
 	var vbox := VBoxContainer.new()
-	vbox.add_theme_constant_override("separation", 8)
-	panel.add_child(vbox)
+	vbox.add_theme_constant_override("separation", 10)
+	actions_block.add_child(vbox)
 
 	info_label = UiStyle.make_label("", 16)
+	info_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	info_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	info_label.custom_minimum_size = Vector2(620, 0)
 	vbox.add_child(info_label)
 
 	var hbox := HBoxContainer.new()
-	hbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	hbox.add_theme_constant_override("separation", 8)
 	vbox.add_child(hbox)
 
@@ -90,24 +189,19 @@ func _build_ui() -> void:
 		var b := Button.new()
 		b.text = MatchManager.GENERAL_ACTION_NAMES[action]
 		b.pressed.connect(manager.do_general_action.bind(action))
-		UiStyle.style_button(b)
+		_pill(b, Color(0.30, 0.34, 0.45))
 		hbox.add_child(b)
 		general_buttons[action] = b
 		_hook_hover(b, &"general", action)
 
-	skill_box = HBoxContainer.new()  # os botões dourados (ações especiais) são criados em _update_skill_buttons
-	skill_box.add_theme_constant_override("separation", 8)
-	hbox.add_child(skill_box)
-
 	end_turn_button = Button.new()
 	end_turn_button.text = "Encerrar turno"
 	end_turn_button.pressed.connect(manager.request_end_turn)
-	UiStyle.style_button(end_turn_button, Color(0.75, 0.30, 0.30))  # avermelhado: passa a vez
+	_pill(end_turn_button, Color(0.75, 0.30, 0.30))  # avermelhado: passa a vez
 	hbox.add_child(end_turn_button)
 
 	# Linha extra do Passe: variantes + cancelar (só aparece durante a escolha)
 	pass_box = HBoxContainer.new()
-	pass_box.alignment = BoxContainer.ALIGNMENT_CENTER
 	pass_box.add_theme_constant_override("separation", 8)
 	pass_box.visible = false
 	vbox.add_child(pass_box)
@@ -116,24 +210,84 @@ func _build_ui() -> void:
 		var vb := Button.new()
 		vb.text = MatchManager.PASS_VARIANT_NAMES[variant]
 		vb.pressed.connect(manager.choose_pass_variant.bind(variant))
-		UiStyle.style_button(vb)
+		_pill(vb, Color(0.30, 0.34, 0.45))
 		pass_box.add_child(vb)
 		pass_variant_buttons[variant] = vb
 
 	var cancel_button := Button.new()
 	cancel_button.text = "Cancelar passe"
 	cancel_button.pressed.connect(manager.cancel_pass)
-	UiStyle.style_button(cancel_button, Color(0.75, 0.30, 0.30))
+	_pill(cancel_button, Color(0.75, 0.30, 0.30))
 	pass_box.add_child(cancel_button)
 
+	# Bloco das HABILIDADES (lista vertical, cada uma com a sua recarga): à direita ou à esquerda
+	_skill_block = PanelContainer.new()
+	if skills_on_right:
+		_skill_block.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		_skill_block.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		_skill_block.grow_vertical = Control.GROW_DIRECTION_BEGIN
+		_skill_block.offset_right = -16
+		_skill_block.offset_bottom = -16
+	else:
+		_skill_block.set_anchors_preset(Control.PRESET_CENTER_LEFT)
+		_skill_block.grow_horizontal = Control.GROW_DIRECTION_END
+		_skill_block.grow_vertical = Control.GROW_DIRECTION_BOTH
+		_skill_block.offset_left = 16
+	_skill_block.add_theme_stylebox_override("panel", _block_style(UiStyle.ACCENT_COLOR.darkened(0.45)))
+	_skill_block.visible = false   # só aparece quando alguém está agindo
+	add_child(_skill_block)
+
+	var skill_vbox := VBoxContainer.new()
+	skill_vbox.add_theme_constant_override("separation", 8)
+	_skill_block.add_child(skill_vbox)
+	skill_vbox.add_child(UiStyle.make_label("Habilidades", 15, UiStyle.ACCENT_COLOR))
+
+	skill_box = VBoxContainer.new()  # os botões dourados são criados em _update_skill_buttons
+	skill_box.add_theme_constant_override("separation", 8)
+	skill_vbox.add_child(skill_box)
+
 	_build_tooltip()
+
+
+## Bloco "quadrado" que guarda os botões (cantos só levemente arredondados)
+func _block_style(border: Color = UiStyle.PANEL_BORDER) -> StyleBoxFlat:
+	var sb: StyleBoxFlat = UiStyle.panel_style(border, 18.0, 14.0)
+	sb.set_corner_radius_all(18)
+	return sb
+
+
+## Botão "cilíndrico" (pílula). Usa o UiStyle.style_button, então o pulinho no hover e a
+## gelatina ao clicar continuam iguais; aqui só arredondamos os cantos e aumentamos o botão.
+func _pill(b: Button, accent: Color, font_size: int = 17, min_height: float = 46.0) -> void:
+	UiStyle.style_button(b, accent)
+	for state in ["normal", "hover", "pressed", "disabled", "focus"]:
+		var sb: StyleBoxFlat = b.get_theme_stylebox(state) as StyleBoxFlat
+		if sb != null:
+			sb.set_corner_radius_all(int(min_height * 0.5))
+			sb.content_margin_left = 22
+			sb.content_margin_right = 22
+	b.add_theme_font_size_override("font_size", font_size)
+	UiStyle.outline(b, font_size)
+	b.custom_minimum_size = Vector2(0.0, min_height)
+	b.focus_mode = Control.FOCUS_NONE
+
+
+## Separa "Nome (recarga 2)" em [nome, 2]. Sem recarga: [nome, 0]
+func _split_recharge(label: String) -> Array:
+	var i: int = label.rfind(" (recarga ")
+	if i < 0 or not label.ends_with(")"):
+		return [label, 0]
+	var num: String = label.substr(i + 10, label.length() - i - 11)
+	return [label.substr(0, i), int(num) if num.is_valid_int() else 0]
 
 
 func _refresh() -> void:
 	# Na montagem das formações a tela de formação ocupa o lugar deste menu
 	visible = manager.phase != MatchManager.Phase.FORMATION
-	turn_label.text = "Rodada %d — Turno: %s" % [
-		manager.round_number, manager.get_team_name(manager.current_team)]
+	if manager.phase == MatchManager.Phase.FORMATION:
+		_recharge_seen.clear()   # partida nova: ninguém "acabou de ficar pronto"
+		_recharge_total.clear()
+	turn_label.text = "Rodada %d" % manager.round_number   # a borda do painel mostra o time da vez
 	_update_team_border()
 
 	var p: Player = manager.active_player
@@ -211,10 +365,12 @@ func _update_team_border() -> void:
 		_color_tween.kill()
 	if first:
 		_turn_style.border_color = color
+		_vignette.modulate = Color(color.r, color.g, color.b, VIGNETTE_REST)
 		return
 	_color_tween = create_tween()
 	_color_tween.tween_property(_turn_style, "border_color", color, 0.25)
 	UiStyle.pop(turn_label, 1.12, 0.25)
+	_play_turn_change(color)
 
 
 ## Botões das ações gerais (Levantar só aparece para jogador derrubado).
@@ -249,11 +405,24 @@ func _update_skill_buttons() -> void:
 		for b in _skill_buttons:
 			b.queue_free()
 		_skill_buttons.clear()
+		_skill_chips.clear()
+		_skill_bars.clear()
 		_skill_ids = ids
 		for id in ids:
 			var b := Button.new()
 			b.pressed.connect(manager.do_skill_action.bind(id))
-			UiStyle.style_button(b, UiStyle.ACCENT_COLOR.darkened(0.25))  # dourado: ação especial
+			_pill(b, UiStyle.ACCENT_COLOR.darkened(0.25))  # dourado: ação especial
+			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			b.custom_minimum_size.x = 330.0
+			# Recarga: etiqueta no canto direito do botão
+			var chip: Label = UiStyle.make_label("", 14, UiStyle.MUTED_COLOR)
+			chip.set_anchors_preset(Control.PRESET_FULL_RECT)
+			chip.offset_right = -20
+			chip.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+			chip.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			b.add_child(chip)
+			_skill_chips.append(chip)
+			_skill_bars.append(_make_recharge_bar(b))
 			skill_box.add_child(b)
 			_skill_buttons.append(b)
 			_hook_hover(b, &"skill", id)
@@ -261,12 +430,31 @@ func _update_skill_buttons() -> void:
 	for i in skills.size():
 		if confused:
 			_skill_buttons[i].text = "★ ???"
+			_skill_chips[i].text = ""
+			_skill_bars[i].visible = false
 			# Habilitado até quando a habilidade não pode ser usada: não entrega qual é qual.
 			# Apertar uma que não dá simplesmente não faz nada (o MatchManager confere).
 			_skill_buttons[i].disabled = not (manager.can_act() and manager.skill_left_for(p) > 0)
 		else:
-			_skill_buttons[i].text = "★ " + String(skills[i]["name"])
+			var parts: Array = _split_recharge(String(skills[i]["name"]))
+			_skill_buttons[i].text = "★ " + String(parts[0])
+			_skill_chips[i].text = ("recarga %d" % int(parts[1])) if int(parts[1]) > 0 else ""
+			# Recarga que acabou desde a última vez que vimos: brilha uma vez
+			var seen_key: String = "%d:%s" % [p.get_instance_id(), String(skills[i]["id"])]
+			if int(_recharge_seen.get(seen_key, 0)) > 0 and int(parts[1]) == 0:
+				_flash_ready(_skill_buttons[i])
+			_recharge_seen[seen_key] = int(parts[1])
+			# Barrinha: a maior recarga vista é o "total"; ao acabar, o total é esquecido
+			var left: int = int(parts[1])
+			if left > 0:
+				_recharge_total[seen_key] = maxi(int(_recharge_total.get(seen_key, 0)), left)
+				var total: int = maxi(int(_recharge_total[seen_key]), 1)
+				_set_recharge_bar(_skill_bars[i], 1.0 - float(left) / float(total), true)
+			else:
+				_recharge_total.erase(seen_key)
+				_set_recharge_bar(_skill_bars[i], 1.0, false)
 			_skill_buttons[i].disabled = not manager.can_use_skill(skills[i]["id"])
+	_skill_block.visible = p != null and not skills.is_empty()
 
 
 ## Ordem embaralhada de quem está confuso (sorteada uma vez por confusão, não a cada frame)
@@ -376,7 +564,15 @@ func _update_tip() -> void:
 	var view_w: float = get_viewport().get_visible_rect().size.x
 	var x: float = clampf(r.position.x + r.size.x * 0.5 - _tip_panel.size.x * 0.5,
 		8.0, maxf(8.0, view_w - _tip_panel.size.x - 8.0))
-	_tip_panel.position = Vector2(x, r.position.y - _tip_panel.size.y - 10.0)
+	if _hover_kind == &"skill":
+		# Lista vertical: o balão aparece ao lado do bloco (para dentro da tela)
+		var view_h: float = get_viewport().get_visible_rect().size.y
+		var tip_x: float = (r.position.x - _tip_panel.size.x - 12.0) if skills_on_right else (r.end.x + 12.0)
+		var tip_y: float = clampf(r.position.y + r.size.y * 0.5 - _tip_panel.size.y * 0.5,
+				8.0, maxf(8.0, view_h - _tip_panel.size.y - 8.0))
+		_tip_panel.position = Vector2(maxf(tip_x, 8.0), tip_y)
+	else:
+		_tip_panel.position = Vector2(x, r.position.y - _tip_panel.size.y - 10.0)
 
 
 ## {"title", "description", "icon"} do botão em foco. Vazio = sem balão.

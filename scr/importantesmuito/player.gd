@@ -110,7 +110,7 @@ const ACTION_TIMEOUT: float = 3.0
 @export var draw_placeholder: bool = true      # círculo colorido enquanto não há sprite
 @export var draw_shadow: bool = true
 @export var placeholder_radius: float = 18.0
-@export_range(0.0, 1.0) var team_tint_strength: float = 0.55
+@export_range(0.0, 1.0) var team_tint_strength: float = 0.0   # 0 = não pinta o sprite (o time aparece na base e no marcador)
 
 @export_group("Animação")
 ## AnimatedSprite2D do personagem. Vazio = procura um filho chamado "AnimatedSprite2D".
@@ -227,6 +227,34 @@ var _home_tween: Tween
 var _lift_node: Node2D
 var _lift_base_pos: Vector2 = Vector2.ZERO
 
+## BALANÇO NATURAL (só visual): parado, o jogador só inclina bem de leve de um lado para o
+## outro (rotação). Não mexe na posição de verdade nem na altura. Cada um tem uma fase própria.
+@export_group("Balanço (visual)")
+@export var sway_enabled: bool = true
+@export var sway_degrees: float = 1.1     # quanto o sprite inclina de um lado para o outro
+@export var sway_period: float = 3.4      # segundos de um balanço completo
+var _sway_time: float = randf() * 10.0
+var _sway_speed: float = randf_range(0.9, 1.1)
+var _sway_amount: float = 0.0             # 0 = sem balanço (agindo), 1 = balanço inteiro (parado)
+var _sway_dirty: bool = false
+
+## POEIRA (só visual): partículas pequenas e claras ao correr e ao deslizar no chão
+@export_group("Poeira (visual)")
+@export var dust_enabled: bool = true
+var _dust_run: CPUParticles2D
+var _dust_slide: CPUParticles2D
+static var _dust_texture: GradientTexture2D
+
+## REALCE: anel fino que "respira" no jogador sob o mouse, mas SÓ se ele puder ser clicado agora
+var _hovered: bool = false
+var _hover_ok: bool = false
+
+## TIME (visual): o time aparece sem pintar o sprite, com uma base colorida no chão (usa o
+## draw_team_marker) e um marcador (triângulo) em cima da cabeça
+@export_group("Time (visual)")
+@export var team_tag_enabled: bool = true
+@export var team_tag_offset: float = 62.0    # altura do marcador acima dos pés (px)
+
 ## Para que lado o personagem olha: 1 = direita, -1 = esquerda
 var facing: float = 1.0
 var _has_art: bool = false                 # tem AnimatedSprite2D com SpriteFrames?
@@ -245,6 +273,8 @@ func _ready() -> void:
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING  # visão de cima, sem gravidade
 	input_pickable = true
 	input_event.connect(_on_input_event)
+	mouse_entered.connect(_on_hover_changed.bind(true))
+	mouse_exited.connect(_on_hover_changed.bind(false))
 
 	if tint_sprite:
 		tint_sprite.modulate = get_team_tint()   # ← era get_team_color()
@@ -1173,11 +1203,22 @@ func _process(_delta: float) -> void:
 		if to_mouse.length() > 1.0:
 			aim_direction = to_mouse.normalized()
 		queue_redraw()
+	else:
+		var hover_ok: bool = _hovered and _is_clickable_now()
+		if hover_ok != _hover_ok:
+			_hover_ok = hover_ok
+			queue_redraw()
+		elif hover_ok or is_pass_option:
+			queue_redraw()   # o anel do realce / do alvo de passe pulsa
 	var status_key: int = _status_visual_key()
 	if status_key != _status_drawn:
 		_status_drawn = status_key
 		queue_redraw()
 	_update_animation()
+	_apply_sway(_delta)
+	_update_dust()
+	if team_tag_enabled:
+		queue_redraw()   # a seta do time sobe e desce
 
 
 # ---------- ANIMAÇÃO ----------
@@ -1350,6 +1391,113 @@ func _update_facing() -> void:
 
 # ---------- VISUAL (sem precisar de assets) ----------
 
+## Balanço natural: só a ROTAÇÃO do sprite, e só com o jogador parado no chão (agindo, no ar
+## ou caído, o balanço some devagar). Jogador sem sprite (círculo) não mostra nada: círculo girado
+## é igual a círculo parado.
+func _apply_sway(delta: float) -> void:
+	if not sway_enabled or _lift_node == null:
+		return
+	var calm: bool = state == State.IDLE and not is_down and not is_aiming \
+			and _action_anim == &"" and height <= 0.5
+	_sway_amount = move_toward(_sway_amount, 1.0 if calm else 0.0, delta * 3.0)
+	if _sway_amount <= 0.0 and not _sway_dirty:
+		return
+	_sway_time += delta * _sway_speed
+	var side: float = sin(_sway_time * TAU / maxf(sway_period, 0.1))
+	var base_rot: float = (PI / 2.0) if (is_down and not _has_art) else 0.0
+	_lift_node.rotation = base_rot + deg_to_rad(sway_degrees) * side * _sway_amount
+	_sway_dirty = _sway_amount > 0.0
+
+
+func _on_hover_changed(on: bool) -> void:
+	_hovered = on
+	if not on:
+		_hover_ok = false
+	queue_redraw()
+
+
+## Este jogador pode ser clicado agora? Segue as mesmas regras do MatchManager (só o time da
+## vez, só quando o jogo espera uma escolha). Se o manager tiver is_player_clickable(player),
+## ele manda; senão usamos as regras abaixo.
+func _is_clickable_now() -> bool:
+	var manager: Node = get_tree().get_first_node_in_group("match_manager")
+	if manager == null:
+		return false
+	if manager.has_method("is_player_clickable"):
+		return manager.call("is_player_clickable", self)
+	# Habilidade esperando um ponto ou um alvo: o clique no jogador conta
+	if manager.get("_picking_skill_point") == true or manager.get("_picking_skill_target") == true:
+		return true
+	if manager.get("_repositioning") == true:
+		return false
+	var phase: int = int(manager.get("phase"))
+	var ok_phase: bool = phase == MatchManager.Phase.CHOOSING_PROTAGONIST \
+			or phase == MatchManager.Phase.CHOOSING_ACTION \
+			or phase == MatchManager.Phase.CHOOSING_PASS_TARGET
+	return ok_phase and team == int(manager.get("current_team"))
+
+
+## Textura redonda e macia (bolinha branca que some nas bordas), criada uma vez para todos
+static func _get_dust_texture() -> GradientTexture2D:
+	if _dust_texture == null:
+		var g := Gradient.new()
+		g.offsets = PackedFloat32Array([0.0, 1.0])
+		g.colors = PackedColorArray([Color(1, 1, 1, 1), Color(1, 1, 1, 0)])
+		_dust_texture = GradientTexture2D.new()
+		_dust_texture.gradient = g
+		_dust_texture.fill = GradientTexture2D.FILL_RADIAL
+		_dust_texture.fill_from = Vector2(0.5, 0.5)
+		_dust_texture.fill_to = Vector2(1.0, 0.5)
+		_dust_texture.width = 16
+		_dust_texture.height = 16
+	return _dust_texture
+
+
+func _make_dust(amount: int, life: float, vel_min: float, vel_max: float, spread: float,
+		scale_min: float, scale_max: float, alpha: float) -> CPUParticles2D:
+	var p := CPUParticles2D.new()
+	p.emitting = false
+	p.amount = amount
+	p.lifetime = life
+	p.local_coords = false          # a poeira fica onde foi solta (não anda junto com o jogador)
+	p.texture = _get_dust_texture()
+	p.direction = Vector2.UP
+	p.spread = spread
+	p.gravity = Vector2.ZERO
+	p.initial_velocity_min = vel_min
+	p.initial_velocity_max = vel_max
+	p.damping_min = 25.0
+	p.damping_max = 40.0
+	p.scale_amount_min = scale_min
+	p.scale_amount_max = scale_max
+	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = 5.0
+	var ramp := Gradient.new()
+	ramp.offsets = PackedFloat32Array([0.0, 1.0])
+	ramp.colors = PackedColorArray([Color(0.93, 0.88, 0.74, alpha), Color(0.93, 0.88, 0.74, 0.0)])
+	p.color_ramp = ramp
+	p.show_behind_parent = true     # atrás do sprite do jogador
+	add_child(p)
+	return p
+
+
+## Poeira nos pés: corrida (poucas bolinhas para trás) e carrinho (mais, bem maiores)
+func _update_dust() -> void:
+	if not dust_enabled:
+		return
+	if _dust_run == null:
+		_dust_run = _make_dust(9, 0.55, 10.0, 24.0, 40.0, 0.5, 0.9, 0.5)
+		_dust_slide = _make_dust(16, 0.7, 30.0, 80.0, 35.0, 0.7, 1.2, 0.6)
+	var grounded: bool = height <= 0.5
+	var running: bool = state == State.RUNNING and grounded
+	if running and velocity.length() > 1.0:
+		_dust_run.direction = -velocity.normalized()
+	_dust_run.emitting = running
+	if state == State.SLIDING:
+		_dust_slide.direction = -slide_dir
+	_dust_slide.emitting = state == State.SLIDING and grounded
+
+
 func _update_visual() -> void:
 	queue_redraw()
 	if _lift_node:
@@ -1369,11 +1517,42 @@ func _draw() -> void:
 		draw_circle(Vector2.ZERO, placeholder_radius * shadow_scale, Color(0, 0, 0, 0.3))
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
+	# Realce ao passar o mouse: anel fino, da cor do time, que "respira"
+	if _hover_ok:
+		var breath: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.008)
+		draw_arc(Vector2.ZERO, ring_radius + 3.0 + breath * 1.5, 0.0, TAU, 40,
+				Color(team_color.lightened(0.5), 0.4 + 0.35 * breath), 2.0)
+
 	# Com sprite: anel da cor do time no chão (o placeholder, que tinha a cor, não existe mais)
+	# AGORA é uma BASE: disco do time no chão, com borda forte e um brilho por fora. Assim o
+	# time se vê de longe sem pintar o sprite.
 	if _has_art and draw_team_marker:
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.45))
-		draw_arc(Vector2.ZERO, placeholder_radius + 2.0, 0.0, TAU, 32, Color(team_color, 0.9), 3.0)
+		var base_r: float = placeholder_radius + 7.0
+		draw_circle(Vector2.ZERO, base_r, Color(team_color, 0.40))
+		draw_arc(Vector2.ZERO, base_r, 0.0, TAU, 40, team_color.lightened(0.15), 4.0)
+		draw_arc(Vector2.ZERO, base_r + 5.0, 0.0, TAU, 40, Color(team_color, 0.35), 2.0)
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
+
+	# SETA do time em cima da cabeça (substitui a antiga seta branca): sempre na cor do time e
+	# sobe e desce devagar. Quem vai agir ganha uma seta maior, mais clara, com contorno branco
+	# e um balanço mais forte. Sobe junto com o pulo.
+	if team_tag_enabled:
+		var arrow_t: float = Time.get_ticks_msec() * 0.001
+		var arrow_phase: float = float(get_instance_id() % 1000) * 0.0063   # cada um num ritmo
+		var arrow_bob: float = sin(arrow_t * 4.2 + arrow_phase) * (4.0 if is_active else 2.5)
+		var arrow_s: float = 1.35 if is_active else 1.0
+		var tip := Vector2(0.0, -team_tag_offset - height + arrow_bob - (5.0 if is_active else 0.0))
+		var arrow_fill: Color = team_color.lightened(0.25) if is_active else team_color
+		var arrow_edge: Color = Color(1, 1, 1, 0.95) if is_active else Color(0, 0, 0, 0.6)
+		draw_colored_polygon(PackedVector2Array([
+				tip + Vector2(0.0, 3.0) * arrow_s,
+				tip + Vector2(-12.0, -15.0) * arrow_s,
+				tip + Vector2(12.0, -15.0) * arrow_s]), arrow_edge)
+		draw_colored_polygon(PackedVector2Array([
+				tip,
+				tip + Vector2(-9.0, -12.0) * arrow_s,
+				tip + Vector2(9.0, -12.0) * arrow_s]), arrow_fill)
 
 	# Corpo placeholder (achatado se derrubado, esticado se deslizando)
 	if draw_placeholder:
@@ -1429,7 +1608,7 @@ func _draw() -> void:
 			draw_arc(Vector2.ZERO, ring_radius, 0.0, TAU, 40, Color(1, 1, 1, 0.8), 2.0)
 
 	# Seta em cima de quem vai agir
-	if is_active:
+	if is_active and not team_tag_enabled:   # com a seta do time ligada, ela já indica quem age
 		var top: float = -ring_radius - 8.0 - height
 		draw_colored_polygon(
 			PackedVector2Array([Vector2(-9, top - 16), Vector2(9, top - 16), Vector2(0, top)]),
@@ -1445,15 +1624,29 @@ func _draw() -> void:
 	if range_preview > 0.0:
 		draw_arc(Vector2.ZERO, range_preview, 0.0, TAU, 96, Color(1, 1, 1, 0.4), 2.0)
 	if is_pass_option:
-		draw_arc(Vector2.ZERO, ring_radius + 5.0, 0.0, TAU, 40, Color.LIME_GREEN, 3.0)
+		# Alvo de passe: o anel verde pulsa (raio e brilho) para chamar o olho
+		var beat: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.007)
+		draw_arc(Vector2.ZERO, ring_radius + 5.0 + beat * 2.5, 0.0, TAU, 40,
+				Color(Color.LIME_GREEN, 0.6 + 0.4 * beat), 3.0)
 
 	# Indicador de mira
 	if is_aiming:
 		var start: Vector2 = aim_direction * (placeholder_radius + 4.0)
 		var end: Vector2 = aim_direction * (placeholder_radius + aim_range)
-		var side: Vector2 = aim_direction.orthogonal() * 10.0
-		draw_line(start, end, Color.ORANGE, 4.0)
+		var now: float = Time.get_ticks_msec() * 0.001
+		var pulse: float = 1.0 + 0.12 * sin(now * 8.0)
+		var side: Vector2 = aim_direction.orthogonal() * 10.0 * pulse
+		# Linha de pontinhos que andam para a frente e vão sumindo até a ponta
+		var aim_len: float = maxf(start.distance_to(end), 1.0)
+		var spacing: float = 16.0
+		var shift: float = fmod(now * 70.0, spacing)
+		var d: float = shift
+		while d < aim_len:
+			var k: float = d / aim_len
+			draw_circle(start + aim_direction * d, lerpf(4.0, 2.0, k),
+					Color(1.0, 0.6, 0.1, lerpf(0.95, 0.3, k)))
+			d += spacing
 		draw_colored_polygon(
-			PackedVector2Array([end + aim_direction * 14.0, end + side, end - side]),
+			PackedVector2Array([end + aim_direction * 14.0 * pulse, end + side, end - side]),
 			Color.ORANGE
 		)

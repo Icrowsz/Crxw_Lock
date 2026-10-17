@@ -13,6 +13,9 @@ extends Player
 ## 3. Scars (ação de habilidade, recarga de 2 rodadas): Bunny vai até um inimigo e o impede de pular
 ##      por 2 rodadas (ou até Bunny se afastar). Se ele tentar pular, quem sobe é o Bunny.
 ##
+## Ao mirar o Bun Kick / Hare Leap aparece a TRAJETÓRIA do chute (a bola é simulada como o Ball faz,
+## já com a curva). Precisa do ball_path_preview.gd. Liga/desliga em show_trajectory.
+##
 ## Passivas:
 ## - Insensitive: ação "Planar" própria. NÃO gasta ação (geral nem de habilidade), mas tem QTE fácil.
 ##      Bunny precisa estar no ar. Ele (e a bola, se estiver perto) se movem no ar e continuam lá por
@@ -52,9 +55,13 @@ enum KickVariant { NONE, BUN_KICK, HARE_LEAP }
 @export var leap_range: float = 160.0               # distância máxima até a bola para o Hare Leap
 @export var leap_time: float = 0.3                  # duração do salto até a bola (s)
 
+@export_group("Trajetória do chute")
+@export var show_trajectory: bool = true            # mostra o caminho da bola enquanto mira
+@export var trajectory_length: float = 650.0        # tamanho máximo do desenho (px)
+
 @export_group("Apathic Return")
 @export var apathic_range: float = 450.0            # alcance do passe rasteiro
-@export var apathic_return_range: float = 550.0     # alcance da devolução (passe alto)
+@export var apathic_return_range: float = 550.0     # (sem uso: o passe alto agora vem direto até o Bunny)
 @export var apathic_run_time: float = 0.8           # Correr curto (s)
 @export var apathic_bonus_skills: int = 1           # ações de habilidade extras ao final
 @export var apathic_cooldown: int = 2
@@ -97,6 +104,8 @@ var _planar_carrying: bool = false
 var _planar_uses: int = 0
 ## Está dentro de uma habilidade de chute (o QTE do Chutar geral só conta fora delas)
 var _skill_kick: bool = false
+## Variante que está sendo mirada agora (NONE = sem trajetória na tela)
+var _preview_variant: KickVariant = KickVariant.NONE
 ## Rodopios dos saltos (tempo restante do efeito desenhado)
 var _swirl_time: float = 0.0
 
@@ -220,7 +229,10 @@ func _use_kick_skill() -> bool:
 	if m == null or _kick_variant() == KickVariant.NONE:
 		return false
 
+	_preview_variant = _kick_variant()   # liga a trajetória na tela enquanto mira
 	var aim: Vector2 = await m.aim_for_skill(self, kick_aim_range)
+	_preview_variant = KickVariant.NONE
+	queue_redraw()
 	if aim == Vector2.ZERO:
 		return false   # cancelou: não gasta a ação
 
@@ -266,6 +278,29 @@ func _leap_to(ball: Ball) -> void:
 		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 	await tw.finished
 	global_position = ball.global_position   # a bola pode ter andado durante o salto
+
+
+# ---------- TRAJETÓRIA DO CHUTE (pré-visualização) ----------
+
+## O caminho que a bola vai fazer com a mira atual: o mesmo tipo de chute, a mesma curva
+## (e o mesmo lado dela) que o _use_kick_skill vai aplicar.
+func _trajectory_data() -> Dictionary:
+	var ball: Ball = _get_ball()
+	if ball == null or _preview_variant == KickVariant.NONE:
+		return {}
+	var dir: Vector2 = aim_direction.normalized()
+	var kind: KickType = KickType.VOLLEY
+	var curve_deg: float = bun_kick_curve_deg
+	if _preview_variant == KickVariant.HARE_LEAP:
+		if ball.get_level() == Heights.Level.FLYING:
+			kind = KickType.FLYING
+		curve_deg = hare_leap_curve_deg
+	var launch: Dictionary = BallPathPreview.launch_for(self, ball, kind)
+	var plan: Array = []
+	if curve_deg != 0.0:
+		plan.append(deg_to_rad(curve_deg) * _curve_sign(ball, dir))
+	return BallPathPreview.simulate(ball, ball.global_position, ball.height,
+		dir * float(launch["speed"]), float(launch["lift"]), plan, curve_time, true, trajectory_length)
 
 
 # ---------- CURVA DA BOLA ----------
@@ -349,15 +384,38 @@ func _use_apathic_return() -> bool:
 	# 3) o aliado devolve: QTE difícil
 	var ok: bool = await _qte(KickType.FLYING)
 	if ok:
-		# passe alto de volta: a bola sobe a Voando e fica pairando no meio do caminho
-		await m.run_skill_high_pass(ally, self, ball, apathic_return_range, &"", kick_fx)
-		# 4) Bunny salta até ela, fica no mesmo nível (Voando) e ganha ação de habilidade extra
+		# passe alto de volta: a bola sobe e vem voando DIRETO para cima do Bunny
+		await _high_pass_over_me(m, ally, ball)
+		# 4) Bunny salta até ela (ela está logo acima), fica no mesmo nível (Voando) e ganha ação de habilidade extra
 		await _leap_to(ball)
 		extra_skill_left += apathic_bonus_skills
 	else:
 		# Errou o QTE: só um passe rasteiro de volta (sem salto e sem a ação extra)
 		await m.run_ground_pass(ally, self, ball)
 	return true
+
+
+## Passe alto do aliado: a bola sobe em arco e chega VOANDO exatamente em cima do Bunny
+## (em vez de ficar pairando no meio do caminho). Dali o Bunny só precisa saltar para cima.
+func _high_pass_over_me(m: MatchManager, passer: Player, ball: Ball) -> void:
+	passer.face_towards(global_position - passer.global_position)
+	if not await passer.play_action(Player.ANIM_PASS_HIGH, Player.ANIM_PASS_HIGH):
+		return   # ação cancelada (ex: a partida reiniciou)
+	m.clear_pending_pass()
+	ball.register_touch(passer)   # o passe alto não usa kick(), então registra o toque aqui
+	var point: Vector2 = global_position
+	var mid: Vector2 = (ball.global_position + point) * 0.5
+	ball.trail_enabled = true
+	var previous_fx: bool = ball.fx_during_hover
+	ball.fx_during_hover = true
+	ball.play_fx(kick_fx)
+	await ball.hover_to(mid, Heights.FLYING_HEIGHT, m.high_pass_flight_time).finished
+	await ball.hover_to(point, Heights.FLYING_HEIGHT, m.high_pass_arrive_time).finished
+	ball.stop_fx()
+	ball.fx_during_hover = previous_fx
+	# A bola fica pairando em cima dele; se ninguém tocar até o fim do turno, o manager a solta
+	m.register_skill_pass(team, self)
+	m.pass_completed.emit(passer, self)
 
 
 ## Correr de duração própria, sem gastar o limite de Correr do turno
@@ -647,6 +705,12 @@ func _process(delta: float) -> void:
 func _draw() -> void:
 	super()
 	var center := Vector2(0.0, -height)
+
+	# Trajetória do chute enquanto mira o Bun Kick / Hare Leap
+	if show_trajectory and is_aiming and _preview_variant != KickVariant.NONE:
+		var data: Dictionary = _trajectory_data()
+		if not data.is_empty():
+			BallPathPreview.draw(self, data, LAVENDER)
 
 	# Rodopios lavanda e vermelho claro nos saltos / no Planar
 	if _swirl_time > 0.0:
