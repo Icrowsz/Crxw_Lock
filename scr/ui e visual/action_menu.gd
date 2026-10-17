@@ -29,7 +29,7 @@ var _color_tween: Tween
 
 # Troca de turno: vinheta suave na cor do time + painéis balançando em cascata
 const VIGNETTE_REST: float = 0.10    # brilho da vinheta no dia a dia (dá para perceber)
-const VIGNETTE_PEAK: float = 1.0     # brilho no instante da troca de turno
+const VIGNETTE_PEAK: float = 0.5     # brilho no instante da troca de turno
 var _vignette: TextureRect
 var _vignette_tween: Tween
 var _turn_panel: PanelContainer

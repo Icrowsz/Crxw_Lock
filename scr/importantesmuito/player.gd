@@ -11,6 +11,8 @@ extends CharacterBody2D
 
 signal clicked(player: Player)
 signal run_finished
+## Alguém tentou pular (emitido no começo do jump). O Scars do Bunny escuta isto para redirecionar o pulo.
+signal jumped
 signal slide_finished
 ## Fim da mira: direção escolhida (Vector2.ZERO = cancelado)
 signal aim_finished(direction: Vector2)
@@ -139,6 +141,8 @@ var rounds_down: int = 0
 ## Kurona). Quem aplica é quem desliga; reset_for_new_match zera tudo.
 ## Imune a carrinho: o carrinho passa por baixo (o jogador faz um pulinho) e não derruba.
 var slide_immune: bool = false
+## Ligado por quem redirecionou o pulo deste jogador (Scars do Bunny); lido e zerado em consume_jump_redirect()
+var jump_redirected: bool = false
 ## Soma no alcance do Passe (px) e no tempo do Correr (s)
 var pass_range_bonus: float = 0.0
 var run_time_bonus: float = 0.0
@@ -461,8 +465,20 @@ func on_shot_attempt() -> void:
 
 # ---------- AÇÃO GERAL: PULAR ----------
 
+## Avisa que um pulo foi tentado e devolve true se algum efeito (ex: Scars do Bunny) redirecionou
+## o pulo: aí quem chamou NÃO sobe. Todo jump() (inclusive os sobrescritos) deve começar com isto.
+func consume_jump_redirect() -> bool:
+	jump_redirected = false
+	jumped.emit()   # quem escuta pode ligar jump_redirected
+	var redirected: bool = jump_redirected
+	jump_redirected = false
+	return redirected
+
+
 ## Sobe para o nível Suspenso. O MatchManager chama land() quando a duração acaba.
 func jump() -> void:
+	if consume_jump_redirect():
+		return   # o impulso do pulo foi para outro jogador
 	height_level = Heights.Level.SUSPENDED
 	var tw := create_tween()
 	tw.tween_property(self, "height", Heights.SUSPENDED_HEIGHT, jump_rise_time) \
@@ -762,6 +778,7 @@ func reset_for_new_match() -> void:
 	range_preview = 0.0
 	is_pass_option = false
 	slide_immune = false
+	jump_redirected = false
 	pass_range_bonus = 0.0
 	run_time_bonus = 0.0
 	next_shot_bonus = 0.0
