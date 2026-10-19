@@ -5,7 +5,7 @@
 [ext_resource type="Texture2D" uid="uid://clnnoev3m6vwi" path="res://img/mvps/lorenzo.jpg" id="3_2280n"]
 [ext_resource type="Texture2D" uid="uid://d3ysr4ee5vhd0" path="res://img/testes/lorenzo.png" id="4_2280n"]
 
-[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_lsvxa")]
+[node name="Player" unique_id=1241627939 instance=ExtResource("1_lsvxa")]
 script = ExtResource("2_2280n")
 cooldown_after_effect = true
 zombie_ball_range = 90.0
@@ -30,7 +30,7 @@ yo_cooldown = 2
 intercept_range = 230.0
 intercept_dash_time = 0.2
 intercept_pass_range = 650.0
-ace_range = 1000.0
+ace_range = 700.0
 ace_rounds = 2
 ace_shot_penalty = 0.15
 ace_cooldown = 2
@@ -38,7 +38,6 @@ kick_fx = null
 skill_icons = {}
 display_name = "Don Lorenzo"
 mvp_image = ExtResource("3_2280n")
-visual_root = NodePath("SprPlayer")
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

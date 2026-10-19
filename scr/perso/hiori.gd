@@ -1,154 +1,141 @@
 class_name Hiori
 extends Player
-## Hiori. Mais um personagem do time (depois de Isagi, Rin e Charles), com 3 habilidades:
+## Hiori, com 3 habilidades (efeitos de neve, vidro e gelo em hiori_fx.gd):
 ##
-## 1. Chilling Pass / No Look Cross (ação de habilidade, com 2 variantes automáticas pela
-##      altura de Hiori; recarga de 2 rodadas, compartilhada entre as duas):
-##      - Hiori no chão + bola no chão ou Suspensa -> Chilling Pass: passe alto (alcance 525)
-##          para um ALIADO. Igual ao Passe Alto comum: a bola sobe ao nível Voando no meio
-##          do caminho e PAIRA lá; quando o turno de Hiori voltar, desce ao nível Suspenso
-##          no aliado (ou onde ele estava, se saiu do alcance). Cai sozinha se ninguém tocar.
-##          Sem QTE (igual ao Passe Alto comum).
-##      - Hiori Suspenso + bola próxima -> No Look Cross: a mesma mecânica do Chilling Pass,
-##          só que com alcance bem maior (575px). Também sem QTE.
+## 1. Chilling Pass / No Look Cross (recarga 2, compartilhada). Passe alto para um ALIADO: a bola sobe a Voando
+##      no meio do caminho, PAIRA lá e, quando o turno do time volta, desce Suspensa no aliado (igual ao Passe Alto).
+##      - Hiori no chão + bola no chão ou Suspensa -> Chilling Pass (alcance 525).
+##      - Hiori Suspenso + bola Suspensa -> No Look Cross: QTE fácil e, de recompensa, alcance 575.
+##        Errou o QTE: a ação é gasta e o passe não sai.
 ##
-## 2. Glacial Cut + Ultrasadist (ação de habilidade; recarga de 3 rodadas):
-##      - Glacial Cut: Hiori faz uma corrida curta (menos tempo que o Correr normal, mas um
-##          pouco mais rápida) — NÃO é a ação geral Correr, não gasta nem conta como ela
-##          (runs_this_turn não muda). Se, durante essa corrida, ele chegar perto o
-##          suficiente da bola, libera o complemento Ultrasadist.
-##      - Ultrasadist: só aparece depois de um Glacial Cut que alcançou a bola. É GRATUITO
-##          (skill_is_free) — então os dois juntos continuam contando como uma única ação
-##          de habilidade, igual ao Draconic Header do Shidou (ver player.gd). Funciona como
-##          o Rabona Cross do Charles: Hiori escolhe um LOCAL do campo (alcance 550) em vez
-##          de um aliado; a bola sobe a Voando e pousa lá, Suspensa, NA MESMA RODADA. QTE fácil: errar
-##          encurta e desvia o local. Se o turno de Hiori terminar sem usá-lo, a chance
-##          se perde.
+## 2. Glacial Cut (recarga 2; Let It Go e Ultrasadist compartilham essa recarga)
+##      - Hiori no chão -> Glacial Cut: corrida curta (1.1 s) e rápida (325). Se encontrar a bola no caminho, DOMINA ela
+##        e libera o Ultrasadist de graça (skill_is_free: os dois contam como uma ação só).
+##      - Hiori Suspenso -> Let It Go: avanço/deslize curto (alcance 180, deixa uma camada fina de gelo no chão) em que
+##        ele cai para o chão. Se encontrar um inimigo, DESVIA dele e o CONGELA (bloco de gelo): atordoado = sem
+##        habilidades e sem ações gerais por 1 rodada. Se encontrar a bola, domina e libera o Ultrasadist.
+##      - Ultrasadist: passe para um PONTO do campo (alcance 550), QTE fácil. A bola chega Suspensa na MESMA rodada.
+##        Ponto a menos de 200 -> a bola sobe só a Suspensa durante a trajetória; mais longe -> sobe a Voando.
 ##
-## 3. Coldest Metavision (ação de habilidade; recarga de 3 rodadas, a partir do fim do
-##      efeito — não especificada pelo design, ajuste à vontade):
-##      Por algumas rodadas: a PRÓXIMA ação Correr de Hiori ganha mais segundos; os chutes
-##      do próprio Hiori e os chutes de quem acabou de receber um passe DELE (suas
-##      assistências, enquanto a habilidade durar) ganham +8% de chance de gol; e Hiori
-##      ganha acesso a uma de duas habilidades extras, dependendo do lado do campo em que
-##      estiver:
-##      - Lado da DEFESA -> Frost Guard: com a bola Suspensa e perto, Hiori salta até ela e
-##          dá um "deflect", mandando-a para a direção contrária. Recarga de 2 rodadas.
-##      - Lado do ATAQUE -> Cryo Shot: chute comum, SEM QTE, com Hiori e a bola no chão ou
-##          Suspensos (qualquer combinação dessas duas, menos Voando). Recarga de 2 rodadas.
+## 3. Coldest Metavision (3 rodadas; recarga 3 a partir do fim do efeito): os próximos 2 Correr dele ganham +0.5 s, e os
+##      chutes dele e de quem recebe um passe dele ganham +5%. Libera duas habilidades (recarga 2 compartilhada):
+##      - Cryo Shot (só no lado do ataque): chute/voleio comum, Hiori e bola no chão ou Suspensos. QTE se for voleio,
+##        força 1.2x do Chutar e 40% de chance pura.
+##      - Frost Guard: ARMA uma detecção (raio 240) para o turno inimigo. Ao usar, escolhe a direção (para o chute
+##        Voando) e, se houver aliado ao alcance, quem recebe o passe; sem aliado, o Hiori fica com a bola. Quando um
+##        chute inimigo entra na área: no chão -> Hiori vai até a bola e passa para o aliado (ou fica com ela);
+##        Suspenso -> Hiori salta até a bola e dá um deflect 0.4x para a esquerda; Voando -> Hiori salta até a bola e dá um deflect 0.3x na direção escolhida (QTE).
 ##
-## PEÇAS PEQUENAS NO RESTO DO PROJETO (já aplicadas, se você usou os arquivos que eu
-## devolvi):
-## - match_manager.gd: run_skill_high_pass() — versão pública do passe alto (_run_high_pass)
-##   para habilidades, com animação/aura própria e alcance próprio. Usada pelo Chilling
-##   Pass / No Look Cross.
+## Reação ONE MORE TIME (Isagi): o Ultrasadist anota last_ultrasadist e, se cumprir a reação, sai "carregado".
+## Reação SACRIFICE (Karasu): com a Metavision ativa no ataque, o Cryo Shot vira o LOUD CROW (mirando no Karasu).
 ##
-## Reação Química ONE MORE TIME (com o Isagi, veja reaction_one_more_time.gd): o Ultrasadist anota
-## o último uso em last_ultrasadist (a reação lê isto) e, quando cumpre as condições da reação,
-## sai brilhando e congelando o chão por onde a bola passa (charged_fx + one_more_time_fx.gd).
-##
-## Reação Química SACRIFICE (com o Karasu, veja reaction_sacrifice.gd): se o Karasu passou para o
-## Hiori e depois usou o Wings Block, e a Coldest Metavision está ativa no lado do ataque, o Cryo
-## Shot vira o LOUD CROW. Mirando NO KARASU: cutscene, chute mais forte com 90% de chance de gol e a
-## bola ignora a colisão do Karasu e dos inimigos (passa por cima deles), com gelo e vidro quebrando
-## no trajeto (sacrifice_fx.gd). Mirando para outro lado sai o Cryo Shot normal e a reação não é gasta.
-##
-## Como montar a cena: igual ao Isagi/Rin/Charles — Nova Cena Herdada de player.tscn ->
-## anexe este script ao nó raiz -> renomeie o nó raiz para "Hiori".
+## Cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz -> renomeie o nó raiz para "Hiori".
 
 const SKILL_PASS: StringName = &"chilling_pass"
-const SKILL_GLACIAL: StringName = &"glacial_cut"
+const SKILL_GLACIAL: StringName = &"glacial_cut"          # no ar vira o Let It Go
 const SKILL_ULTRASADIST: StringName = &"ultrasadist"
 const SKILL_METAVISION: StringName = &"coldest_metavision"
 const SKILL_FROST_GUARD: StringName = &"frost_guard"
 const SKILL_CRYO_SHOT: StringName = &"cryo_shot"
 
-## id da reação Sacrifice (reaction_sacrifice.gd)
+## id da reação Sacrifice (Karasu) em reaction_sacrifice.gd
 const SACRIFICE_ID: StringName = &"sacrifice"
 
-## Grupos de recarga (as variantes/complementos de cada habilidade compartilham o mesmo)
 const CD_PASS: StringName = &"cd_pass"
-const CD_GLACIAL: StringName = &"cd_glacial"
+const CD_GLACIAL: StringName = &"cd_glacial"          # Glacial Cut, Let It Go e Ultrasadist
 const CD_METAVISION: StringName = &"cd_metavision"
-const CD_FROST_GUARD: StringName = &"cd_frost_guard"
-const CD_CRYO_SHOT: StringName = &"cd_cryo_shot"
+const CD_GUARD_CRYO: StringName = &"cd_guard_cryo"    # Frost Guard e Cryo Shot
 
-## Variante da habilidade 1, pela altura de Hiori
 enum PassVariant { NONE, CHILLING, NO_LOOK }
+enum CutVariant { NONE, GLACIAL, LET_IT_GO }
 
 @export_group("Chilling Pass / No Look Cross")
 @export var chilling_pass_range: float = 525.0
 @export var no_look_cross_range: float = 575.0
 @export var pass_cooldown: int = 2
 
-@export_group("Glacial Cut / Ultrasadist")
-@export var glacial_cut_duration: float = 0.9          # run_duration padrão costuma ser maior
-@export var glacial_cut_speed_mult: float = 1.3         # "um pouco mais veloz" que o Correr normal
+@export_group("Glacial Cut / Let It Go / Ultrasadist")
+@export var glacial_cut_duration: float = 1.1
+@export var glacial_cut_speed: float = 325.0
+@export var let_it_go_range: float = 180.0
+@export var let_it_go_time: float = 0.45               # duração do avanço
+@export var let_it_go_margin: float = 30.0             # folga além dos corpos para "encontrar" um inimigo
 @export var ultrasadist_range: float = 550.0
-@export_range(0.0, 1.0) var ultrasadist_qte_fail_range_mult: float = 0.5   # alcance que sobra se errar o QTE
-@export_range(0.0, 90.0) var ultrasadist_qte_fail_angle: float = 35.0      # desvio (graus) se errar o QTE
-@export var glacial_cooldown: int = 3
+@export var ultrasadist_low_distance: float = 200.0    # abaixo disso a bola só sobe a Suspensa
+@export_range(0.0, 1.0) var ultrasadist_qte_fail_range_mult: float = 0.5
+@export_range(0.0, 90.0) var ultrasadist_qte_fail_angle: float = 35.0
+@export var glacial_cooldown: int = 2
 
 @export_group("Coldest Metavision")
 @export var metavision_rounds: int = 3
-@export var metavision_run_bonus: float = 1.0                   # segundos extra na PRÓXIMA Correr
-@export_range(0.0, 1.0) var metavision_self_shot_bonus: float = 0.08     # +8% nos chutes do próprio Hiori
-@export_range(0.0, 1.0) var metavision_assist_shot_bonus: float = 0.08   # +8% em quem chuta após receber dele
-@export var metavision_cooldown: int = 3    # a partir do fim do efeito
-
-@export_group("Frost Guard (lado da defesa)")
-@export var frost_guard_reach: float = 80.0
-@export var frost_guard_force: float = 110.0
-@export var frost_guard_cooldown: int = 2
+@export var metavision_run_bonus: float = 0.5          # segundos extra em cada um dos próximos Correr
+@export var metavision_run_count: int = 2
+@export_range(0.0, 1.0) var metavision_self_shot_bonus: float = 0.05
+@export_range(0.0, 1.0) var metavision_assist_shot_bonus: float = 0.05
+@export var metavision_cooldown: int = 3               # a partir do fim do efeito
+@export var guard_cryo_cooldown: int = 2
 
 @export_group("Cryo Shot (lado do ataque)")
-@export_range(0.0, 1.0) var cryo_shot_chance: float = 0.30
-@export var cryo_shot_cooldown: int = 2
+@export_range(0.0, 1.0) var cryo_shot_chance: float = 0.40
+@export var cryo_force_mult: float = 1.2               # sobre a força do Chutar
+
+@export_group("Frost Guard")
+@export var frost_guard_range: float = 125.0
+@export var frost_side_mult: float = 0.4               # deflect do chute Suspenso (para a esquerda)
+@export var frost_air_mult: float = 0.3                # deflect do chute Voando (direção escolhida)
 
 @export_group("Loud Crow (reação Sacrifice)")
-@export_range(0.0, 1.0) var loud_crow_chance: float = 0.90      # chance de gol (valor base)
-@export var loud_crow_force_mult: float = 1.35                  # mais forte que o Cryo Shot (1.0)
-## Tolerância da mira no Karasu (px): a linha da mira precisa passar a esta distância do corpo dele
+@export_range(0.0, 1.0) var loud_crow_chance: float = 0.90
+@export var loud_crow_force_mult: float = 1.35
+## Tolerância (px) para a mira "acertar" o Karasu
 @export var loud_crow_aim_tolerance: float = 36.0
-## Altura do "pulo" visual da bola por cima do Karasu e dos inimigos (px; o nível da bola não muda)
+## Altura (px) do pulo visual da bola por cima dos obstáculos
 @export var loud_crow_hop_height: float = 46.0
-## Aura do chute. Vazio = usa o estilo padrão (veja _make_loud_crow_fx)
+## Visual do chute do Loud Crow (vazio = padrão)
 @export var loud_crow_fx: KickFX
 
 @export_group("Visual do chute")
-## Aura + partículas dos chutes/passes de habilidade. Vazio = usa o estilo padrão (veja _make_kick_fx)
+## Efeito dos chutes e passes (vazio = padrão de gelo)
 @export var kick_fx: KickFX
-## Aura do Ultrasadist quando ele cumpre as condições da reação One More Time. Vazio = estilo padrão
+## Efeito do Ultrasadist carregado (One More Time)
 @export var charged_fx: KickFX
 
+@export_group("Gelo e neve (visual)")
+## Neve, vidro e gelo (hiori_fx.gd). Desligue se o jogo ficar pesado
+@export var snow_particles: bool = true
+@export var ice_trail_seconds: float = 1.6             # quanto a camada de gelo do Let It Go leva para sumir
+@export var ice_trail_width: float = 34.0
+@export var ice_trail_step: float = 14.0               # a cada quantos px nasce um pedaço de gelo
+@export var frost_area_enabled: bool = true            # círculo com floco grande marcando o alcance do Frost Guard
+
 @export_group("Descrição (hover)")
-## Imagem de cada habilidade no balão do menu. Chaves: chilling_pass, glacial_cut,
-## ultrasadist, coldest_metavision, frost_guard, cryo_shot.
+## Imagem de cada habilidade no balão do menu. Chaves: chilling_pass, glacial_cut, ultrasadist,
+## coldest_metavision, frost_guard, cryo_shot.
 @export var skill_icons: Dictionary = {}
 
-## Glacial Cut alcançou a bola: Ultrasadist está esperando ser usado (grátis) ainda
-## neste turno. Vira false sozinho quando o turno de Hiori acaba.
+## Glacial Cut / Let It Go achou a bola: Ultrasadist grátis esperando neste turno
 var _glacial_ready: bool = false
-## Coldest Metavision vale até o fim desta rodada (-1 = inativa)
 var _metavision_until_round: int = -1
-## Último aliado que recebeu um passe de Hiori com a Metavision ativa (ganha o bônus
-## de chute enquanto ela durar)
-var _assist_target: Player = null
-## A próxima chamada de start_run() deve somar o bônus da Coldest Metavision?
-var _coldest_run_bonus_pending: bool = false
-
-## Último Ultrasadist usado (as Reações Químicas leem isto, ex: One More Time):
-## {"landing": local escolhido, "touches": toques na bola logo depois do passe}
+var _run_bonus_left: int = 0               # Correr com +0.5 s que ainda restam
+var _assist_target: Player = null          # quem recebeu passe dele com a Metavision (ganha o bônus de chute)
+## Último Ultrasadist (as Reações Químicas leem): {"landing": ponto, "touches": toques depois do passe}
 var last_ultrasadist: Dictionary = {}
 
-## Mirando o Loud Crow: o desenho destaca o Karasu e mostra se a mira está nele
+## Frost Guard: armado = esperando o turno inimigo; live = turno inimigo, procurando o chute
+var _guard_armed: bool = false
+var _guard_live: bool = false
+var _guard_busy: bool = false
+var _guard_ally: Player = null
+var _guard_dir: Vector2 = Vector2.RIGHT
+
+var _aura: CPUParticles2D                  # neve em volta dele (Metavision / Frost Guard)
 var _aiming_loud_crow: bool = false
 var _loud_crow_partner: Player = null
 
 
 func _init() -> void:
-	character_id = "hiori"   # o menu de formação usa isto para saber quem é quem
-	display_name = "Hiori"   # troque aqui se quiser o nome completo
+	character_id = "hiori"
+	display_name = "Hiori"
 
 
 func _ready() -> void:
@@ -159,6 +146,10 @@ func _ready() -> void:
 		charged_fx = _make_charged_fx()
 	if loud_crow_fx == null:
 		loud_crow_fx = _make_loud_crow_fx()
+	if snow_particles:
+		HioriFX.warm_up()
+		_aura = HioriFX.make_aura()
+		add_child(_aura)
 	_hook_manager.call_deferred()
 
 
@@ -215,159 +206,302 @@ func _make_loud_crow_fx() -> KickFX:
 
 func _hook_manager() -> void:
 	var m: MatchManager = _get_manager()
-	if m:
-		m.pass_completed.connect(_on_pass_completed)
-		m.turn_ended.connect(_on_turn_ended)
+	if m == null:
+		return
+	m.pass_completed.connect(_on_pass_completed)
+	m.turn_ended.connect(_on_turn_ended)
+	m.turn_started.connect(_on_turn_started)
+	m.bonus_turn_started.connect(_on_turn_started)
 
 
-## Quem recebeu o passe, enquanto a Coldest Metavision estiver ativa, vira o alvo da
-## assistência (ver shot_bonus_for_ally)
+## Quem recebeu o passe do Hiori com a Metavision ativa vira o alvo da assistência (ver shot_bonus_for_ally)
 func _on_pass_completed(passer: Player, target: Player) -> void:
 	if passer == self and is_metavision_active():
 		_assist_target = target
 
 
-## O turno de Hiori acabou: a chance "grátis" do Ultrasadist se perde se não foi usada
+## O turno dele acabou: a chance grátis do Ultrasadist se perde
 func _on_turn_ended(ended_team: int) -> void:
 	if ended_team == team and _glacial_ready:
 		_glacial_ready = false
 		queue_redraw()
 
 
+## Frost Guard: começou o turno inimigo = procura o chute; voltou a vez do Hiori = desliga
+func _on_turn_started(started_team: int) -> void:
+	_guard_live = _guard_armed and started_team != team
+	if started_team == team:
+		_guard_armed = false
+	queue_redraw()
+
+
+# ---------- EFEITOS (neve, vidro e gelo: hiori_fx.gd) ----------
+
+func _fx_burst(pos: Vector2, amount: int = 10, strong: bool = false) -> void:
+	if snow_particles:
+		HioriFX.burst(self, pos, amount, strong)
+
+
+func _fx_ring(pos: Vector2, radius: float, amount: int = 14) -> void:
+	if snow_particles:
+		HioriFX.ring(self, pos, radius, amount)
+
+
+func _fx_trail(ball: Ball, seconds: float = 0.5) -> void:
+	if snow_particles:
+		HioriFX.trail(ball, seconds)
+
+
+func _body_pos() -> Vector2:
+	return global_position + Vector2(0.0, -height)
+
+
+## Chamado pelo kick_ball() logo depois que o Cryo Shot sai (on_kick)
+func _launch_cryo(ball: Ball, _dir: Vector2, _speed: float) -> void:
+	_fx_trail(ball, 0.6)
+	_fx_burst(ball.sprite.global_position, 8)
+
+
 # ---------- HABILIDADE 1: CHILLING PASS / NO LOOK CROSS ----------
 
 func get_pass_variant() -> PassVariant:
 	var ball: Ball = _get_ball()
-	if ball == null or ball.is_held() or ball.is_locked_for(team):
+	if ball == null or ball.is_held() or ball.is_locked_for(team) \
+			or global_position.distance_to(ball.global_position) > kick_range:
 		return PassVariant.NONE
-	if global_position.distance_to(ball.global_position) > kick_range:
-		return PassVariant.NONE
-	if ball.get_level() == Heights.Level.FLYING:
+	var level: Heights.Level = ball.get_level()
+	if level == Heights.Level.FLYING:
 		return PassVariant.NONE
 	if height_level == Heights.Level.SUSPENDED:
-		return PassVariant.NO_LOOK
-	if height_level == Heights.Level.GROUND:
-		return PassVariant.CHILLING
-	return PassVariant.NONE
+		return PassVariant.NO_LOOK if level == Heights.Level.SUSPENDED else PassVariant.NONE
+	return PassVariant.CHILLING if height_level == Heights.Level.GROUND else PassVariant.NONE
 
 
 func _pass_skill_name() -> String:
-	if get_pass_variant() == PassVariant.NO_LOOK:
-		return "No Look Cross"
-	return "Chilling Pass"
+	return "No Look Cross" if get_pass_variant() == PassVariant.NO_LOOK else "Chilling Pass"
 
 
 func _use_pass_skill() -> bool:
 	var m: MatchManager = _get_manager()
-	if m == null:
+	var variant: PassVariant = get_pass_variant()
+	if m == null or variant == PassVariant.NONE:
 		return false
-	match get_pass_variant():
-		PassVariant.CHILLING:
-			return await _use_chilling_pass(m)
-		PassVariant.NO_LOOK:
-			return await _use_no_look_cross(m)
+	var no_look: bool = variant == PassVariant.NO_LOOK
+	var range_px: float = no_look_cross_range if no_look else chilling_pass_range
+	var ball: Ball = _get_ball()
+	var target: Player = await m.pick_ally_for_skill(self, range_px)
+	if target == null:
+		return false   # cancelou: não gasta a ação
+	if get_pass_variant() != variant:
+		return false   # a situação mudou enquanto ele escolhia o alvo
+
+	# No Look Cross: QTE fácil (a recompensa é o alcance maior). Errou: gasta a ação e o passe não sai
+	if no_look and not skips_qte() and not await m.run_qte(KickType.VOLLEY):
+		start_cooldown(CD_PASS, pass_cooldown)
+		return true
+
+	PassFX.arm(ball, PassFX.Style.CHILLING)   # fita gelada e floquinhos: começa quando a bola sai
+	await m.run_skill_high_pass(self, target, ball, range_px,
+		&"no_look_cross" if no_look else &"chilling_pass", kick_fx)
+	start_cooldown(CD_PASS, pass_cooldown)
+	return true
+
+
+# ---------- HABILIDADE 2: GLACIAL CUT / LET IT GO / ULTRASADIST ----------
+
+func get_cut_variant() -> CutVariant:
+	if is_down:
+		return CutVariant.NONE
+	match height_level:
+		Heights.Level.GROUND:
+			return CutVariant.GLACIAL
+		Heights.Level.SUSPENDED:
+			return CutVariant.LET_IT_GO
+	return CutVariant.NONE
+
+
+func _cut_skill_name() -> String:
+	return "Let It Go" if get_cut_variant() == CutVariant.LET_IT_GO else "Glacial Cut"
+
+
+func _use_cut_skill() -> bool:
+	match get_cut_variant():
+		CutVariant.GLACIAL:
+			return await _use_glacial_cut()
+		CutVariant.LET_IT_GO:
+			return await _use_let_it_go()
 	return false
 
 
-func _use_chilling_pass(m: MatchManager) -> bool:
+## A bola está ao alcance dele agora (qualquer nível que o nível atual dele alcance)?
+func _ball_in_reach() -> bool:
 	var ball: Ball = _get_ball()
-	var target: Player = await m.pick_ally_for_skill(self, chilling_pass_range)
-	if target == null:
-		return false   # cancelou: não gasta a ação
-
-	# A situação pode ter mudado (Hiori pulou, a bola subiu...) enquanto ele escolhia o alvo
-	if get_pass_variant() != PassVariant.CHILLING:
-		return false
-
-	PassFX.arm(ball, PassFX.Style.CHILLING)   # fita gelada e floquinhos: começa quando a bola sai
-	await m.run_skill_high_pass(self, target, ball, chilling_pass_range, &"chilling_pass", kick_fx)
-	start_cooldown(CD_PASS, pass_cooldown)
-	return true
+	return ball != null and not ball.is_held() and not ball.is_locked_for(team) \
+		and can_reach_level(ball.get_level()) \
+		and global_position.distance_to(ball.global_position) <= kick_range
 
 
-func _use_no_look_cross(m: MatchManager) -> bool:
-	var ball: Ball = _get_ball()
-	var target: Player = await m.pick_ally_for_skill(self, no_look_cross_range)
-	if target == null:
-		return false   # cancelou: não gasta a ação
-
-	if get_pass_variant() != PassVariant.NO_LOOK:
-		return false
-
-	await m.run_skill_high_pass(self, target, ball, no_look_cross_range, &"no_look_cross", kick_fx)
-	start_cooldown(CD_PASS, pass_cooldown)
-	return true
+## Dominar a bola: toque dele, ela para e o chute que ela levava (se havia) é cancelado
+func _dominate_ball(ball: Ball) -> void:
+	ball.register_touch(self)
+	if not ball.hovering:
+		ball.velocity = Vector2.ZERO
+		ball.pending_shot_chance = Ball.NO_SHOT
+	_fx_ring(_ball_point(ball), 28.0, 10)
 
 
-# ---------- HABILIDADE 2: GLACIAL CUT / ULTRASADIST ----------
+func _ball_point(ball: Ball) -> Vector2:
+	return ball.sprite.global_position if ball.sprite != null else ball.global_position
 
-## Corrida curta e um pouco mais rápida que o Correr normal. NÃO é a ação geral Correr:
-## não mexe em runs_this_turn nem precisa dela sobrando. Se chegar perto da bola durante
-## a corrida, libera o Ultrasadist (complemento gratuito, ver can_use_skill/skill_is_free).
+
+## Glacial Cut: corrida curta e veloz (NÃO é a ação geral Correr). Encontrou a bola: domina e libera o Ultrasadist.
 func _use_glacial_cut() -> bool:
 	state = State.RUNNING
 	var time_left: float = glacial_cut_duration
 	var reached: bool = false
+	_fx_burst(_body_pos(), 8)
 	while time_left > 0.0:
 		await get_tree().physics_frame
 		var delta: float = get_physics_process_delta_time()
 		var dir := Input.get_vector("move_left", "move_right", "move_up", "move_down")
-		velocity = dir * (move_speed * glacial_cut_speed_mult)
+		velocity = dir * glacial_cut_speed
 		move_and_slide()
 		time_left -= delta
-
-		if not reached:
-			var ball: Ball = _get_ball()
-			if ball != null and not ball.is_held() and not ball.is_locked_for(team) \
-					and ball.get_level() != Heights.Level.FLYING \
-					and global_position.distance_to(ball.global_position) <= kick_range:
-				reached = true
+		if not reached and _ball_in_reach():
+			reached = true
+			_dominate_ball(_get_ball())
 		queue_redraw()
 
 	velocity = Vector2.ZERO
 	state = State.IDLE
+	_fx_burst(_body_pos(), 6)
 	start_cooldown(CD_GLACIAL, glacial_cooldown)
 	_glacial_ready = reached
 	queue_redraw()
 	return true
 
 
-## Complemento gratuito do Glacial Cut (só existe se ele alcançou a bola). Igual ao Rabona
-## Cross do Charles: Hiori escolhe um LOCAL do campo em vez de um aliado.
+## Let It Go: avanço curto na direção mirada, caindo para o chão no meio do caminho. Desvia dos inimigos que
+## encontra e os congela (atordoa); encontrou a bola: domina e libera o Ultrasadist. Deixa gelo fino no chão.
+func _use_let_it_go() -> bool:
+	var m: MatchManager = _get_manager()
+	if m == null:
+		return false
+	var aim: Vector2 = await m.aim_for_skill(self, let_it_go_range)
+	if aim == Vector2.ZERO:
+		return false   # cancelou: não gasta a ação
+	if get_cut_variant() != CutVariant.LET_IT_GO:
+		return false
+	var dir: Vector2 = aim.normalized()
+	face_towards(dir)
+	if not await play_action(&"let_it_go"):
+		return false
+
+	var start: Vector2 = global_position
+	var speed: float = let_it_go_range / maxf(let_it_go_time, 0.05)
+	var travelled: float = 0.0
+	var last_ice: Vector2 = start
+	var frozen: Array[Player] = []
+	var dodge_start: float = -1.0      # onde (px percorridos) o desvio começa; -1 = sem desvio
+	var dodge_len: float = 0.0
+	var dodge_amp: float = 0.0
+	var dodge_vec: Vector2 = Vector2.ZERO
+	var landed: bool = false
+	var got_ball: bool = false
+	_fx_burst(_body_pos(), 8)
+
+	while travelled < let_it_go_range:
+		await get_tree().physics_frame
+		travelled = minf(travelled + speed * get_physics_process_delta_time(), let_it_go_range)
+		var offset := Vector2.ZERO
+		if dodge_start >= 0.0:
+			var u: float = (travelled - dodge_start) / dodge_len
+			if u >= 0.0 and u <= 1.0:
+				offset = dodge_vec * dodge_amp * sin(PI * u)   # contorna o inimigo e volta para a linha
+		global_position = _clamp_to_pitch(start + dir * travelled + offset, body_radius)
+
+		if not landed and travelled >= let_it_go_range * 0.5:
+			land()
+			landed = true
+
+		# Encontrou um inimigo: congela e desvia (o desvio vai para o lado oposto ao dele)
+		for p: Player in get_tree().get_nodes_in_group("players"):
+			if p.team == team or p.is_down or frozen.has(p) or not can_reach_level(p.height_level):
+				continue
+			var trigger: float = body_radius + p.body_radius + let_it_go_margin
+			if global_position.distance_to(p.global_position) > trigger:
+				continue
+			frozen.append(p)
+			_stun(p)
+			if dodge_start < 0.0:
+				dodge_start = travelled
+				dodge_len = trigger * 2.0
+				dodge_amp = body_radius + p.body_radius + 14.0
+				dodge_vec = dir.orthogonal()
+				if dodge_vec.dot(p.global_position - global_position) > 0.0:
+					dodge_vec = -dodge_vec
+
+		if not got_ball and _ball_in_reach():
+			got_ball = true
+			_dominate_ball(_get_ball())
+
+		if snow_particles and global_position.distance_to(last_ice) >= ice_trail_step:
+			HioriFX.ice_layer(self, last_ice, global_position, ice_trail_width, ice_trail_seconds)
+			last_ice = global_position
+
+	if not landed:
+		land()
+	_fx_burst(_body_pos(), 8)
+	start_cooldown(CD_GLACIAL, glacial_cooldown)
+	_glacial_ready = got_ball
+	queue_redraw()
+	return true
+
+
+## Atordoar = sem habilidades e sem ações gerais. Dura até o fim do próximo turno do time do inimigo
+## (1 rodada; se o turno dele já passou nesta rodada, vale também a seguinte). O bloco de gelo some junto.
+func _stun(p: Player) -> void:
+	var m: MatchManager = _get_manager()
+	var rounds: int = 1
+	if m != null and m.turns_played >= m.team_count - 1:
+		rounds = 2
+	p.apply_lock(self, rounds, false)
+	HioriFX.ice_block(self, p, 0.0, true)
+
+
+## Ultrasadist (grátis depois do Glacial Cut / Let It Go): passe para um PONTO do campo, QTE fácil.
+## Ponto a menos de ultrasadist_low_distance: a bola só sobe a Suspensa; mais longe: sobe a Voando.
 func _use_ultrasadist() -> bool:
 	var m: MatchManager = _get_manager()
 	var ball: Ball = _get_ball()
-	if m == null or ball == null:
-		return false
+	if m == null or ball == null or not _ball_in_reach():
+		return false   # só com a bola próxima dele
 
 	var landing: Vector2 = await m.pick_point_for_skill(self, ultrasadist_range)
 	if landing == Vector2.INF:
-		return false   # cancelou: a chance continua valendo até o turno acabar
-	if ball.is_held() or ball.is_locked_for(team):
-		return false   # a bola saiu de jogo enquanto ele escolhia o local
+		return false   # cancelou: a chance continua até o turno acabar
+	if not _ball_in_reach():
+		return false   # a bola saiu do alcance (ou de jogo) enquanto ele escolhia o local
 
-	_glacial_ready = false   # consumida: só dá uma chance por Glacial Cut
+	_glacial_ready = false   # consumida: só uma chance por Glacial Cut / Let It Go
 
 	var dir: Vector2 = landing - global_position
 	dir = dir.normalized() if dir.length() > 0.01 else Vector2(_default_facing(), 0.0)
 	face_towards(dir)
 	if not await play_action(&"ultrasadist", ANIM_PASS_HIGH):
-		return false   # ação cancelada (ex: a partida reiniciou)
+		return false
 
 	var qte_ok: bool = true
 	if not skips_qte():
 		qte_ok = await m.run_qte(KickType.VOLLEY)   # QTE fácil
-
 	if not qte_ok:
-		# Errou: o local sai mais perto do que o clicado e um pouco torto
+		# Errou: o local sai mais perto e um pouco torto
 		var bad_dir: Vector2 = dir.rotated(deg_to_rad(randf_range(-ultrasadist_qte_fail_angle, ultrasadist_qte_fail_angle)))
-		var dist: float = global_position.distance_to(landing) * ultrasadist_qte_fail_range_mult
-		landing = global_position + bad_dir * dist
+		landing = global_position + bad_dir * global_position.distance_to(landing) * ultrasadist_qte_fail_range_mult
 
-	ball.register_touch(self)   # o passe alto não usa kick(), então registra o toque aqui
+	ball.register_touch(self)
 
-	# One More Time (Hiori + Isagi): se este Ultrasadist cumpre as condições da reação, ele brilha e
-	# congela o chão por onde a bola passa (até ela chegar ao local)
+	# One More Time (Hiori + Isagi): se cumpre a reação, o passe sai brilhando e congelando o chão
 	var charged: bool = ReactionOneMoreTime.is_ultrasadist_charged(self)
 	last_ultrasadist = {}
 	if charged:
@@ -377,18 +511,21 @@ func _use_ultrasadist() -> bool:
 	elif kick_fx:
 		ball.play_fx(kick_fx)
 	if not charged:
-		PassFX.attach(ball, PassFX.Style.ULTRASADIST)   # lascas de gelo (o carregado já tem os efeitos da One More Time)
-	var midpoint: Vector2 = (ball.global_position + landing) * 0.5
-	var tween: Tween = ball.hover_to(midpoint, Heights.FLYING_HEIGHT, 0.9)
-	await tween.finished
+		PassFX.attach(ball, PassFX.Style.ULTRASADIST)
+		_fx_trail(ball, 1.0)
+		_fx_burst(_ball_point(ball), 10)
 
-	# Chega NA MESMA RODADA: a bola desce até o local (Suspensa) agora, sem esperar o próximo turno.
-	# O register_skill_pass deixa ela pairando lá até alguém tocar ou o turno acabar (aí ela cai).
-	var arrive: Tween = ball.hover_to(landing, Heights.SUSPENDED_HEIGHT, m.high_pass_arrive_time)
-	await arrive.finished
+	var distance: float = ball.global_position.distance_to(landing)
+	var peak: float = Heights.SUSPENDED_HEIGHT if distance < ultrasadist_low_distance else Heights.FLYING_HEIGHT
+	var flight: float = 0.45 + 0.45 * clampf(distance / ultrasadist_range, 0.0, 1.0)   # passe curto é mais rápido
+	await ball.hover_to((ball.global_position + landing) * 0.5, peak, flight).finished
+
+	# Chega NA MESMA RODADA, Suspensa; fica pairando até alguém tocar ou o turno acabar
+	await ball.hover_to(landing, Heights.SUSPENDED_HEIGHT, m.high_pass_arrive_time).finished
 	m.register_skill_pass(team, null)
+	_fx_ring(landing, 40.0, 10)
 
-	# Avisa as Reações Químicas (a One More Time lê isto): o Ultrasadist saiu e a bola é dele
+	# Avisa as Reações Químicas (a One More Time lê isto)
 	last_ultrasadist = {"landing": landing, "touches": ball.interaction_count}
 	if charged:
 		OneMoreTimeFX.ice_burst(self, ball.sprite.global_position, 30)
@@ -396,14 +533,14 @@ func _use_ultrasadist() -> bool:
 	return true
 
 
-# ---------- HABILIDADE 3: COLDEST METAVISION (+ FROST GUARD / CRYO SHOT) ----------
+# ---------- HABILIDADE 3: COLDEST METAVISION (+ CRYO SHOT / FROST GUARD) ----------
 
 func is_metavision_active() -> bool:
 	var m: MatchManager = _get_manager()
 	return m != null and _metavision_until_round >= 0 and m.round_number <= _metavision_until_round
 
 
-## +8% nos chutes do próprio Hiori enquanto a Metavision estiver ativa
+## +5% nos chutes do próprio Hiori enquanto a Metavision estiver ativa
 func get_shot_chance(kind: KickType) -> float:
 	var base: float = super(kind)
 	if is_metavision_active():
@@ -411,31 +548,28 @@ func get_shot_chance(kind: KickType) -> float:
 	return base
 
 
-## +8% no chute de quem acabou de receber um passe de Hiori (a assistência), enquanto a
-## Metavision durar (ver _on_pass_completed)
+## +5% no chute de quem acabou de receber um passe dele (assistência), enquanto a Metavision durar
 func shot_bonus_for_ally(shooter: Player, _ball: Ball) -> float:
 	if is_metavision_active() and shooter == _assist_target:
 		return metavision_assist_shot_bonus
 	return 0.0
 
 
-## Lado do campo em que Hiori está AGORA (metade do próprio gol). Considera a troca de lado
-## do 2º tempo (ver o comentário de cabeçalho do field.gd).
+## Lado do campo em que ele está AGORA (metade do próprio gol), considerando a troca de lado do 2º tempo
 func _is_on_defense_side() -> bool:
 	var field := get_tree().get_first_node_in_group("field") as Field
 	var x: float = global_position.x if field == null else field.to_local(global_position).x
 	return x * get_attack_dir() < 0.0
 
 
-## Soma o bônus de tempo na PRÓXIMA corrida (gasto na hora: start_run() some com o
-## bônus de novo depois de usá-lo, pra não valer pra corridas futuras)
+## Os próximos metavision_run_count Correr ganham metavision_run_bonus segundos (o bônus some logo depois de usado)
 func start_run() -> void:
-	var bonus_applied: bool = _coldest_run_bonus_pending
-	if bonus_applied:
+	var boosted: bool = _run_bonus_left > 0 and is_metavision_active()
+	if boosted:
+		_run_bonus_left -= 1
 		run_time_bonus += metavision_run_bonus
-		_coldest_run_bonus_pending = false
 	super()
-	if bonus_applied:
+	if boosted:
 		run_time_bonus -= metavision_run_bonus
 
 
@@ -444,39 +578,17 @@ func _use_metavision() -> bool:
 	if m == null:
 		return false
 	await play_action(&"coldest_metavision")
+	_fx_ring(_body_pos(), 46.0, 18)
+	_fx_burst(_body_pos(), 16, true)
 	_metavision_until_round = m.round_number + metavision_rounds
-	_coldest_run_bonus_pending = true
+	_run_bonus_left = metavision_run_count
 	start_cooldown(CD_METAVISION, metavision_cooldown, _metavision_until_round + 1)
 	queue_redraw()
 	return true
 
 
-## Frost Guard: bola Suspensa e perto, lado da defesa -> Hiori salta até ela e deflete
-## para a direção contrária (um "chute" sem chance de gol: é defesa, não ataque).
-func _use_frost_guard() -> bool:
-	var ball: Ball = _get_ball()
-	if ball == null:
-		return false
-
-	face_towards(ball.global_position - global_position)
-	await jump()
-	if not await play_action(&"frost_guard", ANIM_JUMP):
-		return false
-
-	var reflect_dir: Vector2 = -ball.velocity.normalized() if ball.velocity.length() > 1.0 \
-		else Vector2(-facing, 0.0)
-	ball.kick(reflect_dir, frost_guard_force,
-		Heights.lift_for_peak(Heights.SUSPENDED_HEIGHT, ball.gravity), self, Ball.NO_SHOT)
-	if kick_fx:
-		ball.play_fx(kick_fx)
-
-	start_cooldown(CD_FROST_GUARD, frost_guard_cooldown)
-	return true
-
-
-## Cryo Shot: chute comum sem QTE, Hiori e bola no chão ou Suspensos (qualquer combinação
-## dessas duas, nunca Voando), lado do ataque.
-## Reação Sacrifice (Loud Crow): se mirar no Karasu, a cutscene roda e o chute sai especial.
+## Cryo Shot: chute comum (voleio tem QTE), 1.2x a força do Chutar e chance pura. Lado do ataque.
+## Reação Sacrifice (Loud Crow): se mirar no Karasu, a cutscene roda e o chute sai especial (sem QTE).
 func _use_cryo_shot() -> bool:
 	var m: MatchManager = _get_manager()
 	var ball: Ball = _get_ball()
@@ -504,31 +616,179 @@ func _use_cryo_shot() -> bool:
 		_loud_crow_partner = null
 		return false
 
-	# Reação Química (Sacrifice): só vale se a mira passa pelo Karasu. A partida congela, roda a
-	# cutscene e SÓ DEPOIS DO DIÁLOGO o chute acontece.
+	# Reação Química (Sacrifice): só vale se a mira passa pelo Karasu
 	var chance: float = cryo_shot_chance
 	var anim: StringName = &"cryo_shot"
 	var fx: KickFX = kick_fx
-	var on_kick: Callable = Callable()
+	var on_kick: Callable = _launch_cryo
+	var qte_ok: bool = true
 	var sacrifice: ChemicalReaction = _find_sacrifice() if _loud_crow_partner != null else null
 	var karasu: Player = sacrifice.find_partner(self) if sacrifice != null else null
 	_loud_crow_partner = null
+	var loud_crow: bool = false
 	if karasu != null and _aim_hits_partner(aim, karasu, ball):
 		var rm: ReactionManager = ReactionManager.get_for(self)
 		if rm != null:
 			await rm.play(sacrifice, self, karasu)
 			if m.match_over:
 				return false
+			loud_crow = true
 			chance = loud_crow_chance
 			anim = _loud_crow_anim()
 			fx = loud_crow_fx
 			next_kick_force_mult *= loud_crow_force_mult
 			on_kick = _launch_loud_crow.bind(karasu)
+	if not loud_crow:
+		next_kick_force_mult *= cryo_force_mult
+		if kind == KickType.VOLLEY and not skips_qte():
+			qte_ok = await m.run_qte(kind)   # só o voleio tem QTE
 
-	# qte_success = true direto: Cryo Shot / Loud Crow nunca têm QTE (nem errada, nem o knock_down do erro)
-	await kick_ball(ball, aim, kind, true, chance, false, fx, anim, on_kick)
-	start_cooldown(CD_CRYO_SHOT, cryo_shot_cooldown)
+	await kick_ball(ball, aim, kind, qte_ok, chance, false, fx, anim, on_kick)
+	start_cooldown(CD_GUARD_CRYO, guard_cryo_cooldown)
 	return true
+
+
+# ---------- FROST GUARD (detecção no turno inimigo) ----------
+
+func _ally_in_range(range_px: float) -> bool:
+	var m: MatchManager = _get_manager()
+	if m == null:
+		return false
+	for o: Player in m.get_team_players(team):
+		if o != self and not o.is_down and global_position.distance_to(o.global_position) <= range_px:
+			return true
+	return false
+
+
+## Arma o Frost Guard e fica esperando o turno inimigo. Escolhe a direção (usada no chute Voando) e, com aliado ao
+## alcance, quem recebe o passe do chute no chão; sem aliado, o Hiori fica com a bola. A detecção desliga quando o
+## turno do Hiori volta ou ao pegar um chute.
+func _use_frost_guard() -> bool:
+	var m: MatchManager = _get_manager()
+	if m == null:
+		return false
+	var ally: Player = null
+	if _ally_in_range(m.ground_pass_range):
+		ally = await m.pick_ally_for_skill(self, m.ground_pass_range)
+		if ally == null:
+			return false   # cancelou: não gasta a ação
+	var aim: Vector2 = await m.aim_for_skill(self, kick_aim_range)
+	if aim == Vector2.ZERO:
+		return false
+	if not await play_action(&"frost_guard"):
+		return false
+	_guard_ally = ally
+	_guard_dir = aim.normalized()
+	_guard_armed = true
+	start_cooldown(CD_GUARD_CRYO, guard_cryo_cooldown)
+	_fx_ring(global_position, frost_guard_range, 22)   # mostra a área de detecção
+	_fx_burst(_body_pos(), 10)
+	queue_redraw()
+	return true
+
+
+## Turno inimigo: primeiro chute inimigo que entra na área de detecção
+func _scan_for_shot() -> void:
+	var ball: Ball = _get_ball()
+	if ball == null or _guard_busy or ball.is_held() or not ball.has_pending_shot() or ball.shot_team == team \
+			or ball.global_position.distance_to(global_position) > frost_guard_range:
+		return
+	_guard_busy = true
+	_guard_live = false
+	_guard_armed = false
+	queue_redraw()
+	await _react_to_shot(ball)
+	_guard_busy = false
+
+
+func _react_to_shot(ball: Ball) -> void:
+	var m: MatchManager = _get_manager()
+	var speed: float = ball.velocity.length()
+	var dir: Vector2 = ball.velocity.normalized() if speed > 1.0 else Vector2(get_attack_dir(), 0.0)
+	_fx_burst(_ball_point(ball), 14, true)   # interceptou o chute
+	match ball.get_level():
+		Heights.Level.GROUND:
+			# Vai até a bola, para ela e passa para o aliado escolhido (sem aliado ao alcance, a bola fica com ele)
+			ball.velocity = Vector2.ZERO
+			ball.pending_shot_chance = Ball.NO_SHOT
+			face_towards(ball.global_position - global_position)
+			var tw := create_tween()
+			tw.tween_property(self, "global_position", _clamp_to_pitch(ball.global_position, body_radius), 0.18)
+			await tw.finished
+			if m.match_over:
+				return
+			if _guard_ally != null and is_instance_valid(_guard_ally) and not _guard_ally.is_down \
+					and global_position.distance_to(_guard_ally.global_position) <= m.ground_pass_range:
+				if snow_particles:
+					HioriFX.line(self, global_position, _guard_ally.global_position, 12)
+				_fx_trail(ball)
+				await m.run_ground_pass(self, _guard_ally, ball)
+			else:
+				await _keep_ball(ball)
+		Heights.Level.SUSPENDED:
+			# O HIORI salta até a bola e rebate para a esquerda
+			var was_ground_s: bool = height_level == Heights.Level.GROUND
+			await _jump_to_ball(ball)
+			_deflect(ball, dir.rotated(-PI * 0.5), speed * frost_side_mult)
+			if was_ground_s:
+				await get_tree().create_timer(0.35).timeout
+				land()
+		Heights.Level.FLYING:
+			# O HIORI salta até a bola e rebate na direção escolhida ao usar; QTE (errou: rebate fraco e torto)
+			var was_ground: bool = height_level == Heights.Level.GROUND
+			await _jump_to_ball(ball)
+			var ok: bool = true
+			if not skips_qte():
+				ok = await m.run_qte(KickType.FLYING)
+			var out_dir: Vector2 = _guard_dir
+			var out_speed: float = speed * frost_air_mult
+			if not ok:
+				out_speed *= qte_fail_power_mult
+				out_dir = out_dir.rotated(deg_to_rad(randf_range(-qte_fail_max_angle, qte_fail_max_angle)))
+			_deflect(ball, out_dir, out_speed)
+			if was_ground:   # volta ao chão logo depois do rebate
+				await get_tree().create_timer(0.35).timeout
+				land()
+
+
+## Quem rebate é o Hiori, não a área: ele salta até a bola (que fica parada no ar) antes do deflect
+func _jump_to_ball(ball: Ball) -> void:
+	ball.pending_shot_chance = Ball.NO_SHOT   # chute interceptado: o goleiro não decide mais nada
+	ball.velocity = Vector2.ZERO
+	ball.vel_z = 0.0
+	face_towards(ball.global_position - global_position)
+	height_level = Heights.Level.SUSPENDED
+	var spot: Vector2 = _clamp_to_pitch(ball.global_position - Vector2(facing * (body_radius + ball.collision_radius + 4.0), 0.0), body_radius)
+	var tw := create_tween().set_parallel(true)
+	tw.tween_property(self, "global_position", spot, 0.15).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(self, "height", Heights.SUSPENDED_HEIGHT, 0.15).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	await tw.finished
+
+
+func _deflect(ball: Ball, dir: Vector2, speed: float) -> void:
+	var rise: float = maxf(0.0, Heights.SUSPENDED_HEIGHT - ball.height)
+	ball.kick(dir, speed, Heights.lift_for_peak(rise, ball.gravity), self, Ball.NO_SHOT)
+	if kick_fx:
+		ball.play_fx(kick_fx)
+	_fx_trail(ball, 0.5)
+
+
+## Frost Guard sem aliado: a bola fica parada nos pés dele
+func _keep_ball(ball: Ball) -> void:
+	ball.register_touch(self)
+	var spot: Vector2 = _clamp_to_pitch(global_position + Vector2(facing * (body_radius + ball.collision_radius + 6.0), 0.0), ball.collision_radius)
+	await ball.hover_to(spot, 0.0, 0.15).finished
+	ball.release_hover()
+
+
+## Mantém um ponto dentro do campo (a margem é o raio de quem está sendo movido)
+func _clamp_to_pitch(pos: Vector2, radius: float) -> Vector2:
+	var field := get_tree().get_first_node_in_group("field") as Field
+	if field == null:
+		return pos
+	var half: Vector2 = field.pitch_size * 0.5 - Vector2(radius, radius)
+	var l: Vector2 = field.to_local(pos)
+	return field.to_global(Vector2(clampf(l.x, -half.x, half.x), clampf(l.y, -half.y, half.y)))
 
 
 # ---------- LOUD CROW (reação Sacrifice) ----------
@@ -637,18 +897,18 @@ func _ghost_span(origin: Vector2, dir: Vector2) -> float:
 func get_skills() -> Array[Dictionary]:
 	var list: Array[Dictionary] = []
 	list.append({"id": SKILL_PASS, "name": skill_label(_pass_skill_name(), CD_PASS)})
-	list.append({"id": SKILL_GLACIAL, "name": skill_label("Glacial Cut", CD_GLACIAL)})
+	list.append({"id": SKILL_GLACIAL, "name": skill_label(_cut_skill_name(), CD_GLACIAL)})
 	if _glacial_ready:
 		list.append({"id": SKILL_ULTRASADIST, "name": "Ultrasadist (grátis)"})
 	var meta_name: String = "Coldest Metavision (ativa)" if is_metavision_active() \
 		else skill_label("Coldest Metavision", CD_METAVISION)
 	list.append({"id": SKILL_METAVISION, "name": meta_name})
 	if is_metavision_active():
-		if _is_on_defense_side():
-			list.append({"id": SKILL_FROST_GUARD, "name": skill_label("Frost Guard", CD_FROST_GUARD)})
-		else:
+		var guard_name: String = "Frost Guard (armado)" if _guard_armed else skill_label("Frost Guard", CD_GUARD_CRYO)
+		list.append({"id": SKILL_FROST_GUARD, "name": guard_name})
+		if not _is_on_defense_side():
 			var cryo_name: String = "Loud Crow" if _find_sacrifice() != null else "Cryo Shot"
-			list.append({"id": SKILL_CRYO_SHOT, "name": skill_label(cryo_name, CD_CRYO_SHOT)})
+			list.append({"id": SKILL_CRYO_SHOT, "name": skill_label(cryo_name, CD_GUARD_CRYO)})
 	return list
 
 
@@ -659,19 +919,17 @@ func can_use_skill(skill_id: StringName = &"default") -> bool:
 		SKILL_PASS:
 			return not is_on_cooldown(CD_PASS) and get_pass_variant() != PassVariant.NONE
 		SKILL_GLACIAL:
-			return not is_on_cooldown(CD_GLACIAL)
+			return not is_on_cooldown(CD_GLACIAL) and get_cut_variant() != CutVariant.NONE
 		SKILL_ULTRASADIST:
-			return _glacial_ready
+			return _glacial_ready and _ball_in_reach()
 		SKILL_METAVISION:
 			return not is_metavision_active() and not is_on_cooldown(CD_METAVISION)
 		SKILL_FROST_GUARD:
-			if not is_metavision_active() or is_on_cooldown(CD_FROST_GUARD) or not _is_on_defense_side():
-				return false
-			var ball: Ball = _get_ball()
-			return ball != null and ball.get_level() == Heights.Level.SUSPENDED \
-				and global_position.distance_to(ball.global_position) <= frost_guard_reach
+			var m: MatchManager = _get_manager()
+			return m != null and is_metavision_active() and not is_on_cooldown(CD_GUARD_CRYO) \
+				and not _guard_armed and height_level != Heights.Level.FLYING
 		SKILL_CRYO_SHOT:
-			if not is_metavision_active() or is_on_cooldown(CD_CRYO_SHOT) or _is_on_defense_side():
+			if not is_metavision_active() or is_on_cooldown(CD_GUARD_CRYO) or _is_on_defense_side():
 				return false
 			var ball: Ball = _get_ball()
 			var kind: KickType = get_kick_type(ball) if ball != null else KickType.NONE
@@ -679,14 +937,13 @@ func can_use_skill(skill_id: StringName = &"default") -> bool:
 	return false
 
 
-## Ultrasadist é o complemento GRATUITO do Glacial Cut (ver player.gd: skill_is_free /
-## has_free_followup, mesmo padrão do Draconic Header do Shidou)
+## Ultrasadist é o complemento GRATUITO do Glacial Cut / Let It Go (ver player.gd: skill_is_free / has_free_followup)
 func skill_is_free(skill_id: StringName) -> bool:
 	return skill_id == SKILL_ULTRASADIST
 
 
 func has_free_followup() -> bool:
-	return _glacial_ready
+	return _glacial_ready and _ball_in_reach()
 
 
 func use_skill(skill_id: StringName = &"default") -> bool:
@@ -694,7 +951,7 @@ func use_skill(skill_id: StringName = &"default") -> bool:
 		SKILL_PASS:
 			return await _use_pass_skill()
 		SKILL_GLACIAL:
-			return await _use_glacial_cut()
+			return await _use_cut_skill()
 		SKILL_ULTRASADIST:
 			return await _use_ultrasadist()
 		SKILL_METAVISION:
@@ -717,41 +974,42 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	var text: String = ""
 	match skill_id:
 		SKILL_PASS:
-			match get_pass_variant():
-				PassVariant.CHILLING:
-					title = "Chilling Pass"
-					text = "Passe alto para um aliado: a bola sobe no meio do caminho e chega nele no ar."
-				PassVariant.NO_LOOK:
-					title = "No Look Cross"
-					text = "O mesmo passe alto, mas com muito mais alcance."
-				_:
-					title = "Chilling Pass / No Look Cross"
-					text = "Passe alto para um aliado. Com o Hiori no ar, ele chega bem mais longe."
+			if get_pass_variant() == PassVariant.NO_LOOK:
+				title = "No Look Cross"
+				text = "Passe alto para um aliado, com QTE fácil. De recompensa, o alcance sobe para %d." % int(no_look_cross_range)
+			else:
+				title = "Chilling Pass"
+				text = "Passe alto para um aliado (alcance %d): a bola sobe no meio do caminho e chega nele Suspensa. No ar, vira No Look Cross." % int(chilling_pass_range)
 			text += "\nRecarga: %d rodadas." % pass_cooldown
 		SKILL_GLACIAL:
-			title = "Glacial Cut"
-			text = "Corrida curta e rápida. Se alcançar a bola, libera o Ultrasadist de graça.\nRecarga: %d rodadas." % glacial_cooldown
+			if get_cut_variant() == CutVariant.LET_IT_GO:
+				title = "Let It Go"
+				text = "Avanço curto (alcance %d) em que o Hiori cai para o chão. Desvia dos inimigos que encontrar e os congela (sem habilidades e ações gerais por 1 rodada). Se encontrar a bola, domina e libera o Ultrasadist.\nRecarga: %d rodadas." % [int(let_it_go_range), glacial_cooldown]
+			else:
+				title = "Glacial Cut"
+				text = "Corrida curta (%.1f s) e veloz. Se encontrar a bola, domina e libera o Ultrasadist de graça.\nRecarga: %d rodadas." % [glacial_cut_duration, glacial_cooldown]
 		SKILL_ULTRASADIST:
 			title = "Ultrasadist"
-			text = "Complemento grátis do Glacial Cut: passe alto para o local do campo que você escolher. A bola chega na mesma rodada."
+			text = "Complemento grátis (só com a bola perto do Hiori): passe para o ponto do campo que você escolher (alcance %d), QTE fácil. A bola chega Suspensa na mesma rodada; abaixo de %d ela só sobe a Suspensa, acima sobe a Voando." % [int(ultrasadist_range), int(ultrasadist_low_distance)]
 		SKILL_METAVISION:
 			title = "Coldest Metavision (ativa)" if is_metavision_active() else "Coldest Metavision"
-			text = ("Por %d rodadas: +%.1f s no próximo Correr e +%d%% de chance de gol nos chutes do Hiori e nos chutes depois de um passe dele. Libera uma habilidade nova, conforme o lado do campo.\n"
-				+ "Recarga: %d rodadas.") % [
-				metavision_rounds, metavision_run_bonus, _pct(metavision_self_shot_bonus), metavision_cooldown]
+			text = ("Por %d rodadas: os próximos %d Correr ganham +%.1f s e os chutes do Hiori e depois de um passe dele ganham +%d%% de chance. Libera Frost Guard e Cryo Shot.\n"
+				+ "Recarga: %d rodadas depois do efeito.") % [
+				metavision_rounds, metavision_run_count, metavision_run_bonus, _pct(metavision_self_shot_bonus), metavision_cooldown]
 		SKILL_FROST_GUARD:
 			title = "Frost Guard"
-			text = "Salta até a bola no ar e a rebate para a direção contrária.\nRecarga: %d rodadas." % frost_guard_cooldown
+			text = "Você escolhe a direção e, com aliado ao alcance, quem recebe o passe (sem aliado, o Hiori fica com a bola). A detecção (raio %d) fica armada para o turno inimigo. Chute no chão: ele vai até a bola e passa (ou fica com ela). Suspenso: ele salta até a bola e dá um deflect %.1fx para a esquerda. Voando: ele salta até a bola e dá um deflect %.1fx na direção escolhida (QTE).\nRecarga: %d rodadas (compartilhada com o Cryo Shot)." % [
+				int(frost_guard_range), frost_side_mult, frost_air_mult, guard_cryo_cooldown]
 		SKILL_CRYO_SHOT:
 			var star: ChemicalReaction = _find_sacrifice()
 			if star != null:
 				title = "Loud Crow"
 				text = "Reação Química Sacrifice com o Karasu: MIRE NO KARASU e o chute sai mais forte, com %d%% de chance de gol, e a bola passa por cima dele e dos inimigos. Mirando para outro lado, sai o Cryo Shot (%d%%).\nA reação recarrega em %d rodadas. Recarga: %d rodadas." % [
-					_pct(loud_crow_chance), _pct(cryo_shot_chance), star.cooldown_rounds, cryo_shot_cooldown]
+					_pct(loud_crow_chance), _pct(cryo_shot_chance), star.cooldown_rounds, guard_cryo_cooldown]
 			else:
 				title = "Cryo Shot"
-				text = "Chute comum, sem QTE. %d%% de chance de gol.\nRecarga: %d rodadas." % [
-					_pct(cryo_shot_chance), cryo_shot_cooldown]
+				text = "Chute comum com %.1fx a força do Chutar e %d%% de chance pura (voleio tem QTE).\nRecarga: %d rodadas (compartilhada com o Frost Guard)." % [
+					cryo_force_mult, _pct(cryo_shot_chance), guard_cryo_cooldown]
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D
@@ -764,15 +1022,43 @@ func reset_for_new_match() -> void:
 	super()
 	_glacial_ready = false
 	_metavision_until_round = -1
+	_run_bonus_left = 0
 	_assist_target = null
-	_coldest_run_bonus_pending = false
 	last_ultrasadist = {}
+	_guard_armed = false
+	_guard_live = false
+	_guard_busy = false
+	_guard_ally = null
 	_aiming_loud_crow = false
 	_loud_crow_partner = null
+	if _aura != null:
+		_aura.emitting = false
 	queue_redraw()
 
 
-# ---------- VISUAL ----------
+# ---------- LOOP / VISUAL ----------
+
+func _process(delta: float) -> void:
+	super(delta)
+	if _aura != null:   # neve em volta dele enquanto a Metavision está valendo ou o Frost Guard está armado
+		var want: bool = is_metavision_active() or _guard_armed or _guard_live
+		if _aura.emitting != want:
+			_aura.emitting = want
+		if want:
+			_aura.position = Vector2(0.0, -height)
+	if _frost_area_shown() or _glacial_ready:
+		queue_redraw()   # o floco gira devagar / o anel do Ultrasadist acompanha a bola
+
+
+func _physics_process(delta: float) -> void:
+	super(delta)
+	if _guard_live and not _guard_busy:
+		_scan_for_shot()
+
+
+func _frost_area_shown() -> bool:
+	return frost_area_enabled and (_guard_armed or _guard_live)
+
 
 func _draw() -> void:
 	super()
@@ -785,8 +1071,13 @@ func _draw() -> void:
 		draw_arc(center, placeholder_radius + 8.0, 0.0, TAU, 28, aura_color, 2.0)
 
 	# Anel branco-gelo enquanto o Ultrasadist está esperando ser usado
-	if _glacial_ready:
+	if _glacial_ready and _ball_in_reach():
 		draw_arc(center, placeholder_radius + 14.0, 0.0, TAU, 20, Color(0.9, 0.98, 1.0, 0.95), 2.0)
+
+	# Frost Guard: círculo do alcance com um floco grande (mais forte no turno inimigo, quando está procurando)
+	if _frost_area_shown():
+		HioriFX.draw_frost_area(self, Vector2.ZERO, frost_guard_range, 1.0 if _guard_live else 0.5,
+			Time.get_ticks_msec() / 1000.0 * 0.3)
 
 	# Loud Crow: destaca o Karasu enquanto mira (mais forte quando a mira passa por ele)
 	if is_aiming and _aiming_loud_crow:

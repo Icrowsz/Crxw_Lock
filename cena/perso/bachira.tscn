@@ -5,32 +5,53 @@
 [ext_resource type="Texture2D" uid="uid://6hhnhjobeij1" path="res://img/mvps/bachira.jpg" id="3_dcfof"]
 [ext_resource type="Texture2D" uid="uid://ccww6ebnf2q71" path="res://img/testes/bachira.png" id="4_dcfof"]
 
-[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_ygkwl")]
+[node name="Player" unique_id=1241627939 instance=ExtResource("1_ygkwl")]
 script = ExtResource("2_6eyd0")
 chance_bon = 0.4
 chance_bee = 0.5
+chance_leap = 0.45
+bon_force_mult = 0.55
+bee_force_mult = 1.2
+leap_force_mult = 1.2
 bon_peak_level = 2
 bon_max_bounces = 1
-bon_force_mult = 0.55
+leap_range = 100.0
+leap_time = 0.2
 shot_cooldown = 2
-step_range = 110.0
-step_max_targets = 2
+skills_use_qte = true
+step_ball_range = 90.0
+step_walk_distance = 220.0
+step_walk_speed = 190.0
+step_dash_distance = 150.0
+step_dash_speed = 750.0
+step_hit_radius = 50.0
+step_ball_offset = 30.0
 step_stun_turns = 1
 step_cooldown = 2
+freedom_range = 110.0
+freedom_jump_time = 0.22
+freedom_run_time = 1.1
+freedom_speed_mult = 1.35
 instinct_range = 90.0
 instinct_grab_time = 0.15
 instinct_ball_offset = 22.0
-instinct_trigger_radius = 75.0
-instinct_dodge_distance = 160.0
-instinct_dodge_time = 0.25
-instinct_extra_dodges = 6
-instinct_extra_generals = 1
+instinct_move_speed = 250.0
+juggle_period = 1.1
+juggle_touch_time = 0.12
+juggle_foot_height = 6.0
+juggle_variation = 0.18
+juggle_sway = 5.0
+dodge_hop_height = 40.0
+cps_seconds = 5.0
+cps_head_start = 3
+instinct_win_skill_actions = 1
 instinct_cooldown = 2
 kick_fx = null
+particles_fx = true
+monster_texture = null
 skill_icons = {}
 display_name = "Meguru Bachira"
 mvp_image = ExtResource("3_dcfof")
-visual_root = NodePath("SprPlayer")
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

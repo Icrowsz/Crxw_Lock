@@ -78,6 +78,7 @@ static func style_button(b: Button, accent: Color = Color(0.30, 0.34, 0.45)) -> 
 	b.mouse_entered.connect(_button_pop.bind(b, 1.06))
 	b.mouse_exited.connect(_button_pop.bind(b, 1.0))
 	b.pressed.connect(jelly.bind(b, 1.16, 0.5))   # clicou: balança como gelatina
+	_hook_button_sfx(b)
 
 
 ## depth = espessura da "borda de baixo" (efeito almofada). Apertado (depth 0) o texto desce um pouco.
@@ -130,6 +131,7 @@ static func style_card_button(b: Button, font_size: int = 30, bg: Color = CARD_C
 	b.mouse_entered.connect(_button_pop.bind(b, 1.045))
 	b.mouse_exited.connect(_button_pop.bind(b, 1.0))
 	b.pressed.connect(jelly.bind(b, 1.2, 0.6))
+	_hook_button_sfx(b)
 
 
 ## Balanço natural contínuo e suave (gira alguns décimos de grau, cada elemento em fase diferente).
@@ -167,6 +169,22 @@ static func jelly_chain(controls: Array, strength: float = 1.08, step: float = 0
 			jelly(c, strength, 0.55)
 		else:
 			c.get_tree().create_timer(step * i).timeout.connect(jelly.bind(c, strength, 0.55))
+
+
+## Sons dos botões: passar o mouse (hover) e clicar. Todo botão estilizado pelo UiStyle ganha os dois.
+static func _hook_button_sfx(b: Button) -> void:
+	Sfx.ensure()
+	b.mouse_entered.connect(_sfx_hover.bind(b))
+	b.pressed.connect(_sfx_click)
+
+
+static func _sfx_hover(b: Button) -> void:
+	if not b.disabled:
+		Sfx.play(&"ui_hover", 0.7, 0.03)
+
+
+static func _sfx_click() -> void:
+	Sfx.play(&"ui_click", 1.0, 0.03)
 
 
 static func _button_pop(b: Button, target: float) -> void:

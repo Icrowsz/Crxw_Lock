@@ -415,6 +415,7 @@ func _start_catch(forced: bool) -> void:
 	if _move_tween and _move_tween.is_valid():
 		_move_tween.kill()
 	state = State.DIVING
+	Sfx.play(&"keeper_dive")
 	_catch_forced = forced
 	_dive_time = 0.0
 
@@ -424,6 +425,7 @@ func _catch_ball() -> void:
 	ball.clear_touches()  # a posse recomeça do zero: próximo toque é de quem receber
 	ball.hold(self)
 	state = State.HOLDING
+	Sfx.play(&"keeper_catch")
 	if manager:
 		manager.record_keeper_catch(team, _catch_forced, _keeper_label())   # estatística da tela final
 	_play_jump()

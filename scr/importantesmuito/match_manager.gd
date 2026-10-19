@@ -138,8 +138,8 @@ const PASS_VARIANT_NAMES := {
 @export_group("Chutar - QTE")
 @export var volley_qte_keys: int = 3                  # voleio: quantas teclas
 @export var volley_qte_time_per_key: float = 0.7      # voleio: segundos por tecla
-@export var flying_qte_keys: int = 5                  # bola voando: mais teclas...
-@export var flying_qte_time_per_key: float = 0.5      # ...menos tempo (e teclas extras no pool)
+@export var flying_qte_keys: int = 6                  # bola voando: mais teclas...
+@export var flying_qte_time_per_key: float = 0.7      # ...menos tempo (e teclas extras no pool)
 
 @export_group("Passe")
 @export var ground_pass_range: float = 450.0           # alcance do passe rasteiro (px)

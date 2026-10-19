@@ -79,7 +79,7 @@ const ACTION_TIMEOUT: float = 3.0
 @export var slide_duration: float = 0.4
 @export var max_slides_per_turn: int = 1        # quantas vezes o Carrinho pode ser usado por turno
 @export var slide_hit_radius: float = 55.0     # "próximo": raio que acerta inimigos e bola
-@export var slide_ball_power: float = 800.0
+@export var slide_ball_power: float = 350.0
 
 @export_group("Levantar")
 @export var stand_up_time: float = 0.5
@@ -257,7 +257,7 @@ var _hover_ok: bool = false
 ## draw_team_marker) e um marcador (triângulo) em cima da cabeça
 @export_group("Time (visual)")
 @export var team_tag_enabled: bool = true
-@export var team_tag_offset: float = 62.0    # altura do marcador acima dos pés (px)
+@export var team_tag_offset: float = 40.0    # altura do marcador acima dos pés (px)
 
 ## Para que lado o personagem olha: 1 = direita, -1 = esquerda
 var facing: float = 1.0
@@ -273,6 +273,7 @@ var _cooldown_ready: Dictionary = {}
 
 func _ready() -> void:
 	add_to_group("players")
+	Sfx.ensure()   # cria o nó de sons (sfx.gd) se ainda não existir
 	_ensure_input_map()
 	motion_mode = CharacterBody2D.MOTION_MODE_FLOATING  # visão de cima, sem gravidade
 	input_pickable = true
@@ -398,6 +399,50 @@ func _finish_aim(direction: Vector2) -> void:
 
 # ---------- AÇÃO GERAL: CORRER ----------
 
+# ---------- SONS (correr / carrinho) ----------
+# Olha só a mudança de estado, então vale para qualquer personagem (mesmo os que sobrescrevem start_run).
+
+var _sfx_state: State = State.IDLE
+var _run_sfx: AudioStreamPlayer
+
+
+func _update_sfx() -> void:
+	if state == _sfx_state:
+		return
+	if _sfx_state == State.RUNNING:
+		_stop_run_sfx()
+	if state == State.RUNNING:
+		_start_run_sfx()
+	elif state == State.SLIDING:
+		Sfx.play(&"slide")
+	_sfx_state = state
+
+
+## O som de correr toca em laço enquanto ele corre (e acompanha a velocidade do Correr)
+func _start_run_sfx() -> void:
+	if _run_sfx == null:
+		_run_sfx = AudioStreamPlayer.new()
+		_run_sfx.volume_db = -4.0
+		_run_sfx.finished.connect(_on_run_sfx_finished)
+		add_child(_run_sfx)
+	var stream: AudioStream = Sfx.pick(&"run")
+	if stream == null:
+		return
+	_run_sfx.stream = stream
+	_run_sfx.pitch_scale = clampf(get_run_speed_mult(), 0.8, 1.4)
+	_run_sfx.play()
+
+
+func _on_run_sfx_finished() -> void:
+	if state == State.RUNNING:
+		_start_run_sfx()   # o arquivo acabou e ele ainda corre: toca de novo
+
+
+func _stop_run_sfx() -> void:
+	if _run_sfx != null and _run_sfx.playing:
+		_run_sfx.stop()
+
+
 ## Move livremente com WASD por run_duration segundos
 func start_run() -> void:
 	runs_this_turn += 1
@@ -479,6 +524,7 @@ func consume_jump_redirect() -> bool:
 func jump() -> void:
 	if consume_jump_redirect():
 		return   # o impulso do pulo foi para outro jogador
+	Sfx.play(&"jump")
 	height_level = Heights.Level.SUSPENDED
 	var tw := create_tween()
 	tw.tween_property(self, "height", Heights.SUSPENDED_HEIGHT, jump_rise_time) \
@@ -577,8 +623,8 @@ func _check_slide_hits() -> void:
 				target.knock_down()
 
 	var ball := get_tree().get_first_node_in_group("ball") as Ball
-	if ball and not ball.is_held() and not ball.is_locked_for(team) and not _slide_hit_ball \
-			and ball.get_level() == Heights.Level.GROUND:
+	if ball and not ball.is_held() and not ball.is_locked_for(team) and ball.contest_owner == null \
+			and not _slide_hit_ball and ball.get_level() == Heights.Level.GROUND:
 		if global_position.distance_to(ball.global_position) <= slide_hit_radius:
 			_slide_hit_ball = true
 			# A bola vai na MESMA direção do carrinho
@@ -640,6 +686,12 @@ func kick_ball(ball: Ball, direction: Vector2, kind: KickType, qte_success: bool
 	# Multiplicador de força do próximo chute (gasto aqui, mesmo se a ação for cancelada)
 	var force_mult: float = next_kick_force_mult
 	next_kick_force_mult = 1.0
+	# Disputa de bola (Unleash Instinct do Bachira): a tentativa é decidida ANTES do chute.
+	# chance_override >= 0 = chute de habilidade (disputa de CPS); -1 = ação geral Chutar (derruba)
+	if ball != null and ball.contest_owner != null and is_instance_valid(ball.contest_owner) \
+			and ball.contest_owner.team != team:
+		if not await ball.contest_owner.resolve_ball_contest(self, chance_override >= 0.0):
+			return
 	# Animação do chute: a bola só sai no frame de impacto (hit_frames). Sem arte, segue direto.
 	# `anim` = animação própria da habilidade (cai em "kick" se o personagem não tiver)
 	var kick_anim: StringName = anim if anim != &"" else _kick_anim_for(kind)
@@ -1075,6 +1127,13 @@ func try_counter_slide(_attacker: Player) -> bool:
 	return false
 
 
+## Disputa de bola (ex: Unleash Instinct do Bachira): chamado pelo kick_ball() de um ADVERSÁRIO que
+## tenta chutar a bola que este jogador está disputando. true = o chute dele pode seguir;
+## false = foi barrado. Sobrescreva em quem disputa a bola (pode usar await).
+func resolve_ball_contest(_attacker: Player, _by_skill: bool) -> bool:
+	return true
+
+
 ## Efeito que age sozinho quando o turno do TIME deste jogador acaba (ex: o 1-2 do Sharp
 ## Sharp do Kurona). O MatchManager chama on_turn_end() em quem devolver true aqui e ESPERA
 ## ela terminar antes de começar o próximo turno (pode usar await).
@@ -1206,6 +1265,7 @@ func _status_visual_key() -> int:
 
 func _physics_process(delta: float) -> void:
 	z_index = int(global_position.y)  # profundidade, igual à bola
+	_update_sfx()
 
 	match state:
 		State.RUNNING:

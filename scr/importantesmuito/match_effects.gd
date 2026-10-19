@@ -510,6 +510,8 @@ func _build_end_card(winner: int) -> void:
 	again.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	again.custom_minimum_size = Vector2(280.0, 58.0)
 	again.add_theme_font_size_override("font_size", 22)
+	again.mouse_entered.connect(func() -> void: Sfx.play(&"ui_hover", 0.7, 0.03))
+	again.pressed.connect(func() -> void: Sfx.play(&"ui_click"))
 	again.pressed.connect(func() -> void:
 		_clear_end_card()
 		manager.return_to_formation())

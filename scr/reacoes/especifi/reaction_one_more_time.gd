@@ -36,12 +36,14 @@ func _init() -> void:
 	}
 
 	# Falas de exemplo: troque pelas que você quiser (a ordem é a da cutscene)
-	_say("hiori", "The ice is set. I froze the pass right where you need it.")
-	_say("isagi", "Every piece is on the board... and your cold fits in perfectly.")
-	_say("hiori", "Then don't waste it. One more time.")
-	_say("isagi", "One more time... and this time, I go beyond!")
-	_say("hiori", "Break the ice, Isagi.")
-	_say("isagi", "GO BEYOND!")
+	_say("base", "Aren't these guys even looking at each other??")
+	_say("hiori", "I want my soccer...")
+	_say("hiori", "...To produce the world's best striker!")
+	_say("hiori", "Are Ya there, egoist..?")
+	_say("isagi", "Yeah...")
+	_say("isagi", "If we're the real deal...")
+	_say("isagi", "Let's devour them all...")
+	_say("isagi", "...AND GO BEYOND OUR WILDEST DREAMS!!")
 
 
 func find_partner(trigger: Player) -> Player:

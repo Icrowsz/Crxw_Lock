@@ -96,6 +96,11 @@ var held_by: Node2D = null
 ## interagir com a bola. null = livre. Quem lançou é quem limpa (ou release_hover()).
 var spell_owner: Player = null
 
+## Quem está DISPUTANDO a bola (Unleash Instinct do Bachira). Enquanto estiver preenchido junto com o
+## spell_owner, o adversário PODE tentar Chutar / usar habilidade nela (is_locked_for devolve false);
+## quem decide é o Player.kick_ball(), que chama contest_owner.resolve_ball_contest() antes do chute.
+var contest_owner: Player = null
+
 ## Mantém a aura/partículas da habilidade mesmo com a bola pairando (ex: Alohomora do Ness,
 ## que leva a bola pelo ar sem usar a física)
 var fx_during_hover: bool = false
@@ -195,6 +200,7 @@ func _apply_vertical(delta: float) -> void:
 
 ## Bateu no chão: achata o sprite, dispara a onda de vento e solta uma nuvenzinha de poeira
 func _on_land(impact: float, bounced_up: bool) -> void:
+	Sfx.play(&"bounce", clampf(impact / 600.0, 0.2, 1.0))   # quanto mais forte a queda, mais alto
 	_squash = clampf(impact / 600.0, 0.25 if bounced_up else 0.0, 1.0 if bounced_up else 0.6)
 	if wind_enabled and impact > 150.0:
 		_land_t = 0.0
@@ -636,6 +642,10 @@ func is_held() -> bool:
 
 ## A bola está presa por um feitiço de OUTRO time? (aí este time não consegue tocar nela)
 func is_locked_for(team: int) -> bool:
+	# Disputa de bola: o adversário pode tentar (o Bachira decide no kick_ball). Carrinho e outros
+	# toques automáticos checam contest_owner por conta própria.
+	if contest_owner != null and is_instance_valid(contest_owner) and contest_owner == spell_owner:
+		return false
 	return spell_owner != null and is_instance_valid(spell_owner) and spell_owner.team != team
 
 
@@ -672,6 +682,7 @@ func kick_ground(direction: Vector2, power: float, by: Node2D = null,
 	_sticky_ignore_player = null
 	register_touch(by as Player)
 	_set_shot(by, shot_chance)
+	Sfx.play(&"kick" if shot_chance >= 0.0 else &"pass")   # passes usam NO_SHOT
 	velocity = direction.normalized() * power
 	vel_z = 0.0
 
@@ -685,6 +696,7 @@ func kick(direction: Vector2, power: float, lift: float, by: Node2D = null,
 	_sticky_ignore_player = null
 	register_touch(by as Player)
 	_set_shot(by, shot_chance)
+	Sfx.play(&"kick" if shot_chance >= 0.0 else &"pass")
 	velocity = direction.normalized() * power
 	vel_z = lift
 
@@ -693,6 +705,8 @@ func kick(direction: Vector2, power: float, lift: float, by: Node2D = null,
 ## altura e a deixa PAIRANDO lá, sem gravidade, até alguém chutar ou release_hover().
 ## Devolve o Tween (use "await tween.finished" se quiser esperar chegar).
 func hover_to(global_pos: Vector2, target_height: float, duration: float) -> Tween:
+	if not hovering:
+		Sfx.play(&"pass")   # saiu para um passe alto (a chegada, com a bola já pairando, fica muda)
 	_kill_hover_tween()
 	pending_shot_chance = NO_SHOT  # passe alto não é chute
 	hovering = true
@@ -718,6 +732,7 @@ func release_hover() -> void:
 	bounces_left = -1   # todo chute/solta começa sem limite de quiques (quem quiser limita DEPOIS)
 	held_by = null
 	spell_owner = null
+	contest_owner = null
 	_kill_hover_tween()
 
 

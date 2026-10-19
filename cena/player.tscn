@@ -7,7 +7,6 @@ radius = 24.0
 
 [node name="Player" type="CharacterBody2D" unique_id=1241627939 node_paths=PackedStringArray("visual_root")]
 script = ExtResource("1_f42by")
-slide_ball_power = 350.0
 visual_root = NodePath("SprPlayer")
 team_tint_strength = 0.3
 
