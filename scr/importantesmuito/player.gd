@@ -160,6 +160,9 @@ var extra_skill_left: int = 0:
 ## Ações GERAIS extras só DESTE jogador (ex: Gremlin Taunt do Charles, quando ele desvia de
 ## um Carrinho). Mesma ideia do extra_skill_left, mas para Correr/Pular/Carrinho/Chutar/Passe.
 var extra_general_left: int = 0
+## Habilidades desabilitadas por efeitos de fora (ex: Teeth do Kurona): id da habilidade -> última rodada em que
+## ela continua desabilitada. Confere com is_skill_disabled() (o can_use_skill base já faz isso).
+var disabled_skills: Dictionary = {}
 ## Igual ao extra_general_left, mas NÃO vale para o Correr (ex: Unleash Instinct do Bachira:
 ## "mais uma ação geral, menos a de Correr"). O MatchManager gasta esta primeiro nas outras ações.
 var extra_general_no_run_left: int = 0
@@ -831,6 +834,7 @@ func reset_for_new_match() -> void:
 	is_pass_option = false
 	slide_immune = false
 	jump_redirected = false
+	disabled_skills.clear()
 	pass_range_bonus = 0.0
 	run_time_bonus = 0.0
 	next_shot_bonus = 0.0
@@ -980,7 +984,12 @@ func get_skills() -> Array[Dictionary]:
 ## A habilidade pode ser usada agora? (o MatchManager ainda confere se sobrou ação de
 ## habilidade). Personagens sobrescrevem para pôr as condições próprias, chamando super().
 func can_use_skill(_skill_id: StringName = &"default") -> bool:
-	return not is_down and not is_skill_locked() and not is_skills_suppressed()
+	return not is_down and not is_skill_locked() and not is_skills_suppressed() and not is_skill_disabled(_skill_id)
+
+
+## Esta habilidade específica está desabilitada nesta rodada?
+func is_skill_disabled(skill_id: StringName) -> bool:
+	return int(disabled_skills.get(skill_id, -1)) >= get_current_round()
 
 
 ## Executa a habilidade. Pode usar await (mira, QTE, animações).

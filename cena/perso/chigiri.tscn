@@ -5,7 +5,7 @@
 [ext_resource type="Texture2D" uid="uid://k1tsiu1rjls0" path="res://img/mvps/chigiri.jpg" id="3_ewghm"]
 [ext_resource type="Texture2D" uid="uid://bqrl8rdrfili7" path="res://img/testes/chigiri.png" id="4_ewghm"]
 
-[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_yau7e")]
+[node name="Player" unique_id=1241627939 instance=ExtResource("1_yau7e")]
 script = ExtResource("2_v3jbk")
 golden_zone_rounds = 2
 golden_zone_cooldown = 2
@@ -38,7 +38,6 @@ kick_fx = null
 skill_icons = {}
 display_name = "Hyoma Chigiri"
 mvp_image = ExtResource("3_ewghm")
-visual_root = NodePath("SprPlayer")
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

@@ -1,99 +1,93 @@
 class_name Kurona
 extends Player
-## Ranze Kurona. Herda tudo do Player (ações gerais) e adiciona as habilidades próprias:
+## Ranze Kurona. Herda tudo do Player; script único. Visual: kurona_fx.gd (rosa opaco, tubarões e água; a marca do
+## Kurona é uma mordida de tubarão). Cena: player.tscn herdada, script no nó raiz, nó raiz "Kurona".
 ##
-## 1. Sharp Sharp (ação de habilidade): escolhe um aliado (no chão, até 475 de distância) e a bola
-##      vai NA HORA, em passe rasteiro. O aliado ganha a MESMA habilidade para devolver, e cada
-##      devolução dobra o bônus. Dura 3 rodadas; cada rodada mantida dá +3% de chance no PRÓXIMO
-##      chute de quem estiver com a bola. Um aliado de FORA da dupla que tocar na bola recebe o
-##      bônus (metade, veja sharp_outside_ratio) e o 1-2 acaba.
-##      O 1-2 é CANCELADO (efeito acaba, começa a recarga de 3 rodadas e o aliado perde a
-##      habilidade) quando passam as rodadas, alguém chuta, um inimigo toca na bola, nenhum dos
-##      dois está perto da bola, um dos dois cai, sai gol ou um passe é interceptado.
-##      Funciona igual ao Manipulable Array do Teddy (motor em one_two_link.gd).
-##    1.1 Lie Lie (variante): com o 1-2 ativo e a bola com o Kurona, a ação geral "Pular" libera
-##      este botão (no lugar do Sharp Sharp, neste turno). É o "corta-luz": passe curto para um
-##      aliado de FORA da sincronia; se ele receber, ganha metade do bônus acumulado no próximo
-##      chute dele. O 1-2 acaba.
-## 2. Orbital Orbital (ação de habilidade): corrente com um aliado "no chão" até 300 de distância.
-##      Tamanho máximo = distância original + metade dela. Enquanto durar, os dois são imunes
-##      a carrinho (pulam por cima), têm Passe com mais alcance e Correr com 0.7s a mais.
-##      Dura "orbital_rounds" rodadas; recarga de 3 rodadas a partir do fim.
-## 3. Bite Bite (ação de habilidade): um Carrinho um pouco mais longo; se acertar a bola, ela vai
-##      em passe para o aliado mais próximo (até 300).
-##    3.1 Assault Assault (variante automática: Kurona E bola suspensos/voando): ele voa até a
-##      bola próxima e faz um passe (que desce até o chão) para o aliado mais próximo (até 300).
-##      Recarga de 2 rodadas (só desta variante).
+## 1. Moon (recarga 2, compartilhada): bola no chão e aliado até 400. Passe rasteiro para ele e o KURONA corre (duração
+##    reduzida); no fim, o aliado devolve a bola (QTE fácil) e CORRE com velocidade aumentada; por fim o Kurona devolve a
+##    bola de novo (QTE fácil) e a sequência acaba. Passe interceptado ou QTE errado interrompem tudo.
+##      Satellite (bola SUSPENSA): ele salta até a bola e passa rasteiro para um aliado (400). Quando o passe chega, escolhe
+##      esse aliado ou outro como SATÉLITE (marca): o próximo Moon com ele tem +8% de velocidade e ele ganha +6% de chance
+##      no próximo chute.
+## 2. Close Quarter Dribble (recarga 2, compartilhada): bola no chão e inimigo próximo. Conduz a bola grudada em si com 3
+##    dashes de 100 (a direção é escolhida a cada um). Inimigo no caminho = QTE fácil de drible: vencendo, passa por ele sem
+##    perder velocidade; perdendo, é parado e a bola fica solta para a disputa. Terminou com a bola: +1 ação geral.
+##      Teeth: persegue um inimigo (300) acompanhando os movimentos dele; na PRÓXIMA rodada, desabilita uma habilidade
+##      ativável aleatória dele por 1 rodada.
+## 3. Bite (recarga 2, compartilhada): sem a bola por perto, carrinho um pouco mais longo. Se alcançar a bola, lança-a como
+##    o Carrinho normal, ativa o buff do próximo Moon (+8% de velocidade) e dá +1 ação geral.
+##      Underwater (bola no chão, com ele): segura a bola e vai em direção a um aliado; chegando a 100, conecta os dois por 3
+##      rodadas: o Moon ganha mais velocidade e +7% de chance, os dois ficam imunes a Carrinho. A conexão acaba se a distância
+##      passar de 350 (uma ação de Correr mal planejada).
 ##
-## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
-## -> renomeie o nó raiz para "Kurona". Animações opcionais (nomes na SpriteFrames):
-## "sharp_sharp", "orbital_orbital" (conjurar) e "assault_assault" (investida).
+## O documento não dá três números, então ficaram como exports: bônus de chance base do Moon (0%), bônus de velocidade do
+## Underwater no Moon (+12%) e o alcance para escolher o satélite (450).
+## Animações opcionais: moon, satellite, close_quarter_dribble, teeth, bite, underwater.
 
-const SKILL_SHARP: StringName = &"sharp_sharp"
-const SKILL_ORBITAL: StringName = &"orbital_orbital"
-const SKILL_BITE: StringName = &"bite_bite"
+const SKILL_MOON: StringName = &"moon"
+const SKILL_DRIBBLE: StringName = &"close_quarter_dribble"
+const SKILL_BITE: StringName = &"bite"
 
-## Grupos de recarga
-const CD_SHARP: StringName = &"cd_sharp"
-const CD_ORBITAL: StringName = &"cd_orbital"
-const CD_ASSAULT: StringName = &"cd_assault"
+## Grupos de recarga (as variantes de cada habilidade compartilham o mesmo)
+const CD_MOON: StringName = &"cd_moon"
+const CD_DRIBBLE: StringName = &"cd_dribble"
+const CD_BITE: StringName = &"cd_bite"
 
-## Variante do Bite Bite que cabe na situação atual (altura do Kurona x altura da bola)
-enum BiteVariant { NONE, BITE, ASSAULT }
+enum MoonVariant { NONE, MOON, SATELLITE }
+enum DribbleVariant { NONE, DRIBBLE, TEETH }
+enum BiteVariant { NONE, BITE, UNDERWATER }
 
-const SHARP_COLOR := Color(1.0, 0.45, 0.8)
-const ORBITAL_COLOR := Color(1.0, 0.237, 0.972, 1.0)
+@export_group("Moon / Satellite")
+@export var moon_range: float = 400.0
+@export_range(0.1, 1.0) var moon_first_run_mult: float = 0.5   # duração reduzida do Correr do Kurona
+@export var moon_ally_speed_mult: float = 1.4                  # velocidade aumentada do Correr do aliado
+@export_range(0.0, 1.0) var moon_shot_bonus: float = 0.0       # chance base do Moon (o documento não dá o número)
+@export var moon_cooldown: int = 2
+@export var satellite_reach: float = 180.0                     # até onde ele salta para pegar a bola suspensa
+@export var satellite_pick_range: float = 450.0                # alcance para escolher o satélite
+@export_range(0.0, 1.0) var satellite_speed_bonus: float = 0.08
+@export_range(0.0, 1.0) var satellite_shot_bonus: float = 0.06
 
-@export_group("Sharp Sharp")
-@export var sharp_range: float = 475.0                           # alcance para escolher o aliado
-@export_range(0.0, 1.0) var sharp_bonus_per_round: float = 0.03  # +3% por rodada de 1-2
-@export var sharp_touch_range: float = 120.0                     # "bola perto" de um dos dois
-@export var sharp_cooldown: int = 3                              # recarga, contada a partir do fim do efeito
-@export var sharp_duration: int = 3                              # rodadas de duração (a atual conta)
-@export var sharp_ally_access_rounds: int = 3                    # por quantas rodadas o aliado tem a habilidade
-@export var sharp_return_mult: float = 2.0                       # a devolução do aliado multiplica o bônus
-@export_range(0.0, 1.0) var sharp_outside_ratio: float = 0.5     # aliado de fora recebe esta fração do bônus
+@export_group("Close Quarter Dribble / Teeth")
+@export var dribble_dashes: int = 3
+@export var dribble_dash_range: float = 150.0
+@export var dribble_dash_speed: float = 720.0
+@export var dribble_enemy_range: float = 300.0                 # "inimigo próximo" para poder usar
+@export var dribble_hit_radius: float = 45.0                   # "encontrar" um inimigo no caminho
+@export var dribble_cooldown: int = 2
+@export var teeth_range: float = 300.0
+@export var teeth_disable_rounds: int = 1
 
-@export_group("Lie Lie")
-@export var lie_pass_range: float = 450.0                        # alcance do passe curto
-@export_range(0.0, 1.0) var lie_bonus_ratio: float = 0.5         # fração do bônus acumulado que o receptor ganha
-
-@export_group("Orbital Orbital")
-@export var orbital_range: float = 330.0                         # alcance para escolher o aliado
-@export var orbital_chain_extra: float = 0.5                     # corrente = distância original x (1 + isto)
-@export var orbital_rounds: int = 3                              # duração total em rodadas (contando a atual)
-@export var orbital_cooldown: int = 3                            # recarga, contada a partir do fim do efeito
-@export var orbital_pass_range_bonus: float = 150.0              # alcance extra do Passe (px)
-@export var orbital_run_bonus: float = 0.7                       # segundos a mais no Correr
-
-@export_group("Bite Bite")
-@export var bite_distance_mult: float = 1.1                      # carrinho x este valor
-@export var bite_pass_range: float = 360.0                       # alcance do passe até o aliado mais próximo
-
-@export_group("Assault Assault")
-@export var assault_reach: float = 180.0                         # "bola próxima": até onde ele voa
-@export var assault_dash_time: float = 0.25                      # duração da investida
-@export var assault_cooldown: int = 2
+@export_group("Bite / Underwater")
+@export var bite_distance_mult: float = 1.15                   # carrinho x este valor
+@export_range(0.0, 1.0) var bite_buff_speed: float = 0.08      # buff do próximo Moon
+@export var bite_cooldown: int = 2
+@export var underwater_pick_range: float = 350.0
+@export var underwater_stop_range: float = 100.0               # chegando aqui, a conexão começa
+@export var underwater_speed: float = 460.0
+@export var underwater_max_time: float = 1.6
+@export var underwater_rounds: int = 3
+@export var underwater_link_range: float = 350.0               # passou disso, a conexão acaba
+@export_range(0.0, 1.0) var underwater_speed_bonus: float = 0.12   # extra no Moon (o documento não dá o número)
+@export_range(0.0, 1.0) var underwater_shot_bonus: float = 0.07
 
 @export_group("Descrição (hover)")
-## Imagem de cada habilidade no balão do menu. Chaves: sharp_sharp, orbital_orbital, bite_bite.
-## Sem imagem, o balão aparece só com o texto.
+## Imagem de cada habilidade no balão. Chaves: moon, close_quarter_dribble, bite.
 @export var skill_icons: Dictionary = {}
 
 # ---------- ESTADO ----------
-# Sharp Sharp (motor compartilhado com o Manipulable Array do Teddy: one_two_link.gd)
-var _link: OneTwoLink
-var _lie_ready: bool = false             # "Pular" com a bola liberou o Lie Lie neste turno
-
-# Orbital Orbital
-var _orb_active: bool = false
-var _orb_partner: Player = null
-var _orb_max_len: float = 0.0
-var _orb_until_round: int = -1
-
-# Bite Bite
+var _satellite: Player = null                 # marcado pelo Satellite
+var _satellite_mark: KuronaFX.Mark = null
+var _moon_buff: bool = false                  # buff do Bite para o próximo Moon
+var _teeth_target: Player = null
+var _teeth_round: int = -1
+var _teeth_last: Vector2 = Vector2.ZERO
+var _teeth_mark: KuronaFX.Mark = null
+var _uw_active: bool = false
+var _uw_partner: Player = null
+var _uw_until_round: int = -1
+var _uw_link: KuronaFX.Link = null
 var _bite_active: bool = false
-var _bite_pass_running: bool = false
 var _base_slide_distance: float = 0.0
 
 
@@ -105,13 +99,11 @@ func _init() -> void:
 func _ready() -> void:
 	super()
 	_base_slide_distance = slide_distance
-	_build_link()
 	_hook_manager.call_deferred()
 
 
 func _exit_tree() -> void:
-	_clear_sharp()
-	_clear_orbital()
+	_clear_all()
 
 
 func _hook_manager() -> void:
@@ -119,30 +111,42 @@ func _hook_manager() -> void:
 	if m:
 		m.round_started.connect(_on_round_started)
 		m.goal_scored.connect(_on_goal_scored)
-		m.turn_ended.connect(_on_turn_ended)
 
 
 func _on_round_started(round_number: int) -> void:
-	_link.on_round_started(round_number)
-	if _orb_active and not _orbital_valid():
-		_break_orbital()
+	if _teeth_target != null and round_number >= _teeth_round:
+		_apply_teeth(round_number)
+	if _uw_active and not _uw_valid():
+		_end_underwater()
 	queue_redraw()
 
 
-## Gol: todo mundo volta para a formação, então a corrente e o 1-2 se desfazem
+## Gol: todo mundo volta para a formação, então tudo se desfaz
 func _on_goal_scored(_goal: Dictionary) -> void:
-	_break_sharp()
-	_break_orbital()
+	_end_underwater()
+	_clear_teeth()
+	_clear_satellite(false)
+	_moon_buff = false
 
 
-# ---------- UTIL ----------
+# ---------- AUXILIARES ----------
 
-## Companheiros (menos o próprio Kurona e os derrubados) a até range_px de "from"
-func _allies_near(from: Vector2, range_px: float, ground_only: bool = false,
-		exclude: Player = null) -> Array[Player]:
+func _clamp_to_pitch(global_p: Vector2) -> Vector2:
+	var field := get_tree().get_first_node_in_group("field") as Field
+	if field == null:
+		return global_p
+	var half: Vector2 = field.pitch_size * 0.5 - Vector2(20.0, 20.0)
+	var l: Vector2 = field.to_local(global_p)
+	l.x = clampf(l.x, -half.x, half.x)
+	l.y = clampf(l.y, -half.y, half.y)
+	return field.to_global(l)
+
+
+## Companheiros (menos o Kurona e os derrubados) a até range_px de "from"
+func _allies_near(from: Vector2, range_px: float, ground_only: bool = false) -> Array[Player]:
 	var result: Array[Player] = []
 	for p: Player in get_tree().get_nodes_in_group("players"):
-		if p == self or p == exclude or p.team != team or p.is_down:
+		if p == self or p.team != team or p.is_down:
 			continue
 		if ground_only and p.height_level != Heights.Level.GROUND:
 			continue
@@ -151,214 +155,355 @@ func _allies_near(from: Vector2, range_px: float, ground_only: bool = false,
 	return result
 
 
-func _nearest_ally(from: Vector2, range_px: float) -> Player:
+## Primeiro inimigo em pé, no chão e ainda não driblado, a até radius de "from"
+func _enemy_near(from: Vector2, radius: float, skip: Array[Player] = []) -> Player:
 	var best: Player = null
 	var best_dist: float = INF
-	for p in _allies_near(from, range_px):
+	for p: Player in get_tree().get_nodes_in_group("players"):
+		if p.team == team or p.is_down or p in skip:
+			continue
 		var d: float = from.distance_to(p.global_position)
-		if d < best_dist:
+		if d <= radius and d < best_dist:
 			best_dist = d
 			best = p
 	return best
 
 
-## A bola parou encostada em "to" (passe chegou sem ninguém interceptar)?
+func _ball_ready(ball: Ball) -> bool:
+	return ball != null and is_instance_valid(ball) and not ball.is_held() and not ball.is_locked_for(team)
+
+
+## A bola parou encostada em "to" (o passe chegou sem ninguém interceptar)?
 func _ball_arrived(ball: Ball, to: Player) -> bool:
-	return ball.global_position.distance_to(to.global_position) \
-		<= to.body_radius + ball.collision_radius + 10.0
+	return ball.global_position.distance_to(to.global_position) <= to.body_radius + ball.collision_radius + 10.0
 
 
-# ---------- SHARP SHARP ----------
-
-## Habilidade 1: escolhe o aliado e passa a bola na hora (tudo no motor do 1-2).
-## Com o 1-2 já ativo, o mesmo botão passa/devolve ou, se o Pular liberou, vira Lie Lie.
-func _use_sharp_sharp() -> bool:
-	return await _link.cast()
-
-
-## Variante 1.1: corta-luz para um aliado de fora da sincronia
-func _use_lie_lie() -> bool:
+## Domina a bola: pairando nos pés dele até soltar
+func _grab_ball(ball: Ball, dir: Vector2) -> void:
+	ball.register_touch(self)
 	var m: MatchManager = _get_manager()
-	if m == null:
-		return false
-	var partner: Player = _link.partner
-	var outside_sync: Callable = func(o: Player) -> bool:
-		return o != partner and not o.is_down
-	var target: Player = await m.pick_ally_for_skill(self, lie_pass_range, false, outside_sync)
-	if target == null:
-		return false
-	var ball: Ball = _get_ball()
-	# Pode ter mudado enquanto ele escolhia: confere de novo
-	if ball == null or not _link.active or get_kick_type(ball) == KickType.NONE:
-		return false
+	if m != null:
+		m.clear_pending_pass()
+	ball.hover_to(global_position + dir.normalized() * (body_radius + 18.0), 0.0, 0.08)
 
-	_link.busy = true   # o passe do corta-luz não conta como interrupção do 1-2
-	var half: float = _link.bonus * lie_bonus_ratio
-	await m.run_ground_pass(self, target, ball)
+
+func _carry_ball(ball: Ball, dir: Vector2) -> void:
+	ball.global_position = global_position + dir.normalized() * (body_radius + 18.0)
+	ball.height = 0.0
+
+
+## Uma ação de Correr (não conta no limite do turno) de "p", com duração e velocidade multiplicadas
+func _timed_run(p: Player, duration_mult: float, speed_mult: float) -> void:
+	var m: MatchManager = _get_manager()
+	var saved_speed: float = p.move_speed
+	var saved_duration: float = p.run_duration
+	p.move_speed = saved_speed * speed_mult
+	p.run_duration = saved_duration * duration_mult
+	p.start_run()
+	p.runs_this_turn = maxi(0, p.runs_this_turn - 1)
+	while p.state == State.RUNNING and (m == null or not m.match_over):
+		await get_tree().physics_frame
+	p.move_speed = saved_speed
+	p.run_duration = saved_duration
+
+
+## Passe rasteiro de "from" para "to" (nadadeira de tubarão no caminho). true = a bola chegou.
+func _pass_between(m: MatchManager, ball: Ball, from: Player, to: Player) -> bool:
+	KuronaFX.fin(self, from.global_position, to.global_position, 0.45)
+	KuronaFX.ball_trail(ball, 0.9)
+	ball.collisions_paused = true
+	await m.run_ground_pass(from, to, ball)
 	ball.collisions_paused = false
-	_link.busy = false
-	# Só ganha se RECEBEU o passe curto (ninguém interceptou)
-	if _ball_arrived(ball, target):
-		target.next_shot_bonus = maxf(target.next_shot_bonus, half)
-	_break_sharp()   # a bola saiu da dupla: o 1-2 acaba
-	return true
+	return _ball_arrived(ball, to)
 
 
-## Quando "Pular" é usado com o 1-2 ativo e a bola com o Kurona, libera o Lie Lie
-func jump() -> void:
-	var had_ball: bool = _link.active and get_kick_type(_get_ball()) != KickType.NONE
-	await super()
-	if had_ball and _link.active:
-		_lie_ready = true
-		queue_redraw()
+## Devolução do Moon: QTE fácil e passe. false = errou o QTE ou interceptaram.
+func _return_pass(m: MatchManager, ball: Ball, from: Player, to: Player) -> bool:
+	var ok: bool = true
+	if not skips_qte():
+		ok = await m.run_qte(KickType.VOLLEY)
+	if not ok:
+		return false
+	return await _pass_between(m, ball, from, to)
 
 
-func _lie_available() -> bool:
-	return _link.active and _lie_ready and get_kick_type(_get_ball()) != KickType.NONE
+# ---------- HABILIDADE 1: MOON / SATELLITE ----------
+
+func _moon_variant() -> MoonVariant:
+	var ball: Ball = _get_ball()
+	if is_down or not _ball_ready(ball):
+		return MoonVariant.NONE
+	var dist: float = global_position.distance_to(ball.global_position)
+	if height_level == Heights.Level.GROUND and ball.get_level() == Heights.Level.GROUND and dist <= kick_range \
+			and not _allies_near(global_position, moon_range, true).is_empty():
+		return MoonVariant.MOON
+	if height_level != Heights.Level.FLYING and ball.get_level() == Heights.Level.SUSPENDED and dist <= satellite_reach \
+			and not _allies_near(global_position, moon_range, true).is_empty():
+		return MoonVariant.SATELLITE
+	return MoonVariant.NONE
 
 
-## Lie Lie liberado E existe aliado de fora da dupla ao alcance
-func _lie_usable() -> bool:
-	return _lie_available() \
-		and not _allies_near(global_position, lie_pass_range, false, _link.partner).is_empty()
+## Bônus de velocidade do Moon com este aliado (Satellite, buff do Bite e Underwater somam)
+func _moon_speed_bonus(ally: Player) -> float:
+	var bonus: float = 0.0
+	if ally == _satellite:
+		bonus += satellite_speed_bonus
+	if _moon_buff:
+		bonus += bite_buff_speed
+	if _uw_active and ally == _uw_partner:
+		bonus += underwater_speed_bonus
+	return bonus
 
 
-## O corta-luz só vale no turno em que o Pular foi usado
-func _on_turn_ended(team_ended: int) -> void:
-	if team_ended == team:
-		_lie_ready = false
-	_link.on_turn_ended(team_ended)
+func _moon_shot_bonus_for(ally: Player) -> float:
+	return moon_shot_bonus + (underwater_shot_bonus if _uw_active and ally == _uw_partner else 0.0)
 
 
-## Acaba o 1-2 (Lie Lie usado ou gol) e começa a recarga
-func _break_sharp() -> void:
-	_lie_ready = false
-	_link.break_link()
-
-
-## Desliga o 1-2 sem recarga (usado também na partida nova)
-func _clear_sharp() -> void:
-	_lie_ready = false
-	_link.clear()
-
-
-## Valores do Sharp Sharp no motor do 1-2 (o Teddy usa o mesmo motor com valores dele)
-func _build_link() -> void:
-	_link = OneTwoLink.new(self)
-	_link.skill_id = SKILL_SHARP
-	_link.skill_name = "Sharp Sharp"
-	_link.cooldown_group = CD_SHARP
-	_link.cooldown_rounds = sharp_cooldown
-	_link.pass_range = sharp_range
-	_link.animation = &"sharp_sharp"
-	_link.color = SHARP_COLOR
-	_link.icon = skill_icons.get(String(SKILL_SHARP), null) as Texture2D
-	_link.ally_ground_only = true
-	_link.duration_rounds = sharp_duration
-	_link.ally_access_rounds = sharp_ally_access_rounds
-	_link.return_multiplier = sharp_return_mult
-	_link.outside_ratio = sharp_outside_ratio
-	_link.keep_range = sharp_touch_range
-	_link.base_per_round = sharp_bonus_per_round
-
-
-# ---------- ORBITAL ORBITAL ----------
-
-func _use_orbital() -> bool:
+func _use_moon() -> bool:
 	var m: MatchManager = _get_manager()
-	if m == null:
+	var variant: MoonVariant = _moon_variant()
+	if m == null or variant == MoonVariant.NONE:
 		return false
 	var only_grounded: Callable = func(o: Player) -> bool:
 		return o.height_level == Heights.Level.GROUND and not o.is_down
-	var target: Player = await m.pick_ally_for_skill(self, orbital_range, false, only_grounded)
-	if target == null:
-		return false
-	if not await play_action(&"orbital_orbital"):
-		return false
+	var ally: Player = await m.pick_ally_for_skill(self, moon_range, false, only_grounded)
+	if ally == null or _moon_variant() != variant:
+		return false   # cancelou (ou a situação mudou): não gasta a ação
+	if variant == MoonVariant.SATELLITE:
+		return await _satellite_pass(m, ally)
+	return await _moon_sequence(m, ally)
 
-	_orb_partner = target
-	_orb_max_len = global_position.distance_to(target.global_position) * (1.0 + orbital_chain_extra)
-	_orb_until_round = m.round_number + orbital_rounds - 1   # a rodada atual conta
-	_orb_active = true
-	start_cooldown(CD_ORBITAL, orbital_cooldown, _orb_until_round + 1)
-	_set_orbital_effects(self, true)
-	_set_orbital_effects(target, true)
-	queue_redraw()
+
+## Passe, Kurona corre, devolução, aliado corre, devolução final
+func _moon_sequence(m: MatchManager, ally: Player) -> bool:
+	var ball: Ball = _get_ball()
+	var speed_bonus: float = _moon_speed_bonus(ally)
+	var shot_bonus: float = _moon_shot_bonus_for(ally)
+	if ally == _satellite:
+		_clear_satellite(true)
+	_moon_buff = false
+	start_cooldown(CD_MOON, moon_cooldown)
+
+	if not await _pass_between(m, ball, self, ally):
+		return true   # interceptado: a sequência acaba aqui
+	await _timed_run(self, moon_first_run_mult, 1.0)
+	if not await _return_pass(m, ball, ally, self):
+		return true
+	await _timed_run(ally, 1.0, moon_ally_speed_mult * (1.0 + speed_bonus))
+	if not await _return_pass(m, ball, self, ally):
+		return true
+	if shot_bonus > 0.0:
+		ally.next_shot_bonus = maxf(ally.next_shot_bonus, shot_bonus)
 	return true
 
 
-## Liga/desliga os efeitos nos dois jogadores (o Player lê estas variáveis)
-func _set_orbital_effects(p: Player, on: bool) -> void:
-	p.slide_immune = on
-	p.pass_range_bonus = orbital_pass_range_bonus if on else 0.0
-	p.run_time_bonus = orbital_run_bonus if on else 0.0
+## Satellite: salta até a bola suspensa e passa rasteiro; quando chega, escolhe o satélite
+func _satellite_pass(m: MatchManager, ally: Player) -> bool:
+	var ball: Ball = _get_ball()
+	start_cooldown(CD_MOON, moon_cooldown)
+	await _leap_to_ball(ball)
+	if not await _pass_between(m, ball, self, ally):
+		return true   # interceptado: sem satélite
+	var chosen: Player = await m.pick_ally_for_skill(self, satellite_pick_range, false,
+		func(o: Player) -> bool: return not o.is_down)
+	m._skill_pick_cancelled = false   # a escolha é opcional: cancelar não desfaz o passe
+	if chosen == null:
+		chosen = ally
+	_set_satellite(chosen)
+	return true
 
 
-func _orbital_valid() -> bool:
-	var m: MatchManager = _get_manager()
-	return m != null and is_instance_valid(_orb_partner) and m.round_number <= _orb_until_round
+func _leap_to_ball(ball: Ball) -> void:
+	var start: Vector2 = global_position
+	var start_height: float = height
+	var stop_dist: float = body_radius + ball.collision_radius + 6.0
+	var duration: float = 0.25
+	var t: float = 0.0
+	KuronaFX.fin(self, start, ball.global_position, duration)
+	while t < duration and is_inside_tree():
+		await get_tree().process_frame
+		t += get_process_delta_time()
+		var k: float = clampf(t / duration, 0.0, 1.0)
+		var away: Vector2 = start - ball.global_position
+		var dir: Vector2 = away.normalized() if away.length() > 0.01 else Vector2(-facing, 0.0)
+		face_towards(ball.global_position - global_position)
+		global_position = start.lerp(_clamp_to_pitch(ball.global_position + dir * stop_dist), k)
+		height = start_height + sin(k * PI) * 34.0
+	height = start_height
+	KuronaFX.chomp_burst(self, ball.global_position)
 
 
-## A corrente acabou (duração, gol): começa a recarga a partir do fim do efeito
-func _break_orbital() -> void:
-	if not _orb_active:
-		return
-	_clear_orbital()
-	start_cooldown(CD_ORBITAL, orbital_cooldown,
-		mini(get_current_round() + 1, _orb_until_round + 1))
-
-
-func _clear_orbital() -> void:
-	if _orb_active:
-		_set_orbital_effects(self, false)
-		if is_instance_valid(_orb_partner):
-			_set_orbital_effects(_orb_partner, false)
-	_orb_active = false
-	_orb_partner = null
+func _set_satellite(p: Player) -> void:
+	_clear_satellite(false)
+	_satellite = p
+	_satellite_mark = KuronaFX.mark(p, true)
+	p.next_shot_bonus = maxf(p.next_shot_bonus, satellite_shot_bonus)
 	queue_redraw()
 
 
-## A corrente é rígida: quem estiver se mexendo não passa do tamanho máximo
-func _physics_process(delta: float) -> void:
-	super(delta)
-	_link.poll()
-	if not _orb_active or not is_instance_valid(_orb_partner):
+func _clear_satellite(burst: bool) -> void:
+	if _satellite_mark != null and is_instance_valid(_satellite_mark):
+		if burst:
+			_satellite_mark.pop()
+		else:
+			_satellite_mark.queue_free()
+	_satellite_mark = null
+	_satellite = null
+
+
+# ---------- HABILIDADE 2: CLOSE QUARTER DRIBBLE / TEETH ----------
+
+func _dribble_variant() -> DribbleVariant:
+	if is_down or height_level != Heights.Level.GROUND:
+		return DribbleVariant.NONE
+	var ball: Ball = _get_ball()
+	if _ball_ready(ball) and ball.get_level() == Heights.Level.GROUND \
+			and global_position.distance_to(ball.global_position) <= kick_range \
+			and _enemy_near(global_position, dribble_enemy_range) != null:
+		return DribbleVariant.DRIBBLE
+	if _enemy_near(global_position, teeth_range) != null:
+		return DribbleVariant.TEETH
+	return DribbleVariant.NONE
+
+
+func _use_dribble() -> bool:
+	if _dribble_variant() == DribbleVariant.TEETH:
+		return await _use_teeth()
+	var m: MatchManager = _get_manager()
+	var ball: Ball = _get_ball()
+	if m == null or ball == null:
+		return false
+	var aim: Vector2 = await m.aim_for_skill(self, dribble_dash_range)
+	if aim == Vector2.ZERO or _dribble_variant() != DribbleVariant.DRIBBLE:
+		return false   # cancelou: não gasta a ação
+	start_cooldown(CD_DRIBBLE, dribble_cooldown)
+
+	_grab_ball(ball, aim)
+	var shell: KuronaFX.Shell = KuronaFX.shell(ball)
+	var beaten: Array[Player] = []
+	var stopped: bool = false
+	for i in dribble_dashes:
+		if i > 0:   # muda de direção livremente entre os dashes; cancelar só encerra a ação
+			aim = await m.aim_for_skill(self, dribble_dash_range)
+			m._skill_pick_cancelled = false
+			if aim == Vector2.ZERO:
+				break
+		face_towards(aim)
+		stopped = await _dribble_dash(m, ball, aim, beaten)
+		if stopped:
+			break
+	if shell != null:
+		shell.release()
+	ball.release_hover()   # a bola fica no chão: com ele, ou solta para a disputa se ele foi parado
+	if not stopped:
+		extra_general_left += 1   # terminou a ação com a bola
+	return true
+
+
+## Um dash de 100. true = o Kurona foi parado por um inimigo (perdeu o QTE de drible).
+func _dribble_dash(m: MatchManager, ball: Ball, dir: Vector2, beaten: Array[Player]) -> bool:
+	KuronaFX.fin(self, global_position, global_position + dir * dribble_dash_range,
+		dribble_dash_range / dribble_dash_speed)
+	var travelled: float = 0.0
+	while travelled < dribble_dash_range and not m.match_over:
+		await get_tree().physics_frame
+		var step: float = minf(dribble_dash_speed * get_physics_process_delta_time(), dribble_dash_range - travelled)
+		var next: Vector2 = _clamp_to_pitch(global_position + dir * step)
+		var moved: float = global_position.distance_to(next)
+		if moved < 0.5:
+			break
+		travelled += moved
+		global_position = next
+		_carry_ball(ball, dir)
+		var enemy: Player = _enemy_near(global_position, dribble_hit_radius, beaten)
+		if enemy != null:
+			beaten.append(enemy)
+			var won: bool = true
+			if not skips_qte():
+				won = await m.run_qte(KickType.VOLLEY)   # QTE fácil de drible
+			if not won:
+				KuronaFX.splash(self, global_position, 10, true)
+				return true
+			KuronaFX.splash(self, enemy.global_position, 8, false)   # passou direto, sem perder velocidade
+	return false
+
+
+## Teeth: marca e persegue um inimigo; na próxima rodada, desabilita uma habilidade dele
+func _use_teeth() -> bool:
+	var m: MatchManager = _get_manager()
+	if m == null:
+		return false
+	var enemy: Player = await m.pick_ally_for_skill(self, teeth_range, true)
+	if enemy == null:
+		return false
+	await play_action(&"teeth")
+	_clear_teeth()
+	_teeth_target = enemy
+	_teeth_round = m.round_number + 1
+	_teeth_last = enemy.global_position
+	_teeth_mark = KuronaFX.mark(enemy, false)
+	KuronaFX.jaws(self, enemy.global_position + Vector2(0.0, -enemy.height - 20.0), 40.0)
+	start_cooldown(CD_DRIBBLE, dribble_cooldown)
+	return true
+
+
+## Acompanha os movimentos do marcado (só o que ele mesmo anda: corrida e carrinho)
+func _follow_teeth() -> void:
+	if _teeth_target == null:
 		return
-	var offset: Vector2 = global_position - _orb_partner.global_position
-	var dist: float = offset.length()
-	if dist <= _orb_max_len or dist < 0.01:
+	if not is_instance_valid(_teeth_target):
+		_clear_teeth()
 		return
-	var pull: Vector2 = offset / dist * _orb_max_len
-	if _orb_partner.state != State.IDLE and state == State.IDLE:
-		_orb_partner.global_position = global_position - pull   # o aliado correndo é quem a corrente segura
-	else:
-		global_position = _orb_partner.global_position + pull
+	var now: Vector2 = _teeth_target.global_position
+	var d: Vector2 = now - _teeth_last
+	_teeth_last = now
+	if state == State.IDLE and (_teeth_target.state == State.RUNNING or _teeth_target.state == State.SLIDING) \
+			and d.length() > 0.01 and d.length() < 60.0:
+		global_position = _clamp_to_pitch(global_position + d)
 
 
-## Mesma regra da corrente, para um ponto qualquer (a investida do Assault Assault usa)
-func _chain_clamped(pos: Vector2) -> Vector2:
-	if not _orb_active or not is_instance_valid(_orb_partner):
-		return pos
-	var offset: Vector2 = pos - _orb_partner.global_position
-	if offset.length() <= _orb_max_len:
-		return pos
-	return _orb_partner.global_position + offset.normalized() * _orb_max_len
+func _apply_teeth(round_number: int) -> void:
+	var target: Player = _teeth_target
+	if is_instance_valid(target):
+		var options: Array[StringName] = []
+		for entry: Dictionary in target.get_skills():
+			var id: StringName = StringName(entry["id"])
+			if target.can_use_skill(id):
+				options.append(id)
+		if not options.is_empty():
+			target.disabled_skills[options.pick_random()] = round_number + teeth_disable_rounds - 1
+			KuronaFX.jaws(self, target.global_position + Vector2(0.0, -target.height - 20.0), 40.0)
+	if _teeth_mark != null and is_instance_valid(_teeth_mark):
+		_teeth_mark.pop()
+	_teeth_mark = null
+	_clear_teeth()
 
 
-# ---------- BITE BITE / ASSAULT ASSAULT ----------
+func _clear_teeth() -> void:
+	if _teeth_mark != null and is_instance_valid(_teeth_mark):
+		_teeth_mark.queue_free()
+	_teeth_mark = null
+	_teeth_target = null
+	_teeth_round = -1
+
+
+# ---------- HABILIDADE 3: BITE / UNDERWATER ----------
 
 func _bite_variant() -> BiteVariant:
-	if height_level == Heights.Level.GROUND:
-		return BiteVariant.BITE
+	if is_down or height_level != Heights.Level.GROUND:
+		return BiteVariant.NONE
 	var ball: Ball = _get_ball()
-	# Kurona suspenso/voando + bola suspensa/voando
-	if ball != null and ball.get_level() != Heights.Level.GROUND:
-		return BiteVariant.ASSAULT
+	if ball == null or global_position.distance_to(ball.global_position) > kick_range:
+		return BiteVariant.BITE   # sem a bola por perto
+	if _ball_ready(ball) and ball.get_level() == Heights.Level.GROUND \
+			and not _allies_near(global_position, underwater_pick_range).is_empty():
+		return BiteVariant.UNDERWATER
 	return BiteVariant.NONE
 
 
-## Bite Bite: carrinho mais longo. Acertou a bola -> passe para o aliado mais próximo.
 func _use_bite() -> bool:
+	if _bite_variant() == BiteVariant.UNDERWATER:
+		return await _use_underwater()
 	var m: MatchManager = _get_manager()
 	if m == null:
 		return false
@@ -366,112 +511,122 @@ func _use_bite() -> bool:
 	var aim: Vector2 = await m.aim_for_skill(self, distance)
 	if aim == Vector2.ZERO:
 		return false   # cancelou: não gasta a ação
-
+	start_cooldown(CD_BITE, bite_cooldown)
 	_bite_active = true
 	slide_distance = distance
+	KuronaFX.fin(self, global_position, global_position + aim * distance, 0.4)
 	start_slide(aim)
 	slides_this_turn -= 1   # é uma habilidade: não gasta o Carrinho geral do turno
 	await slide_finished
 	slide_distance = _base_slide_distance
-	while _bite_pass_running:   # o passe pode ainda estar a caminho quando o carrinho acaba
-		await get_tree().process_frame
 	_bite_active = false
 	return true
 
 
-## Durante o Bite Bite: se o carrinho acerta a bola e há aliado até 300, vira passe.
-## Sem aliado por perto, cai no comportamento normal do carrinho (chuta na direção dele).
+## Carrinho normal; se este carrinho de Bite acertou a bola, vem o buff do Moon e +1 ação geral
 func _check_slide_hits() -> void:
-	if _bite_active and not _slide_hit_ball:
+	var had_ball: bool = _slide_hit_ball
+	super()
+	if _bite_active and not had_ball and _slide_hit_ball:
+		_moon_buff = true
+		extra_general_left += 1
 		var ball: Ball = _get_ball()
-		if ball != null and not ball.is_held() and ball.get_level() == Heights.Level.GROUND \
-				and global_position.distance_to(ball.global_position) <= slide_hit_radius:
-			var ally: Player = _nearest_ally(global_position, bite_pass_range)
-			if ally != null:
-				_slide_hit_ball = true   # o super() não chuta a bola: o passe decide
-				_bite_pass(ball, ally)
-	super()   # derruba os inimigos no caminho (e chuta a bola se não virou passe)
+		if ball != null:
+			KuronaFX.jaws(self, ball.global_position, 36.0)
+		queue_redraw()
 
 
-func _bite_pass(ball: Ball, ally: Player) -> void:
-	var m: MatchManager = _get_manager()
-	if m == null:
-		return
-	_bite_pass_running = true
-	ball.velocity = Vector2.ZERO
-	ball.collisions_paused = true   # o corpo deslizando do Kurona não empurra a bola
-	await m.run_ground_pass(self, ally, ball)
-	ball.collisions_paused = false
-	_bite_pass_running = false
-
-
-func _assault_possible() -> bool:
-	var ball: Ball = _get_ball()
-	if ball == null or ball.is_held() or ball.is_locked_for(team):
-		return false
-	if global_position.distance_to(ball.global_position) > assault_reach:
-		return false
-	return _nearest_ally(ball.global_position, bite_pass_range) != null
-
-
-## Assault Assault: voa até a bola e passa (rasteiro: a bola desce até o chão) para o aliado
-func _use_assault() -> bool:
+## Underwater: segura a bola, vai até o aliado e, a 100 dele, conecta os dois por 3 rodadas
+func _use_underwater() -> bool:
 	var m: MatchManager = _get_manager()
 	var ball: Ball = _get_ball()
-	if m == null or ball == null or not _assault_possible():
+	if m == null or ball == null:
+		return false
+	var only_alive: Callable = func(o: Player) -> bool: return not o.is_down
+	var ally: Player = await m.pick_ally_for_skill(self, underwater_pick_range, false, only_alive)
+	if ally == null or _bite_variant() != BiteVariant.UNDERWATER:
+		return false   # cancelou: não gasta a ação
+	if not await play_action(&"underwater"):
 		return false
 
-	_play_oneshot(&"assault_assault")
-	ball.collisions_paused = true
-	await _dash_to_ball(ball)
-	var ally: Player = _nearest_ally(global_position, bite_pass_range)
-	if ally == null:
-		ally = _nearest_ally(ball.global_position, bite_pass_range)
-	if ally != null:
-		await m.run_ground_pass(self, ally, ball)
-	ball.collisions_paused = false
-	start_cooldown(CD_ASSAULT, assault_cooldown)
+	_grab_ball(ball, ally.global_position - global_position)
+	var shell: KuronaFX.Shell = KuronaFX.shell(ball)
+	var reached: bool = false
+	var t: float = 0.0
+	while t < underwater_max_time and not m.match_over and is_instance_valid(ally):
+		await get_tree().physics_frame
+		var dt: float = get_physics_process_delta_time()
+		t += dt
+		var to: Vector2 = ally.global_position - global_position
+		if to.length() <= underwater_stop_range:
+			reached = true
+			break
+		var dir: Vector2 = to.normalized()
+		face_towards(dir)
+		global_position = _clamp_to_pitch(global_position + dir * minf(underwater_speed * dt, to.length() - underwater_stop_range + 1.0))
+		_carry_ball(ball, dir)
+	if shell != null:
+		shell.release()
+	ball.release_hover()
+	if reached and is_instance_valid(ally):
+		_start_underwater(m, ally)
 	return true
 
 
-## Leva o Kurona até encostar na bola (acompanha a bola se ela ainda estiver se mexendo)
-func _dash_to_ball(ball: Ball) -> void:
-	var start: Vector2 = global_position
-	var stop_dist: float = body_radius + ball.collision_radius + 6.0
-	var t: float = 0.0
-	while t < assault_dash_time and is_inside_tree():
-		await get_tree().process_frame
-		t += get_process_delta_time()
-		var away: Vector2 = start - ball.global_position
-		var dir: Vector2 = away.normalized() if away.length() > 0.01 else Vector2(-facing, 0.0)
-		var dest: Vector2 = _chain_clamped(ball.global_position + dir * stop_dist)
-		face_towards(ball.global_position - global_position)
-		global_position = start.lerp(dest, clampf(t / assault_dash_time, 0.0, 1.0))
+func _start_underwater(m: MatchManager, ally: Player) -> void:
+	_end_underwater()
+	_uw_partner = ally
+	_uw_until_round = m.round_number + underwater_rounds - 1   # a rodada atual conta
+	_uw_active = true
+	start_cooldown(CD_BITE, bite_cooldown, _uw_until_round + 1)
+	slide_immune = true
+	ally.slide_immune = true
+	_uw_link = KuronaFX.link(self, ally, underwater_link_range)
+	KuronaFX.splash(self, (global_position + ally.global_position) * 0.5, 12, true)
+	queue_redraw()
+
+
+func _uw_valid() -> bool:
+	var m: MatchManager = _get_manager()
+	return m != null and is_instance_valid(_uw_partner) and m.round_number <= _uw_until_round
+
+
+## A conexão acabou (duração, distância, gol): a recarga conta a partir do fim do efeito
+func _end_underwater() -> void:
+	if not _uw_active:
+		return
+	slide_immune = false
+	if is_instance_valid(_uw_partner):
+		_uw_partner.slide_immune = false
+	if _uw_link != null and is_instance_valid(_uw_link):
+		_uw_link.release()
+	_uw_link = null
+	_uw_active = false
+	_uw_partner = null
+	start_cooldown(CD_BITE, bite_cooldown, mini(get_current_round() + 1, _uw_until_round + 1))
+	queue_redraw()
 
 
 # ---------- SISTEMA DE HABILIDADES (menu) ----------
 
-func _sharp_skill_name() -> String:
-	if _link.active:
-		if _lie_usable():
-			return "Lie Lie"
-		return "Sharp Sharp (passar, +%d%%)" % roundi(_link.bonus * 100.0)
-	return skill_label("Sharp Sharp", CD_SHARP)
+func _moon_name() -> String:
+	return "Satellite" if _moon_variant() == MoonVariant.SATELLITE else "Moon"
 
 
-func _bite_skill_name() -> String:
-	if _bite_variant() == BiteVariant.ASSAULT:
-		return skill_label("Assault Assault", CD_ASSAULT)
-	return "Bite Bite"
+func _dribble_name() -> String:
+	return "Teeth" if _dribble_variant() == DribbleVariant.TEETH else "Close Quarter Dribble"
+
+
+func _bite_name() -> String:
+	return "Underwater" if _bite_variant() == BiteVariant.UNDERWATER else "Bite"
 
 
 func get_skills() -> Array[Dictionary]:
 	var list: Array[Dictionary] = []
-	list.append({"id": SKILL_SHARP, "name": _sharp_skill_name()})
-	var orbital_name: String = "Orbital Orbital (ativo)" if _orb_active \
-		else skill_label("Orbital Orbital", CD_ORBITAL)
-	list.append({"id": SKILL_ORBITAL, "name": orbital_name})
-	list.append({"id": SKILL_BITE, "name": _bite_skill_name()})
+	list.append({"id": SKILL_MOON, "name": skill_label(_moon_name(), CD_MOON)})
+	list.append({"id": SKILL_DRIBBLE, "name": skill_label(_dribble_name(), CD_DRIBBLE)})
+	var bite_name: String = "Underwater (ativo)" if _uw_active else skill_label(_bite_name(), CD_BITE)
+	list.append({"id": SKILL_BITE, "name": bite_name})
 	return list
 
 
@@ -479,40 +634,24 @@ func can_use_skill(skill_id: StringName = &"default") -> bool:
 	if not super(skill_id):
 		return false
 	match skill_id:
-		SKILL_SHARP:
-			if _link.active:
-				# Já está no 1-2: o botão passa/devolve ou, liberado pelo Pular, vira Lie Lie
-				return _lie_usable() or _link.can_exchange(self)
-			# can_cast confere recarga, bola ao alcance e aliado (no chão) ao alcance
-			return height_level == Heights.Level.GROUND and _link.can_cast()
-		SKILL_ORBITAL:
-			# Kurona no chão ou suspenso (não voando); o aliado precisa estar no chão
-			return not _orb_active and not is_on_cooldown(CD_ORBITAL) \
-				and height_level != Heights.Level.FLYING \
-				and not _allies_near(global_position, orbital_range, true).is_empty()
+		SKILL_MOON:
+			return not is_on_cooldown(CD_MOON) and _moon_variant() != MoonVariant.NONE
+		SKILL_DRIBBLE:
+			return not is_on_cooldown(CD_DRIBBLE) and _dribble_variant() != DribbleVariant.NONE
 		SKILL_BITE:
-			match _bite_variant():
-				BiteVariant.BITE:
-					return true
-				BiteVariant.ASSAULT:
-					return not is_on_cooldown(CD_ASSAULT) and _assault_possible()
-			return false
+			var variant: BiteVariant = _bite_variant()
+			return not is_on_cooldown(CD_BITE) and (variant == BiteVariant.BITE \
+				or (variant == BiteVariant.UNDERWATER and not _uw_active))
 	return false
 
 
 func use_skill(skill_id: StringName = &"default") -> bool:
 	match skill_id:
-		SKILL_SHARP:
-			if _link.active:
-				if _lie_usable():
-					return await _use_lie_lie()
-				return await _link.exchange(self)
-			return await _use_sharp_sharp()
-		SKILL_ORBITAL:
-			return await _use_orbital()
+		SKILL_MOON:
+			return await _use_moon()
+		SKILL_DRIBBLE:
+			return await _use_dribble()
 		SKILL_BITE:
-			if _bite_variant() == BiteVariant.ASSAULT:
-				return await _use_assault()
 			return await _use_bite()
 	return false
 
@@ -527,31 +666,37 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	var title: String = ""
 	var text: String = ""
 	match skill_id:
-		SKILL_SHARP:
-			if _link.active and _lie_usable():
-				title = "Lie Lie"
-				text = "Passe curto para um aliado de fora da dupla, que ganha parte do bônus acumulado no próximo chute. O 1-2 termina."
-			elif _link.active:
-				title = "Sharp Sharp (1-2 ativo)"
-				text = _link.exchange_description()
+		SKILL_MOON:
+			if _moon_variant() == MoonVariant.SATELLITE:
+				title = "Satellite"
+				text = ("Salta até a bola suspensa e passa rasteiro para um aliado (%d). Quando o passe chega, escolhe esse ou outro "
+					+ "aliado como satélite: o próximo Moon com ele tem +%d%% de velocidade e ele ganha +%d%% de chance no próximo chute.\n"
+					+ "Recarga: %d rodadas.") % [int(moon_range), _pct(satellite_speed_bonus), _pct(satellite_shot_bonus), moon_cooldown]
 			else:
-				title = "Sharp Sharp"
-				text = _link.cast_description()
-		SKILL_ORBITAL:
-			title = "Orbital Orbital"
-			text = ("Liga o Kurona a um aliado por uma corrente. Por %d rodadas, os dois ficam imunes a Carrinho, passam a bola mais longe e correm por mais tempo.\n"
-				+ "Recarga: %d rodadas.") % [orbital_rounds, orbital_cooldown]
+				title = "Moon"
+				text = ("Passe rasteiro para um aliado (%d) e o Kurona corre (duração reduzida). O aliado devolve a bola (QTE fácil) e "
+					+ "corre mais rápido; o Kurona devolve de novo (QTE fácil) e acaba. Passe interceptado interrompe a sequência.\n"
+					+ "Recarga: %d rodadas.") % [int(moon_range), moon_cooldown]
+		SKILL_DRIBBLE:
+			if _dribble_variant() == DribbleVariant.TEETH:
+				title = "Teeth"
+				text = ("Persegue um inimigo (%d), acompanhando os movimentos dele. Na próxima rodada, desabilita uma habilidade "
+					+ "ativável aleatória dele por %d rodada.\nRecarga: %d rodadas.") % [int(teeth_range), teeth_disable_rounds, dribble_cooldown]
+			else:
+				title = "Close Quarter Dribble"
+				text = ("Conduz a bola colada em si com %d dashes de %d, mudando de direção a cada um. Inimigo no caminho = QTE fácil de "
+					+ "drible: vencendo, passa por ele; perdendo, é parado e a bola fica solta. Terminou com a bola: +1 ação geral.\n"
+					+ "Recarga: %d rodadas.") % [dribble_dashes, int(dribble_dash_range), dribble_cooldown]
 		SKILL_BITE:
-			match _bite_variant():
-				BiteVariant.BITE:
-					title = "Bite Bite"
-					text = "Carrinho mais longo que derruba inimigos. Se acertar a bola, ela vai em passe para o aliado mais próximo."
-				BiteVariant.ASSAULT:
-					title = "Assault Assault"
-					text = "Voa até a bola no ar e passa rasteiro para o aliado mais próximo.\nRecarga: %d rodadas." % assault_cooldown
-				_:
-					title = "Bite Bite / Assault Assault"
-					text = "Carrinho que derruba inimigos ou voo até a bola no ar, conforme a situação."
+			if _bite_variant() == BiteVariant.UNDERWATER or _uw_active:
+				title = "Underwater"
+				text = ("Segura a bola e vai até um aliado; a %d dele, conecta os dois por %d rodadas: o Moon ganha mais velocidade e "
+					+ "+%d%% de chance, e os dois ficam imunes a Carrinho. Acaba se a distância passar de %d.\nRecarga: %d rodadas.") % [
+					int(underwater_stop_range), underwater_rounds, _pct(underwater_shot_bonus), int(underwater_link_range), bite_cooldown]
+			else:
+				title = "Bite"
+				text = ("Carrinho um pouco mais longo. Se alcançar a bola, lança-a como o Carrinho normal, ativa o buff do próximo Moon "
+					+ "(+%d%% de velocidade) e dá +1 ação geral.\nRecarga: %d rodadas.") % [_pct(bite_buff_speed), bite_cooldown]
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D
@@ -560,40 +705,34 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 
 # ---------- PARTIDA NOVA ----------
 
+func _clear_all() -> void:
+	_end_underwater()
+	_clear_teeth()
+	_clear_satellite(false)
+	_moon_buff = false
+
+
 func reset_for_new_match() -> void:
 	super()
-	_clear_sharp()
-	_clear_orbital()
+	_clear_all()
 	_bite_active = false
-	_bite_pass_running = false
 	slide_distance = _base_slide_distance
 
 
 # ---------- LOOP / VISUAL ----------
 
-func _process(delta: float) -> void:
+func _physics_process(delta: float) -> void:
 	super(delta)
-	if _orb_active and not _orbital_valid():
-		_break_orbital()
-	if _link.active or _orb_active:
-		queue_redraw()   # as linhas acompanham os jogadores se mexendo
+	_follow_teeth()
+	if _uw_active:
+		if not _uw_valid() or global_position.distance_to(_uw_partner.global_position) > underwater_link_range:
+			_end_underwater()   # a rodada acabou ou uma corrida mal planejada passou do alcance
 
 
 func _draw() -> void:
 	super()
-	var center := Vector2(0.0, -height)
-
-	# Orbital: corrente de elos até o aliado (fica vermelha quando esticada no limite)
-	if _orb_active and is_instance_valid(_orb_partner):
-		var end: Vector2 = to_local(_orb_partner.global_position) + Vector2(0.0, -_orb_partner.height)
-		var tension: float = global_position.distance_to(_orb_partner.global_position) / maxf(_orb_max_len, 1.0)
-		var color: Color = ORBITAL_COLOR.lerp(Color(1.0, 0.35, 0.3), clampf((tension - 0.8) / 0.2, 0.0, 1.0))
-		var length: float = center.distance_to(end)
-		if length > 1.0:
-			var dir: Vector2 = (end - center) / length
-			var links: int = maxi(int(length / 14.0), 1)
-			for i in range(links + 1):
-				draw_arc(center + dir * (length * float(i) / float(links)), 5.0, 0.0, TAU, 12, color, 2.0)
-
-	# Sharp Sharp: linha tracejada até o parceiro + bônus acumulado
-	_link.draw_link(self, "  Lie Lie!" if _lie_ready else "")
+	# Buff do Bite para o próximo Moon: anel rosa em volta dele
+	if _moon_buff:
+		var center := Vector2(0.0, -height)
+		draw_arc(center, placeholder_radius + 9.0, 0.0, TAU, 28, Color(KuronaFX.PINK, 0.9), 2.0)
+		draw_arc(center, placeholder_radius + 13.0, 0.0, TAU, 28, Color(KuronaFX.PINK_LIGHT, 0.5), 1.5)
