@@ -55,7 +55,7 @@ enum BiteVariant { NONE, BITE, UNDERWATER }
 @export var dribble_enemy_range: float = 300.0                 # "inimigo próximo" para poder usar
 @export var dribble_hit_radius: float = 45.0                   # "encontrar" um inimigo no caminho
 @export var dribble_cooldown: int = 2
-@export var teeth_range: float = 300.0
+@export var teeth_range: float = 70.0
 @export var teeth_disable_rounds: int = 1
 
 @export_group("Bite / Underwater")
