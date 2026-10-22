@@ -1786,8 +1786,12 @@ func _end_match(winning_team: int) -> void:
 	if not mvp.is_empty() and (str(mvp.get("title", "")) != "" or str(mvp.get("phrase", "")) != ""):
 		intro = MvpIntro.new()
 		get_tree().root.add_child(intro)
+		var title: String = str(mvp.get("title", ""))
+		var phrase: String = str(mvp.get("phrase", ""))
 		var color: Color = mvp.get("title_color", Color.WHITE)
-		await intro.play(str(mvp.get("title", "")), str(mvp.get("phrase", "")), color)
+		# O rostinho do MVP (res://img/rostinhos/) aparece acima do título
+		var face: Texture2D = CharacterRoster.face_for(str(mvp.get("character_id", "")))
+		await intro.play(title, phrase, color, face)
 		if not match_over:   # a partida foi reiniciada durante a abertura
 			intro.queue_free()
 			return

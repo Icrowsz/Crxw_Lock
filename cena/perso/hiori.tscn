@@ -48,7 +48,9 @@ skill_icons = {}
 display_name = "Hiori Yo"
 mvp_image = ExtResource("3_6tajc")
 mvp_title = "\"Ultra Sadist\""
-goal_lines = Array[String](["", ""])
+mvp_phrase = "\"From now on, my life will resolve around me.\""
+mvp_title_color = Color(0.55, 0.85, 1, 1)
+goal_lines = Array[String](["\"My ego told me to kick it.\"", "\"Doubt us now.\""])
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

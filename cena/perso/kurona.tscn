@@ -38,6 +38,10 @@ underwater_shot_bonus = 0.07
 skill_icons = {}
 display_name = "Ranze Kurona"
 mvp_image = ExtResource("3_wsdcl")
+mvp_title = "\"Shark\""
+mvp_phrase = "\"The moon shines brighter! Brighter!\""
+mvp_title_color = Color(0.68542546, 0, 0.30010915, 1)
+goal_lines = Array[String](["\"Blood.. Blood!\"", "\"Bite.. Bite!\""])
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)
