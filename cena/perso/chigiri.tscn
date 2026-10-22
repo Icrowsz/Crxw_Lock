@@ -39,6 +39,10 @@ skill_icons = {}
 move_speed = 390.0
 display_name = "Hyoma Chigiri"
 mvp_image = ExtResource("3_ewghm")
+mvp_title = "\"Red Panther\""
+mvp_phrase = "\"Was I going too fast? Or are you guys just too slow?\""
+mvp_title_color = Color(1, 0.2, 0.28, 1)
+goal_lines = Array[String](["“Did you guys really think you could outrun me?”", "“This is getting annoying... You guys can't even see my shadow.”"])
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

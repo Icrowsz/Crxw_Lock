@@ -33,6 +33,10 @@ kick_fx = null
 skill_icons = {}
 display_name = "Sendou Shuto"
 mvp_image = ExtResource("3_fvyfi")
+mvp_title = "\"Japan's Ace\""
+mvp_phrase = "\"As things stand now, I'm above you.\""
+mvp_title_color = Color(0.96, 0.72, 0.68, 1)
+goal_lines = Array[String](["\"IM THE STAR HERE!\"", "\"They're gonna remember my name.\""])
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

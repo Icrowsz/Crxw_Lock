@@ -5,7 +5,7 @@
 [ext_resource type="Texture2D" uid="uid://cqmrcih02um6m" path="res://img/mvps/barou.jpg" id="3_xb4w8"]
 [ext_resource type="Texture2D" uid="uid://d1muor4e1g84w" path="res://img/testes/barou.png" id="4_xb4w8"]
 
-[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_7y5xy")]
+[node name="Player" unique_id=1241627939 instance=ExtResource("1_7y5xy")]
 script = ExtResource("2_xb4w8")
 nero_chance = 0.4
 shot_cooldown = 3
@@ -37,7 +37,10 @@ kick_fx = null
 skill_icons = {}
 display_name = "Barou Shoei"
 mvp_image = ExtResource("3_xb4w8")
-visual_root = NodePath("SprPlayer")
+mvp_title = "\"King\""
+mvp_phrase = "“I will define an era in soccer as its king. And I will destroy anyone who dares to challenge me.”"
+mvp_title_color = Color(0.775, 0.038, 0.04, 1)
+goal_lines = Array[String](["\"Excellent work. Keep serving me.\"", "\"Let me devour, even more.\""])
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

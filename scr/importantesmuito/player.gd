@@ -22,6 +22,10 @@ enum Role { NONE, PROTAGONIST, SECONDARY }
 ## Tipo de chute possível agora (depende da altura do jogador e da bola)
 enum KickType { NONE, GROUND, VOLLEY, FLYING, HIGH_BALL }
 
+## Pé dominante (muda como a telinha de efeito do Chutar funciona: ver kick_spin_picker.gd)
+enum Foot { RIGHT, LEFT }
+
+
 # Nomes das animações que o Player toca sozinho (crie com estes nomes na SpriteFrames).
 # Os que você não criar são pulados: nada quebra, o personagem só usa o fallback abaixo.
 const ANIM_IDLE := &"idle"                 # parado (loop)
@@ -69,6 +73,22 @@ const ACTION_TIMEOUT: float = 3.0
 ## Imagem do MVP deste personagem (aparece no resumo final se ele for o MVP).
 ## Vazio = procura res://assets/mvp/<character_id>.png (ou .webp/.jpg/.jpeg/.svg).
 @export var mvp_image: Texture2D
+## Abertura do MVP (tela preta antes da tela final): TÍTULO do personagem (em cima) e FRASE digitada letra por letra.
+## Os dois vazios = o personagem não tem abertura (a tela final abre direto). Para textos por código,
+## sobrescreva get_mvp_title() / get_mvp_phrase() no script do personagem.
+@export var mvp_title: String = ""
+@export_multiline var mvp_phrase: String = ""
+## Cor do título na abertura do MVP. Transparente (alfa 0) = usa a cor do time.
+@export var mvp_title_color: Color = Color(0, 0, 0, 0)
+
+@export_group("Falas de gol")
+## Fala de cada gol dele: a 1ª linha é a do primeiro gol, a 2ª a do segundo, a 3ª a do terceiro (vazio = sem fala).
+## Para falas feitas por código, sobrescreva get_goal_line() no script do personagem.
+@export var goal_lines: Array[String] = []
+## Rostinho que aparece acima da fala. Vazio = procura res://assets/faces/<character_id>.png (ou .webp/.jpg/.jpeg/.svg)
+## e, se não achar, usa a imagem do MVP.
+@export var face_image: Texture2D
+@export var goal_line_time: float = 3.5   # quanto tempo a fala fica na tela (s)
 
 @export_group("Pular")
 @export var jump_rise_time: float = 0.25
@@ -87,15 +107,36 @@ const ACTION_TIMEOUT: float = 3.0
 @export_group("Chutar")
 @export var kick_range: float = 70.0            # distância (no chão) máxima até a bola
 @export var kick_aim_range: float = 120.0       # tamanho da seta de mira
-@export var kick_force_ground: float = 75.0     # chute fraco (jogador e bola no chão)
-@export var kick_force_volley: float = 55.0     # voleio (jogador suspenso, bola no chão/suspensa)
-@export var kick_force_flying: float = 50.0     # bola voando (QTE mais difícil)
-@export var kick_force_high_ball: float = 55.0  # jogador no chão, bola suspensa (QTE)
+@export var kick_force_ground: float = 65.0     # chute fraco (jogador e bola no chão)
+@export var kick_force_volley: float = 45.0     # voleio (jogador suspenso, bola no chão/suspensa)
+@export var kick_force_flying: float = 40.0     # bola voando (QTE mais difícil)
+@export var kick_force_high_ball: float = 45.0  # jogador no chão, bola suspensa (QTE)
 @export var kick_force_to_speed: float = 10.0   # força 50 -> 500 px/s na bola
 @export var volley_peak_level: Heights.Level = Heights.Level.SUSPENDED   # até onde a bola sobe no voleio
 @export var flying_peak_level: Heights.Level = Heights.Level.SUSPENDED   # idem, quando a bola estava voando
 @export_range(0.0, 1.0) var qte_fail_power_mult: float = 0.2   # força que sobra se errar o QTE (bola fraquinha)
 @export_range(0.0, 90.0) var qte_fail_max_angle: float = 30.0  # desvio máximo (graus) se errar o QTE
+
+@export_group("Pé dominante e efeito do chute")
+## CHAVE DA MECÂNICA INTEIRA do efeito do Chutar (telinha da bola, curva, sobe/desce, voo flutuante e
+## perda de alcance). false = o Chutar volta a ser o chute simples de antes: sem telinha, sem efeito.
+## Para decidir depois se entra na versão final, é só mudar isto (o MatchManager também respeita).
+@export var kick_spin_enabled: bool = true
+## Destro ou canhoto. Os personagens que herdam o Player escolhem no Inspector (o padrão é destro).
+## Na telinha do Chutar, quem é canhoto tem o lado da curva espelhado (mirror_spin_when_lefty).
+@export var dominant_foot: Foot = Foot.RIGHT
+@export var mirror_spin_when_lefty: bool = true
+## O jogador escolhe um PONTO da bola (telinha do Chutar). Quanto mais longe do centro, mais efeito.
+@export var spin_curve_deg: float = 30.0          # curva total (graus) quando acerta a lateral da bola
+@export var spin_curve_time: float = 0.6          # por quanto tempo a bola vai curvando (s)
+@export_range(0.0, 0.9) var spin_curve_power_loss: float = 0.4   # alcance perdido na curva máxima (efeito sempre alcança menos que o reto)
+@export_range(0.0, 0.9) var spin_rise_power_loss: float = 0.3    # alcance perdido quando acerta embaixo na borda ("sobe"; o tempo maior no ar já é compensado)
+@export_range(0.0, 1.0) var spin_down_power_mult: float = 0.7    # alcance que sobra quando acerta em cima (máximo)
+@export_range(0.0, 0.5) var spin_deadzone: float = 0.12          # perto do centro = sem efeito nenhum (reta)
+## SUBIDA: quanto mais EMBAIXO da bola, mais ela sobe: meio caminho = Suspensa, na borda = Voando.
+## Quanto mais sobe, mais "flutuante" é o voo (gravidade menor = mais tempo no ar, arco bem visível).
+@export_range(0.15, 1.0) var spin_rise_hang_scale: float = 0.5    # gravidade da bola na subida máxima (0.5 = ~40% mais tempo no ar)
+@export_range(0.0, 1.0) var spin_rise_trail_from: float = 0.3     # a partir de quanta subida a bola deixa o rastro do arco
 
 @export_group("Chance de gol (disputa com o goleiro)")
 ## Chance de o chute vencer o goleiro. Se perder o sorteio, o goleiro fica com a bola.
@@ -150,6 +191,10 @@ var run_time_bonus: float = 0.0
 var next_shot_bonus: float = 0.0
 ## Multiplicador de força que vale só no PRÓXIMO kick_ball (gasto ao chutar). Ex: Kablamo do Shidou
 var next_kick_force_mult: float = 1.0
+## Ponto da bola escolhido na telinha do Chutar para o PRÓXIMO chute (o MatchManager define; o kick_ball gasta).
+## x: -1 (esquerda da bola, vista de quem chuta) .. 1 (direita); y: -1 (em cima) .. 1 (embaixo).
+## (0, 0) = centro = chute reto. Chutes de habilidade não passam por aí: ficam sempre retos.
+var pending_spin_point: Vector2 = Vector2.ZERO
 ## Ações de habilidade extras só DESTE jogador (ex: Obsessive Lover do Shidou). O MatchManager
 ## gasta estas primeiro, antes da pool do time.
 var extra_skill_left: int = 0:
@@ -290,6 +335,7 @@ func _ready() -> void:
 
 	facing = _default_facing()
 	refresh_art()
+	_hook_goal_lines.call_deferred()   # o MatchManager entra na árvore no mesmo frame
 
 
 ## Procura o AnimatedSprite2D e liga/desliga o modo "com arte". Chame de novo se trocar
@@ -320,6 +366,68 @@ func get_mvp_image() -> Texture2D:
 		if ResourceLoader.exists(path):
 			return load(path) as Texture2D
 	return null
+
+
+# ---------- ABERTURA DO MVP ----------
+
+## Título do personagem na abertura do MVP. "" = sem título.
+func get_mvp_title() -> String:
+	return mvp_title
+
+
+## Cor do título do MVP (própria do personagem). Sobrescreva para cor por código.
+func get_mvp_title_color() -> Color:
+	if mvp_title_color.a > 0.0:
+		return mvp_title_color
+	return get_team_color()
+
+
+## Frase do MVP, digitada na tela preta. "" = sem frase.
+func get_mvp_phrase() -> String:
+	return mvp_phrase
+
+
+# ---------- FALAS DE GOL ----------
+
+## Fala do gol número `goal_number` (1, 2, 3...) deste jogador. Padrão: lê a lista goal_lines (se fizer mais gols
+## que falas, repete a última). Sobrescreva no personagem para falas por código. "" = sem fala.
+func get_goal_line(goal_number: int) -> String:
+	if goal_lines.is_empty():
+		return ""
+	return goal_lines[mini(goal_number, goal_lines.size()) - 1]
+
+
+## Rostinho da fala: a do Inspector (face_image), res://assets/faces/<character_id>.<extensão> ou a do MVP
+func get_face_image() -> Texture2D:
+	if face_image != null:
+		return face_image
+	for ext in ["png", "webp", "jpg", "jpeg", "svg"]:
+		var path: String = "res://img/rostinhos/%s.%s" % [character_id, ext]
+		if ResourceLoader.exists(path):
+			return load(path) as Texture2D
+	return get_mvp_image()
+
+
+func _hook_goal_lines() -> void:
+	var m: MatchManager = _get_manager()
+	if m != null and not m.goal_scored.is_connected(_on_goal_for_lines):
+		m.goal_scored.connect(_on_goal_for_lines)
+
+
+## Quando ELE faz um gol (não vale gol contra), conta quantos já fez (1º, 2º, 3º) e mostra a fala
+func _on_goal_for_lines(goal: Dictionary) -> void:
+	var me: String = get_display_name()
+	if bool(goal.get("own_goal", false)) or int(goal.get("team", -1)) != team or String(goal.get("scorer", "")) != me:
+		return
+	var number: int = 0
+	for g: Dictionary in _get_manager().goal_log:   # o gol de agora já está no registro
+		if not bool(g["own_goal"]) and int(g["team"]) == team and String(g["scorer"]) == me:
+			number += 1
+	var line: String = get_goal_line(number)
+	if line == "":
+		return
+	await get_tree().create_timer(0.8).timeout   # deixa o "GOL!" aparecer primeiro
+	GoalQuote.show_quote(self, get_face_image(), me, line, get_team_color(), goal_line_time)
 
 
 ## A cor vem do TeamStyle (o jogador escolhe na tela de formação)
@@ -689,6 +797,11 @@ func kick_ball(ball: Ball, direction: Vector2, kind: KickType, qte_success: bool
 	# Multiplicador de força do próximo chute (gasto aqui, mesmo se a ação for cancelada)
 	var force_mult: float = next_kick_force_mult
 	next_kick_force_mult = 1.0
+	# Ponto da bola escolhido na telinha do Chutar (gasto aqui, mesmo se o chute for cancelado)
+	var spin_point: Vector2 = pending_spin_point if kick_spin_enabled else Vector2.ZERO
+	pending_spin_point = Vector2.ZERO
+	var curve: float = spin_curve_amount(spin_point)
+	var rise_amount: float = spin_rise_amount(spin_point)
 	# Disputa de bola (Unleash Instinct do Bachira): a tentativa é decidida ANTES do chute.
 	# chance_override >= 0 = chute de habilidade (disputa de CPS); -1 = ação geral Chutar (derruba)
 	if ball != null and ball.contest_owner != null and is_instance_valid(ball.contest_owner) \
@@ -715,7 +828,12 @@ func kick_ball(ball: Ball, direction: Vector2, kind: KickType, qte_success: bool
 	if not qte_success:
 		force *= qte_fail_power_mult
 		dir = dir.rotated(deg_to_rad(randf_range(-qte_fail_max_angle, qte_fail_max_angle)))
-	var speed: float = force * kick_force_to_speed
+	# Velocidade do chute RETO (sem efeito). O efeito gasta alcance: curva, subida e descida vão sempre
+	# menos longe que o reto (alcance = spin_power_mult). Com subida o alcance é medido de verdade
+	# (a bola fica mais tempo no ar), então a velocidade é calculada para o alcance sair certo.
+	var speed_ref: float = force * kick_force_to_speed
+	var range_mult: float = spin_power_mult(spin_point)
+	var speed: float = speed_ref * range_mult
 	var chance: float = chance_override if chance_override >= 0.0 else get_shot_chance(kind)
 	if chance >= 0.0:
 		# + bônus do próximo chute (ex: Sharp Sharp do Kurona, gasto aqui) - penalidades (ex: Expelliarmus do Ness)
@@ -724,13 +842,35 @@ func kick_ball(ball: Ball, direction: Vector2, kind: KickType, qte_success: bool
 		chance = clampf(chance + take_next_shot_bonus() + get_team_shot_bonus(ball) - get_shot_debuff()
 			- get_opponent_shot_penalty(), 0.0, 1.0)
 
-	if kind == KickType.GROUND or kind == KickType.HIGH_BALL:
+	# Altura do arco (veja spin_peak_height) e gravidade do voo: com subida a bola "flutua" mais
+	var peak_h: float = spin_peak_height(spin_point, ball, kind)
+	var rise: float = maxf(0.0, peak_h - ball.height)
+	var hang: float = spin_hang_scale(spin_point)
+	var base_g: float = _ball_base_gravity(ball)
+	var flight_g: float = base_g * hang   # o lift já é calculado para a gravidade do voo
+	var lift: float = Heights.lift_for_peak(rise, flight_g)
+	if rise_amount > 0.0:
+		# Referência: o mesmo chute, reto. O arco com subida tem que parar mais perto que ele.
+		var ref_rise: float = maxf(0.0, spin_peak_height(Vector2.ZERO, ball, kind) - ball.height)
+		var ref_lift: float = 0.0
+		if kind == KickType.VOLLEY or kind == KickType.FLYING:
+			ref_lift = Heights.lift_for_peak(ref_rise, base_g)
+		var ref_range: float = _estimate_range(ball, speed_ref, ref_lift, base_g)
+		speed = _speed_for_range(ball, ref_range * range_mult, lift, flight_g, speed_ref)
+	if (kind == KickType.GROUND or kind == KickType.HIGH_BALL) and rise_amount <= 0.0:
 		ball.kick_ground(dir, speed, self, chance)
 	else:
-		# Sobe só o que falta até o pico do nível (se a bola já está mais alta, só cai)
-		var peak_level: Heights.Level = volley_peak_level if kind == KickType.VOLLEY else flying_peak_level
-		var rise: float = maxf(0.0, Heights.to_height(peak_level) - ball.height)
-		ball.kick(dir, speed, Heights.lift_for_peak(rise, ball.gravity), self, chance)
+		ball.kick(dir, speed, lift, self, chance)
+
+	# Voo com subida: gravidade menor até a bola pousar + rastro do arco (roda em paralelo, sem esperar)
+	if rise_amount > 0.0:
+		_float_flight(ball, hang, rise_amount >= spin_rise_trail_from)
+	else:
+		_end_float(ball)
+
+	# Curva: a velocidade da bola vai sendo girada aos poucos (roda em paralelo, sem esperar)
+	if absf(curve) > 0.0:
+		_spin_curve(ball, curve)
 
 	# Habilidades como o Backheel Shot: a bola passa direto por quem chutou
 	if ignore_self_collision:
@@ -748,6 +888,185 @@ func kick_ball(ball: Ball, direction: Vector2, kind: KickType, qte_success: bool
 	# Errou o QTE: o jogador se desequilibra e cai (Levantar, ou espera 2 rodadas)
 	if not qte_success:
 		knock_down()
+
+
+## Tira a zona morta do centro e reescala (0..1, com sinal): perto do centro não tem efeito nenhum
+func _spin_axis(v: float) -> float:
+	var a: float = absf(v)
+	if a <= spin_deadzone:
+		return 0.0
+	return signf(v) * minf((a - spin_deadzone) / maxf(1.0 - spin_deadzone, 0.01), 1.0)
+
+
+## Curva do ponto escolhido: -1 (esquerda) .. 1 (direita), vista de quem chuta.
+## Acertar o lado ESQUERDO da bola curva para a DIREITA (e vice-versa); canhoto espelha.
+func spin_curve_amount(point: Vector2) -> float:
+	var amount: float = -_spin_axis(point.x)
+	if dominant_foot == Foot.LEFT and mirror_spin_when_lefty:
+		amount = -amount
+	return amount
+
+
+## Subida (0..1): acertar EMBAIXO da bola faz ela subir
+func spin_rise_amount(point: Vector2) -> float:
+	return maxf(0.0, _spin_axis(point.y))
+
+
+## Descida (0..1): acertar EM CIMA da bola faz ela descer e sair com menos força
+func spin_down_amount(point: Vector2) -> float:
+	return maxf(0.0, -_spin_axis(point.y))
+
+
+## Quanto do ALCANCE sobra com esse ponto (1 = chute reto, sem perda): o efeito "gasta" alcance,
+## então chute com curva, subida ou descida vai sempre menos longe que o reto.
+func spin_power_mult(point: Vector2) -> float:
+	var mult: float = 1.0 - spin_curve_power_loss * absf(spin_curve_amount(point))
+	mult *= 1.0 - spin_rise_power_loss * spin_rise_amount(point)
+	mult *= lerpf(1.0, spin_down_power_mult, spin_down_amount(point))
+	return mult
+
+
+## Altura MÁXIMA (px) que a bola chega com o ponto escolhido. Usada pelo kick_ball e pela telinha.
+## Bola no chão / bola alta: de onde ela está até Voando, na proporção do ponto
+## (meio caminho = Suspensa, borda de baixo = Voando). Voleio e bola voando: pico do tipo de chute,
+## que sobe até o nível de cima (embaixo) ou desce até o de baixo (em cima).
+func spin_peak_height(point: Vector2, ball: Ball, kind: KickType) -> float:
+	var rise_amount: float = spin_rise_amount(point)
+	var down_amount: float = spin_down_amount(point)
+	if kind == KickType.VOLLEY or kind == KickType.FLYING:
+		var peak_level: Heights.Level = volley_peak_level if kind == KickType.VOLLEY else flying_peak_level
+		var peak_h: float = Heights.to_height(peak_level)
+		if rise_amount > 0.0:
+			peak_h = lerpf(peak_h, Heights.to_height(_level_above(peak_level)), rise_amount)
+		elif down_amount > 0.0:
+			peak_h = lerpf(peak_h, Heights.to_height(_level_below(peak_level)), down_amount)
+		return maxf(ball.height, peak_h)
+	return ball.height + maxf(0.0, (Heights.FLYING_HEIGHT - ball.height) * rise_amount)
+
+
+## Escala da gravidade no voo (1 = normal; menor = a bola fica mais tempo no ar)
+func spin_hang_scale(point: Vector2) -> float:
+	return lerpf(1.0, spin_rise_hang_scale, spin_rise_amount(point))
+
+
+## Tempo no ar (s): Vector2(subida, descida), para a telinha mostrar quanto a bola demora
+func spin_air_times(point: Vector2, ball: Ball, kind: KickType) -> Vector2:
+	var g: float = maxf(_ball_base_gravity(ball) * spin_hang_scale(point), 1.0)
+	var peak_h: float = spin_peak_height(point, ball, kind)
+	return Vector2(sqrt(2.0 * maxf(peak_h - ball.height, 0.0) / g), sqrt(2.0 * peak_h / g))
+
+
+## Estima, simulando a física da bola (gravidade, quique, atrito e resistência do ar), quantos px ela
+## anda na horizontal até parar. Serve para o chute com subida sair com o alcance certo.
+func _estimate_range(ball: Ball, speed: float, lift: float, g: float) -> float:
+	var dt: float = 1.0 / 60.0
+	var v: float = speed
+	var z: float = ball.height
+	var vz: float = lift
+	var dist: float = 0.0
+	var t: float = 0.0
+	while t < 8.0 and v > 1.0:
+		t += dt
+		if z > 0.0 or vz > 0.0:
+			vz -= g * dt
+			z += vz * dt
+			if z <= 0.0:
+				z = 0.0
+				if absf(vz) > ball.min_bounce_speed:
+					vz = -vz * ball.bounce_factor
+					v *= 0.9   # perde um pouco ao quicar (igual ao Ball)
+				else:
+					vz = 0.0
+		if z <= 0.0 and vz == 0.0:
+			v = maxf(0.0, v - (v * ball.ground_friction + ball.stop_speed) * dt)
+		else:
+			v *= maxf(0.0, 1.0 - ball.air_drag * dt)
+		dist += v * dt
+	return dist
+
+
+## Velocidade horizontal (até max_speed) com a qual o chute alcança target px
+func _speed_for_range(ball: Ball, target: float, lift: float, g: float, max_speed: float) -> float:
+	if _estimate_range(ball, max_speed, lift, g) <= target:
+		return max_speed
+	var lo: float = 0.0
+	var hi: float = max_speed
+	for i in 14:
+		var mid: float = (lo + hi) * 0.5
+		if _estimate_range(ball, mid, lift, g) < target:
+			lo = mid
+		else:
+			hi = mid
+	return (lo + hi) * 0.5
+
+
+## Gravidade original da bola (guardada na primeira vez, porque o voo com subida a altera)
+func _ball_base_gravity(ball: Ball) -> float:
+	if not ball.has_meta("base_gravity"):
+		ball.set_meta("base_gravity", ball.gravity)
+	return float(ball.get_meta("base_gravity"))
+
+
+## Volta a gravidade normal e cancela qualquer voo flutuante em andamento
+func _end_float(ball: Ball) -> void:
+	if ball == null or not is_instance_valid(ball):
+		return
+	ball.set_meta("float_token", int(ball.get_meta("float_token", 0)) + 1)
+	ball.gravity = _ball_base_gravity(ball)
+
+
+## Voo flutuante: a bola fica com a gravidade reduzida (mais tempo no ar, arco mais bonito) até o
+## primeiro pouso, alguém tocar nela, ela ser segurada ou ficar pairando. Se outro chute assumir a bola
+## no meio, ele manda (token); este só devolve a gravidade se ainda for o dono.
+func _float_flight(ball: Ball, hang: float, with_trail: bool) -> void:
+	var token: int = int(ball.get_meta("float_token", 0)) + 1
+	ball.set_meta("float_token", token)
+	var base_g: float = _ball_base_gravity(ball)
+	ball.gravity = base_g * hang
+	if with_trail:
+		ball.trail_enabled = true
+	var touches: int = ball.interaction_count
+	var elapsed: float = 0.0
+	while elapsed < 6.0:
+		await get_tree().physics_frame
+		if not is_instance_valid(ball):
+			return
+		if int(ball.get_meta("float_token", 0)) != token:
+			return   # outro chute assumiu a bola
+		elapsed += get_physics_process_delta_time()
+		if ball.interaction_count != touches or ball.hovering or ball.held_by != null:
+			break
+		if ball.height <= 0.0 and ball.vel_z <= 0.0:
+			break   # pousou
+	if is_instance_valid(ball) and int(ball.get_meta("float_token", 0)) == token:
+		ball.gravity = base_g
+		if with_trail:
+			ball.trail_enabled = false
+
+
+func _level_above(level: Heights.Level) -> Heights.Level:
+	return mini(int(level) + 1, int(Heights.Level.FLYING)) as Heights.Level
+
+
+func _level_below(level: Heights.Level) -> Heights.Level:
+	return maxi(int(level) - 1, int(Heights.Level.GROUND)) as Heights.Level
+
+
+## Curva da bola chutada: amount -1..1 (+ = para a direita de quem chuta, - = para a esquerda);
+## a curva total é spin_curve_deg * amount. Para se alguém tocar na bola, ela for segurada,
+## ficar pairando ou quase parar.
+func _spin_curve(ball: Ball, amount: float) -> void:
+	var touches: int = ball.interaction_count
+	var rate: float = deg_to_rad(spin_curve_deg) * amount / maxf(spin_curve_time, 0.05)
+	var elapsed: float = 0.0
+	while elapsed < spin_curve_time and is_instance_valid(ball):
+		await get_tree().physics_frame
+		var dt: float = get_physics_process_delta_time()
+		elapsed += dt
+		if not is_instance_valid(ball) or ball.interaction_count != touches or ball.hovering \
+				or ball.held_by != null or ball.velocity.length() < 30.0:
+			break
+		ball.velocity = ball.velocity.rotated(rate * dt)
 
 
 ## Pega (e zera) o bônus de chance do próximo chute
@@ -1736,3 +2055,82 @@ func _draw() -> void:
 			PackedVector2Array([end + aim_direction * 14.0 * pulse, end + side, end - side]),
 			Color.ORANGE
 		)
+
+
+## Fala de gol: rostinho em cima e a frase embaixo, centralizados na parte de baixo da tela (acima da barra de ações).
+## Só existe uma por vez: uma fala nova substitui a anterior.
+class GoalQuote extends CanvasLayer:
+	static var current: GoalQuote
+
+	static func show_quote(host: Node, face: Texture2D, who: String, text: String, color: Color, hold: float) -> void:
+		if current != null and is_instance_valid(current):
+			current.queue_free()
+		current = GoalQuote.new()
+		host.get_tree().root.add_child(current)
+		current._build(face, who, text, color, hold)
+
+	func _build(face: Texture2D, who: String, text: String, color: Color, hold: float) -> void:
+		layer = 11   # acima do placar e do menu (10)
+		var root := VBoxContainer.new()
+		root.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+		root.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		root.grow_vertical = Control.GROW_DIRECTION_BEGIN   # cresce para cima
+		root.offset_top = -80.0
+		root.offset_bottom = -80.0
+		root.alignment = BoxContainer.ALIGNMENT_END
+		root.add_theme_constant_override("separation", 8)
+		root.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		root.modulate.a = 0.0
+		add_child(root)
+
+		if face != null:   # o rostinho, em moldura arredondada na cor do time
+			var frame := PanelContainer.new()
+			frame.custom_minimum_size = Vector2(104.0, 104.0)
+			frame.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+			frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			frame.clip_children = CanvasItem.CLIP_CHILDREN_AND_DRAW
+			frame.add_theme_stylebox_override("panel", _box(color, 4, 18, 4.0, Color(0.05, 0.06, 0.09, 1.0)))
+			var pic := TextureRect.new()
+			pic.texture = face
+			pic.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+			pic.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_COVERED
+			pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
+			frame.add_child(pic)
+			root.add_child(frame)
+
+		var panel := PanelContainer.new()
+		panel.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+		panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_theme_stylebox_override("panel", _box(color, 2, 14, 22.0, Color(0.05, 0.06, 0.09, 0.92)))
+		root.add_child(panel)
+		var inner := VBoxContainer.new()
+		inner.add_theme_constant_override("separation", 2)
+		inner.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		panel.add_child(inner)
+		inner.add_child(UiStyle.make_label(who, 18, color.lightened(0.3)))
+		var quote := UiStyle.make_label(text, 28)
+		quote.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		quote.custom_minimum_size = Vector2(minf(720.0, get_viewport().get_visible_rect().size.x * 0.7), 0.0)
+		inner.add_child(quote)
+
+		# Sobe um pouquinho enquanto aparece, fica parada e some
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(root, "modulate:a", 1.0, 0.25)
+		tw.tween_property(root, "offset_top", -110.0, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_property(root, "offset_bottom", -110.0, 0.3).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.chain().tween_interval(hold)
+		tw.chain().tween_property(root, "modulate:a", 0.0, 0.4)
+		tw.chain().tween_callback(queue_free)
+
+	func _box(border: Color, border_w: int, radius: int, margin: float, bg: Color) -> StyleBoxFlat:
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = bg
+		sb.border_color = border
+		sb.set_border_width_all(border_w)
+		sb.set_corner_radius_all(radius)
+		sb.content_margin_left = margin
+		sb.content_margin_right = margin
+		sb.content_margin_top = maxf(margin * 0.5, 4.0)
+		sb.content_margin_bottom = maxf(margin * 0.5, 4.0)
+		return sb

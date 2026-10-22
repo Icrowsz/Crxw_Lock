@@ -57,6 +57,10 @@ destroyer_fx_offset = Vector2(0, 28)
 skill_icons = {}
 display_name = "Itoshi Rin"
 mvp_image = ExtResource("4_f5bs0")
+mvp_title = "\"Destroyer\""
+mvp_phrase = "\"The field is a battlefield, and you turned your backs on an armed soldier.\""
+mvp_title_color = Color(1.4439226e-07, 0.5406561, 0.45262384, 1)
+goal_lines = Array[String](["\"Disgusting..\"", "\"It's Half-Baked.\""])
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

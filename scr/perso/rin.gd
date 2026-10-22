@@ -120,7 +120,7 @@ func _ready() -> void:
 ## Verde-azulado do Rin; as partículas giram em espiral (a curva / "gravidade"). strong = Self Destruction: escuro e largo
 func _make_fx(strong: bool = false) -> KickFX:
 	var fx := KickFX.new()
-	fx.color = Color(0.03, 0.12, 0.12) if strong else Color(0.176, 0.661, 0.569)
+	fx.color = Color(0.184, 0.431, 0.431, 1.0) if strong else Color(0.176, 0.661, 0.569)
 	fx.additive = false   # o campo é verde: mistura normal mantém a cor visível
 	fx.trail_width = 34.0 if strong else 16.0
 	fx.trail_points = 20

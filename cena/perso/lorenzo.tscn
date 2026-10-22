@@ -38,6 +38,10 @@ kick_fx = null
 skill_icons = {}
 display_name = "Don Lorenzo"
 mvp_image = ExtResource("3_2280n")
+mvp_title = "\"Ace Eater\""
+mvp_phrase = "\"There's nothing in the world that money can't buy, and im gonna leave this match RICH!\""
+mvp_title_color = Color(0.24, 0.08, 0.4, 1)
+goal_lines = Array[String](["\"DAH!\"", "\"You guys are WORTHLESS!\""])
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

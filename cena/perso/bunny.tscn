@@ -2,10 +2,10 @@
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_hlu3s"]
 [ext_resource type="Texture2D" uid="uid://cbo7yf5pqae8i" path="res://img/mvps/bunny.jpg" id="2_8skxl"]
-[ext_resource type="Script" uid="uid://dpcg3wvx2lxag" path="res://scr/perso/bunny.gd" id="2_gccaw"]
+[ext_resource type="Script" uid="uid://cdphs4em23ubm" path="res://scr/perso/bunny.gd" id="2_gccaw"]
 [ext_resource type="Texture2D" uid="uid://caumecy3n5mcc" path="res://img/testes/bunny.png" id="4_gccaw"]
 
-[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_hlu3s")]
+[node name="Player" unique_id=1241627939 instance=ExtResource("1_hlu3s")]
 script = ExtResource("2_gccaw")
 chance_bun_kick = 0.45
 chance_hare_leap = 0.5
@@ -15,6 +15,8 @@ hare_leap_curve_deg = 12.0
 curve_time = 0.2
 leap_range = 160.0
 leap_time = 0.3
+show_trajectory = true
+trajectory_length = 650.0
 apathic_range = 450.0
 apathic_return_range = 550.0
 apathic_run_time = 0.8
@@ -36,7 +38,10 @@ kick_fx = null
 skill_icons = {}
 display_name = "Bunny Iglesias"
 mvp_image = ExtResource("2_8skxl")
-visual_root = NodePath("SprPlayer")
+mvp_title = "\"Conejo\""
+mvp_phrase = "\"Y eso que tan solo acabo de empezar\""
+mvp_title_color = Color(1, 0.58, 0.58, 1)
+goal_lines = Array[String](["\"A cada uno voy a humiliar.\"", "\"Soy el mejor destruyendo sus sueños.\""])
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

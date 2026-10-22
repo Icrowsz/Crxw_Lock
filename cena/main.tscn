@@ -42,9 +42,11 @@ shape = SubResource("RectangleShape2D_jb6vp")
 [node name="Field" type="Node2D" parent="." unique_id=679632803 node_paths=PackedStringArray("ball")]
 script = ExtResource("1_mk8v6")
 ball = NodePath("../Bola")
+spawn_goalkeepers = false
 
 [node name="MatchManager" type="Node2D" parent="." unique_id=1461380594]
 script = ExtResource("1_3tt73")
+kick_spin_enabled = false
 
 [node name="Bola" parent="." unique_id=235203312 instance=ExtResource("4_mk8v6")]
 

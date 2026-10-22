@@ -113,7 +113,17 @@ const PASS_VARIANT_NAMES := {
 @export_group("Formações")
 @export var use_formation_setup: bool = true          # antes da partida, cada time monta e confirma a formação
 @export var reset_positions_after_goal: bool = true   # depois de um gol, todo mundo volta à posição da formação
-@export var reposition_time: float = 0.1              # quanto tempo os jogadores levam para voltar (0 = na hora)
+@export var reposition_time: float = 0.1              # quanto tempo os jogadores levam para voltar (só vale com animated_reset desligado)
+
+@export_group("Reset animado (gol / troca de tempo)")
+## Nos resets os jogadores CAMINHAM até as posições (no 2º tempo, já viradas) e o JUIZ pega a bola onde ela
+## parou, leva até o centro e a coloca no chão. Desligado: tudo volta na hora, como antes (reposition_time).
+@export var animated_reset: bool = true
+@export var use_referee: bool = true            # o juiz (referee.gd) cuida da bola nos resets
+@export var reset_walk_speed: float = 230.0     # px/s dos jogadores voltando às posições
+@export var reset_min_time: float = 0.8         # o mais rápido que um jogador chega (mesmo estando perto)
+@export var reset_max_time: float = 3.0         # o mais devagar (mesmo estando longe)
+@export var referee_walk_speed: float = 320.0   # px/s do juiz
 
 @export_group("MVP")
 @export var mvp_goal_points: int = 1          # pontos por gol (gol contra não pontua)
@@ -140,6 +150,10 @@ const PASS_VARIANT_NAMES := {
 @export var volley_qte_time_per_key: float = 0.7      # voleio: segundos por tecla
 @export var flying_qte_keys: int = 6                  # bola voando: mais teclas...
 @export var flying_qte_time_per_key: float = 0.7      # ...menos tempo (e teclas extras no pool)
+
+@export_group("Chutar - efeito na bola")
+@export var kick_spin_enabled: bool = true            # abre a telinha de efeito depois da mira (e do QTE)
+@export var kick_spin_time: float = 5.0               # tempo para escolher (acabou = bola reta)
 
 @export_group("Passe")
 @export var ground_pass_range: float = 450.0           # alcance do passe rasteiro (px)
@@ -219,6 +233,9 @@ var _swap_pending: bool = false
 var _stoppage_open: bool = false
 ## O gol saiu e a bola ainda não voltou ao centro (pausa pedida agora fica agendada para o reset)
 var _awaiting_goal_reset: bool = false
+## Onde a bola estava quando o gol saiu / o tempo virou (o juiz vai buscá-la ali)
+var _reset_ball_from: Vector2 = Vector2.ZERO
+var _reset_running: bool = false   # o reset animado está rodando agora
 ## Times que pediram pausa durante o gol: a tela abre quando a bola volta ao centro
 var _queued_pauses: Array[int] = []
 
@@ -320,7 +337,9 @@ func _on_ball_reset_after_goal() -> void:
 		return
 	# Se o tempo virou, é aqui que os times trocam de lado
 	var swapped: bool = _apply_pending_swap()
-	if reset_positions_after_goal or swapped:
+	if animated_reset:
+		await _animated_reset(_reset_ball_from, reset_positions_after_goal or swapped)
+	elif reset_positions_after_goal or swapped:
 		return_players_home(reposition_time)
 
 
@@ -334,6 +353,73 @@ func return_players_home(duration: float) -> void:
 		await get_tree().create_timer(duration).timeout
 	_repositioning = false
 	state_changed.emit()
+
+
+## Reset com animação: os jogadores CAMINHAM até as posições da formação (no 2º tempo já viradas) e o JUIZ
+## pega a bola onde ela parou, leva até o centro e a coloca no chão. Ninguém age enquanto isso.
+## A bola já está no centro quando isto roda (o Field a reposicionou): o juiz a esconde e a "traz" de volta.
+func _animated_reset(ball_from: Vector2, move_players: bool) -> void:
+	if _reset_running:
+		return   # já tem um reset acontecendo (o Field pode avisar duas vezes)
+	_reset_running = true
+	_repositioning = true
+	state_changed.emit()
+	var field := get_tree().get_first_node_in_group("field") as Field
+	var ball: Ball = _get_ball()
+	var started: int = Time.get_ticks_msec()
+	var longest: float = 0.0
+
+	# Jogadores: cada um caminha em um tempo proporcional à distância e olha para onde vai
+	if move_players:
+		for p: Player in get_tree().get_nodes_in_group("players"):
+			var dist: float = p.global_position.distance_to(p.home_position)
+			var time: float = clampf(dist / maxf(reset_walk_speed, 1.0), reset_min_time, reset_max_time)
+			var dx: float = p.home_position.x - p.global_position.x
+			p.return_home(time)
+			if absf(dx) > 10.0:
+				p.facing = 1 if dx > 0.0 else -1
+			longest = maxf(longest, time)
+
+	# Juiz: entra pela lateral, pega a bola, leva ao centro, coloca no chão e apita
+	var ref: Referee = null
+	var center: Vector2 = Vector2.ZERO
+	if use_referee and ball != null and field != null:
+		center = ball.global_position
+		var from: Vector2 = _clamp_to_pitch(field, ball_from, 28.0)
+		ref = Referee.new()
+		ref.walk_speed = referee_walk_speed
+		field.add_child(ref)
+		ref.fetch_ball(ball, from, center, _sideline_point(field, from), _sideline_point(field, center))
+		while not ref.is_done and not match_over and Time.get_ticks_msec() - started < 20000:
+			await get_tree().physics_frame
+		if not ref.is_done:
+			ref.force_finish(ball, center)   # trava de segurança
+
+	# Espera os jogadores que ainda estão chegando
+	var left: float = longest - float(Time.get_ticks_msec() - started) / 1000.0
+	if left > 0.0:
+		await get_tree().create_timer(left).timeout
+	if move_players:
+		for p: Player in get_tree().get_nodes_in_group("players"):
+			p.facing = p._default_facing()   # volta a olhar para o gol de ataque
+	_reset_running = false
+	_repositioning = false
+	state_changed.emit()
+
+
+## Ponto na lateral (fora do campo) mais perto de uma posição: por onde o juiz entra e sai
+func _sideline_point(field: Field, global_pos: Vector2) -> Vector2:
+	var local: Vector2 = field.to_local(global_pos)
+	var half: Vector2 = field.pitch_size * 0.5
+	var y: float = half.y + 36.0 if local.y >= 0.0 else -half.y - 36.0
+	return field.to_global(Vector2(clampf(local.x, -half.x + 40.0, half.x - 40.0), y))
+
+
+## Mantém um ponto dentro do campo (a bola pode estar dentro do gol, fora das linhas)
+func _clamp_to_pitch(field: Field, global_pos: Vector2, margin: float) -> Vector2:
+	var local: Vector2 = field.to_local(global_pos)
+	var half: Vector2 = field.pitch_size * 0.5 - Vector2(margin, margin)
+	return field.to_global(Vector2(clampf(local.x, -half.x, half.x), clampf(local.y, -half.y, half.y)))
 
 
 ## Chamado pelo botão do fim de jogo: zera a partida e volta para a montagem das formações
@@ -808,6 +894,10 @@ func do_general_action(action: GeneralAction) -> void:
 			var qte_ok: bool = true
 			if kind != Player.KickType.GROUND and not actor.skips_qte():
 				qte_ok = await _run_qte(kind)
+			# Telinha do efeito: o jogador clica na bola para escolher como ela vai (curva, sobe, desce)
+			# (só abre se o personagem tem o efeito ligado: Player.kick_spin_enabled)
+			if kick_spin_enabled and actor.kick_spin_enabled and not match_over:
+				actor.pending_spin_point = await _pick_kick_spin(actor, ball)
 			await actor.kick_ball(ball, kick_dir, kind, qte_ok)
 			_after_action()
 
@@ -1471,6 +1561,14 @@ func run_typing_game(title: String, words: Array[String], time_limit: float) -> 
 
 
 ## Versão pública do QTE para as habilidades dos personagens (devolve true se acertou)
+## Abre a telinha do efeito do chute e devolve o ponto da bola escolhido (Vector2.ZERO = centro = reta,
+## que é o que vale se o tempo acabar)
+func _pick_kick_spin(actor: Player, ball: Ball) -> Vector2:
+	var picker := KickSpinPicker.new()
+	add_child(picker)
+	return await picker.pick(actor, ball, kick_spin_time)
+
+
 func run_qte(kind: Player.KickType) -> bool:
 	return await _run_qte(kind)
 
@@ -1635,6 +1733,8 @@ func _on_goal_scored(scoring_team: int) -> void:
 		return
 
 	var ball: Ball = _get_ball()
+	if ball != null:
+		_reset_ball_from = ball.global_position
 	var scorer: Player = ball.last_toucher if ball else null
 	var assist: Player = ball.previous_toucher if ball else null
 	var own_goal: bool = scorer != null and scorer.team != scoring_team
@@ -1681,7 +1781,21 @@ func _end_match(winning_team: int) -> void:
 		active_player.cancel_aim()
 	_clear_roles()
 	_set_phase(Phase.MATCH_OVER)
+	# Abertura do MVP: a tela escurece, título + frase digitada, e SÓ ENTÃO a tela final abre
+	var intro: MvpIntro = null
+	if not mvp.is_empty() and (str(mvp.get("title", "")) != "" or str(mvp.get("phrase", "")) != ""):
+		intro = MvpIntro.new()
+		get_tree().root.add_child(intro)
+		var color: Color = mvp.get("title_color", Color.WHITE)
+		await intro.play(str(mvp.get("title", "")), str(mvp.get("phrase", "")), color)
+		if not match_over:   # a partida foi reiniciada durante a abertura
+			intro.queue_free()
+			return
 	match_ended.emit(winner)
+	if intro != null:
+		await get_tree().process_frame   # deixa a tela final se montar por baixo do preto
+		await get_tree().process_frame
+		intro.fade_out()
 
 
 # ---------- ESTATÍSTICAS DOS TIMES (tela final) ----------
@@ -1738,6 +1852,9 @@ func _stats_for(p: Player) -> Dictionary:
 			"win": 0,
 			"points": 0,
 			"image": p.get_mvp_image(),
+			"title": p.get_mvp_title(),
+			"phrase": p.get_mvp_phrase(),
+			"title_color": p.get_mvp_title_color(),
 		}
 	return player_stats[key]
 
@@ -1875,7 +1992,8 @@ func _apply_pending_swap() -> bool:
 		p.home_position = Formations.flip_position(p.home_position, field)
 	for k: Goalkeeper in get_tree().get_nodes_in_group("goalkeepers"):
 		k.refresh_side()
-	announce_keeper("Começou o 2º tempo: os times trocaram de lado!", -1)
+	if not show_score_hud:   # com o HUD, o aviso grande "2º TEMPO" já aparece (sides_swapped)
+		announce_keeper("Começou o 2º tempo: os times trocaram de lado!", -1)
 	sides_swapped.emit()
 	state_changed.emit()
 	return true
@@ -1885,11 +2003,16 @@ func _apply_pending_swap() -> bool:
 func _force_halftime_reset() -> void:
 	if match_over or not _swap_pending or phase == Phase.FORMATION:
 		return
+	var ball: Ball = _get_ball()
+	var ball_from: Vector2 = ball.global_position if ball != null else Vector2.ZERO
 	_apply_pending_swap()
 	var field := get_tree().get_first_node_in_group("field") as Field
 	if field:
 		field.reset_ball()   # também manda os goleiros para casa (e solta a bola)
-	return_players_home(reposition_time)
+	if animated_reset:
+		await _animated_reset(ball_from, true)
+	else:
+		return_players_home(reposition_time)
 
 
 # ---------- UTIL ----------

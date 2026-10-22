@@ -5,7 +5,7 @@
 [ext_resource type="Script" uid="uid://20o5fgka0s1u" path="res://scr/perso/teddy.gd" id="2_nrc47"]
 [ext_resource type="Texture2D" uid="uid://dvq0cobk1dc6" path="res://img/testes/teddy.png" id="4_nrc47"]
 
-[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_13b2s")]
+[node name="Player" unique_id=1241627939 instance=ExtResource("1_13b2s")]
 script = ExtResource("2_nrc47")
 cuts_charges = 4
 cuts_short_distance = 130.0
@@ -48,7 +48,10 @@ trail_width = 14.0
 skill_icons = {}
 display_name = "Teddy Knight"
 mvp_image = ExtResource("2_a1qud")
-visual_root = NodePath("SprPlayer")
+mvp_title = "\"Puppet\""
+mvp_phrase = "\"Im a puppet. Im just a worthless puppet.\""
+mvp_title_color = Color(0.82807976, 0.8677835, 0.89341265, 1)
+goal_lines = Array[String](["\"The rainbow knight shows himself.\"", "\"One.. to infinity..\""])
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

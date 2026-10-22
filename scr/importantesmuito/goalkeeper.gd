@@ -21,6 +21,19 @@ extends Node2D
 ##    acontece uma disputa de sorte. A chance de o chute vencer o goleiro vem do chute
 ##    (padrão 30%, voleio 35%, bola voando 40%). Se vencer, a bola segue; se perder, o
 ##    goleiro defende e fica com a bola (e entra no ciclo do item 2).
+## 4) ACOMPANHA A BOLA: enquanto espera, o goleiro desliza pela boca do gol para o lado em que a bola
+##    está, como se estivesse focado nela (e sai um pouco da linha quando ela chega perto, fechando o
+##    ângulo). Um marcador na base dele aponta para a bola. Se a bola troca de lado rápido demais, ele
+##    atrasa (track_speed).
+## 5) DEFESA SITUACIONAL: a chance de o chute vencer o goleiro muda conforme onde ele vai (os valores
+##    somam em pontos de porcentagem, antes das passivas dos goleiros especiais):
+##      - PONTA CONTRÁRIA ao goleiro (longe dele, mais difícil de alcançar): +6%
+##      - NO ÂNGULO (chute alto perto da trave): +4%
+##      - GOLEIRO FORA DE POSIÇÃO (a bola trocou de lado e ele ainda está chegando): +5%
+##      - À QUEIMA-ROUPA (bola muito perto da linha de fundo): +3%
+##      - CHUTE NO MEIO, na mão do goleiro: -5%
+##      - ÂNGULO FECHADO (ele saiu da linha): -3%
+##    O aviso do chute lista os que valeram (ex: "ponta contrária +6%, no ângulo +4%").
 ##
 ## GOLEIROS ESPECIAIS (passivas)
 ## Cada time pode ter um estilo de goleiro. Os especiais estendem este script (veja bl_man.gd e
@@ -62,6 +75,33 @@ var display_name: String = ""
 @export var max_dive_time: float = 1.5         # trava de segurança do salto
 @export var hold_height: float = 24.0          # altura da bola nas mãos
 @export var jump_height: float = 45.0          # altura do salto (visual)
+
+@export_group("Acompanhar a bola (posicionamento)")
+## O goleiro desliza pela boca do gol acompanhando a bola, como se estivesse focado nela
+@export var track_ball: bool = true
+@export var track_speed: float = 230.0          # velocidade lateral (px/s): bola trocando de lado rápido = ele atrasa
+@export var track_far_gain: float = 0.12        # bola longe da linha de fundo: acompanha pouco (fração do y da bola)...
+@export var track_near_gain: float = 0.6        # ...e bola perto: acompanha bastante
+@export var track_near_distance: float = 300.0  # a esta distância (x) da linha de fundo vale o "near"
+@export var track_far_distance: float = 1000.0  # a esta distância ou mais vale o "far"
+@export var track_edge_margin: float = 26.0     # quanto ele para antes da trave (px)
+@export var rush_depth: float = 36.0            # até onde ele sai da linha com a bola perto (fecha o ângulo)
+@export var rush_start: float = 520.0           # a bola a menos desta distância da linha de fundo faz ele sair
+@export var look_at_ball: bool = true           # marcador na base dele apontando para a bola
+
+@export_group("Defesa situacional (chance do chute)")
+## Ajustes na chance de o chute vencer o goleiro (somam em pontos de porcentagem)
+@export var situation_mechanics: bool = true
+@export var far_post_bonus: float = 0.06        # chute na ponta contrária ao goleiro (mais difícil de alcançar)
+@export var far_post_reach: float = 0.28        # distância dele (fração da boca do gol) a partir da qual é a "ponta contrária"
+@export var central_penalty: float = 0.05       # chute no meio, na mão dele: tira da chance
+@export var central_zone: float = 0.10          # fração da boca do gol em volta dele que conta como "na mão"
+@export var angle_bonus: float = 0.04           # chute alto no canto ("no ângulo")
+@export var out_of_position_bonus: float = 0.05 # goleiro atrasado em relação à bola (ela trocou de lado)
+@export var out_of_position_lag: float = 0.30   # atraso (fração da boca do gol) para contar
+@export var point_blank_bonus: float = 0.03     # à queima-roupa: pouco tempo de reação
+@export var point_blank_distance: float = 150.0 # distância da bola até a linha de fundo
+@export var narrowed_angle_penalty: float = 0.03 # ele saiu da linha e fechou o ângulo: tira da chance
 
 @export_group("Área de atuação")
 ## Quanto a área em que ele salta na bola cresce em direção ao meio do campo (px)
@@ -123,6 +163,8 @@ var _dive_time: float = 0.0
 var _token: int = 0                 # muda ao cancelar: corrotinas antigas se encerram
 var _move_tween: Tween
 var _jump_tween: Tween
+var _look_angle: float = 0.0         # para onde ele olha (direção da bola); só visual
+var _mods_text: String = ""          # (não aparece mais no aviso; sobrou para não quebrar goleiros especiais)
 
 
 func _ready() -> void:
@@ -167,7 +209,7 @@ func is_waiting_for_player() -> bool:
 ## Os especiais sobrescrevem e montam o texto com os valores dos próprios exports, assim ele
 ## nunca fica desatualizado.
 func get_description() -> String:
-	return "Goleiro padrão, sem passiva. Quando a bola entra na grande área, ele se prepara por %d rodada(s), salta e segura a bola; depois lança para um aliado sorteado (até %d px). Os chutes seguem a chance normal." % [
+	return "Goleiro padrão, sem passiva. Quando a bola entra na grande área, ele se prepara por %d rodada(s), salta e segura a bola; depois lança para um aliado sorteado (até %d px). Ele acompanha a bola pela boca do gol, e a chance dos chutes muda conforme o canto (ponta contrária ao goleiro +6%%, no ângulo, à queima-roupa...)." % [
 		prepare_rounds, int(throw_range)]
 
 
@@ -220,6 +262,10 @@ var _sway_rot: float = 0.0
 
 ## Balanço natural: só enquanto ele espera (parado, se preparando ou segurando a bola)
 func _process(delta: float) -> void:
+	if look_at_ball and ball != null:
+		_look_angle = lerp_angle(_look_angle, (ball.global_position - global_position).angle(), minf(1.0, delta * 7.0))
+		if not team_tag_enabled:
+			queue_redraw()
 	if team_tag_enabled:
 		queue_redraw()   # a seta do time sobe e desce
 	if not sway_enabled:
@@ -275,7 +321,7 @@ func _process_diving(delta: float) -> void:
 
 
 func _process_holding(delta: float) -> void:
-	_walk_home(delta)  # volta para a posição carregando a bola
+	_walk_home(delta, false)  # volta para a posição base carregando a bola (sem acompanhar nada)
 	if ball.held_by != self:
 		_cancel_all()  # alguém tirou a bola
 		return
@@ -283,10 +329,33 @@ func _process_holding(delta: float) -> void:
 	ball.height = hold_height + height
 
 
-func _walk_home(delta: float) -> void:
+## Anda até a posição de espera. Com "track", ela acompanha a bola (veja _stance_local); sem, é a
+## posição base de sempre.
+func _walk_home(delta: float, track: bool = true) -> void:
 	if _move_tween and _move_tween.is_valid():
 		return
-	global_position = global_position.move_toward(_home_position(), walk_speed * delta)
+	if track and track_ball:
+		global_position = global_position.move_toward(field.to_global(_stance_local()), track_speed * delta)
+	else:
+		global_position = global_position.move_toward(_home_position(), walk_speed * delta)
+
+
+## Onde ele quer ficar agora (coordenadas do campo): na altura da bola, dentro da boca do gol.
+## Bola longe = acompanha pouco; bola perto = acompanha bastante e ele sai um pouco da linha.
+func _stance_local() -> Vector2:
+	var home: Vector2 = _home_local()
+	if not track_ball or ball == null:
+		return home
+	var dir: int = _dir()
+	var gx: float = field.pitch_size.x * 0.5 * float(dir)
+	var b: Vector2 = field.to_local(ball.global_position)
+	var dx: float = maxf((gx - b.x) * float(dir), 0.0)   # distância da bola até a linha de fundo
+	var near: float = 1.0 - smoothstep(track_near_distance, track_far_distance, dx)
+	var gain: float = lerpf(track_far_gain, track_near_gain, near)
+	var limit: float = field.goal_width * 0.5 - track_edge_margin
+	var y: float = clampf(b.y * gain, -limit, limit)
+	var out: float = rush_depth * (1.0 - smoothstep(0.0, rush_start, dx)) if dx < rush_start else 0.0
+	return Vector2(home.x - float(dir) * out, y)
 
 
 # ---------- PREPARO (conta turnos) ----------
@@ -332,7 +401,7 @@ func on_shot_resolved(_beaten: bool) -> void:
 	pass
 
 
-## GANCHO: texto extra no aviso do chute (ex: a reserva do Gagamaru). Vazio = nada.
+## GANCHO antigo: texto extra no aviso do chute. O aviso agora mostra só a chance de marcar x a defesa, então este texto não aparece mais.
 func contest_note() -> String:
 	return ""
 
@@ -352,7 +421,11 @@ func _try_shot_contest() -> bool:
 
 	var base_chance: float = ball.pending_shot_chance
 	ball.pending_shot_chance = Ball.NO_SHOT  # cada chute só é disputado uma vez
-	var chance: float = clampf(modify_shot_chance(base_chance, ball), 0.0, 1.0)
+	# Situação do chute (ponta contrária, ângulo...); depois as passivas dos goleiros especiais
+	var situational: float = base_chance
+	for mod: Dictionary in _situation_mods(_predict_goal_crossing()):
+		situational += float(mod["value"])
+	var chance: float = clampf(modify_shot_chance(clampf(situational, 0.0, 1.0), ball), 0.0, 1.0)
 	var beaten: bool = randf() < chance
 	on_shot_resolved(beaten)
 	if manager:
@@ -364,6 +437,41 @@ func _try_shot_contest() -> bool:
 	else:
 		_start_catch(true)
 	return true
+
+
+## Ajustes de situação na chance do chute (veja a documentação no topo): {"label", "value"}.
+## crossing = (y no campo, altura) onde a bola cruzaria a linha de fundo.
+func _situation_mods(crossing: Vector2) -> Array[Dictionary]:
+	var mods: Array[Dictionary] = []
+	if not situation_mechanics or not crossing.is_finite():
+		return mods
+	var mouth: float = field.goal_width
+	var keeper: Vector2 = field.to_local(global_position)
+	var shot_y: float = crossing.x
+	var shot_h: float = crossing.y
+	var reach: float = absf(shot_y - keeper.y)          # o quanto o goleiro precisa se esticar
+	var top: float = field.crossbar_height - field.crossbar_thickness
+	var half_mouth: float = mouth * 0.5 - field.post_radius - field.ball_hit_radius
+
+	# Ponta contrária (longe dele: mais difícil de alcançar) ou no meio (na mão dele)
+	if reach >= mouth * far_post_reach:
+		mods.append({"label": "ponta contrária", "value": far_post_bonus})
+	elif reach <= mouth * central_zone and shot_h < top * 0.8:
+		mods.append({"label": "chute no meio", "value": -central_penalty})
+	# Chute alto no canto ("no ângulo")
+	if shot_h >= top * 0.7 and absf(shot_y) >= half_mouth * 0.65:
+		mods.append({"label": "no ângulo", "value": angle_bonus})
+	# Goleiro atrasado: a bola trocou de lado e ele ainda está chegando ao lugar certo
+	if absf(_stance_local().y - keeper.y) >= mouth * out_of_position_lag:
+		mods.append({"label": "goleiro fora de posição", "value": out_of_position_bonus})
+	# À queima-roupa: pouco tempo de reação
+	var to_line: float = absf(field.pitch_size.x * 0.5 * float(_dir()) - field.to_local(ball.global_position).x)
+	if to_line <= point_blank_distance:
+		mods.append({"label": "à queima-roupa", "value": point_blank_bonus})
+	# Ele saiu da linha e fechou o ângulo
+	if absf(keeper.x - _home_local().x) >= rush_depth * 0.6:
+		mods.append({"label": "ângulo fechado", "value": -narrowed_angle_penalty})
+	return mods
 
 
 ## A bola vai cruzar a linha de fundo dentro da boca do gol e abaixo do travessão?
@@ -396,10 +504,10 @@ func _predict_goal_crossing() -> Vector2:
 ## O chute venceu a disputa: o goleiro se joga na direção da bola, mas não alcança (só visual)
 func _dive_and_miss() -> void:
 	var crossing: Vector2 = _predict_goal_crossing()
-	var local_home: Vector2 = _home_local()
-	var shot_y: float = crossing.x if crossing.is_finite() else local_home.y
-	# Vai só até a metade do caminho: fica curto
-	var miss_point: Vector2 = field.to_global(Vector2(local_home.x, lerpf(local_home.y, shot_y, 0.5)))
+	var here: Vector2 = field.to_local(global_position)
+	var shot_y: float = crossing.x if crossing.is_finite() else here.y
+	# Sai de onde ele está (acompanhando a bola) e vai bem na direção do chute, mas fica curto
+	var miss_point: Vector2 = field.to_global(Vector2(here.x, lerpf(here.y, shot_y, 0.65)))
 
 	if _move_tween and _move_tween.is_valid():
 		_move_tween.kill()
@@ -668,20 +776,16 @@ func _keeper_label() -> String:
 	return "%s (%s)" % [display_name, _team_name(team)]
 
 
-## Se a passiva do goleiro mudou a chance, o aviso mostra os dois valores (ex: 45% para 37%)
-func _announce_contest(base_chance: float, chance: float, beaten: bool) -> void:
-	var pct: int = int(round(chance * 100.0))
-	var chance_text: String = "%d%%" % pct
-	if absf(base_chance - chance) > 0.0001:
-		chance_text = "%d%% para %d%%" % [int(round(base_chance * 100.0)), pct]
-	var note: String = contest_note()
-	if note != "":
-		note = " - " + note
+## Aviso do chute contra o goleiro: só a chance de marcar contra a defesa dele (já com tudo somado e
+## subtraído), sem mostrar os ajustes um a um
+func _announce_contest(_base_chance: float, chance: float, beaten: bool) -> void:
+	var scoring: int = int(round(chance * 100.0))
+	var versus: String = "Chance de marcar %d%% x Defesa do goleiro %d%%" % [scoring, 100 - scoring]
 	if beaten:
 		var shooter: int = ball.shot_team if ball.shot_team >= 0 else team
-		_say("O chute passou pelo goleiro! (%s de chance)%s" % [chance_text, note], shooter)
+		_say("O chute passou pelo goleiro! %s" % versus, shooter)
 	else:
-		_say("DEFENDEU! %s pegou o chute (%s de chance)%s" % [_keeper_label(), chance_text, note])
+		_say("DEFENDEU! %s pegou o chute. %s" % [_keeper_label(), versus])
 
 
 # ---------- VISUAL (imagem do goleiro; sem imagem, um círculo placeholder) ----------
@@ -700,6 +804,15 @@ func _draw() -> void:
 	# Alcance do lançamento enquanto o jogador escolhe o alvo (Fukaku)
 	if range_preview > 0.0:
 		draw_arc(Vector2.ZERO, range_preview, 0.0, TAU, 96, Color(1, 1, 1, 0.4), 2.0)
+
+
+## Marcador de "olhar" na base dele: um ponto branco que gira para a direção da bola
+func _draw_gaze(radius: float) -> void:
+	if not look_at_ball or state == State.HOLDING or ball == null:
+		return
+	var tip: Vector2 = Vector2.from_angle(_look_angle) * (radius + 3.0)
+	draw_circle(tip, 5.5, Color(0, 0, 0, 0.5))
+	draw_circle(tip, 3.8, Color(1, 1, 1, 0.95))
 
 
 ## Marcador do time em cima da cabeça: triângulo com contorno escuro
@@ -726,6 +839,8 @@ func _draw_placeholder(team_color: Color) -> void:
 			draw_arc(center, body_radius + 6.0, 0.0, TAU, 32, Color(1, 1, 1, 0.9), 2.0)
 		State.HOLDING:
 			draw_arc(center, body_radius + 6.0, 0.0, TAU, 32, Color(0.4, 0.9, 1.0, 0.9), 2.0)
+	if look_at_ball and state != State.HOLDING and ball != null:   # o "olhar": um ponto na direção da bola
+		draw_circle(center + Vector2.from_angle(_look_angle) * body_radius * 0.55, 3.5, Color(0.1, 0.1, 0.1, 0.9))
 
 
 func _draw_art(team_color: Color) -> void:
@@ -744,6 +859,7 @@ func _draw_art(team_color: Color) -> void:
 			draw_arc(Vector2.ZERO, body_radius + 8.0, 0.0, TAU, 32, Color(1, 1, 1, 0.9), 2.0)
 		State.HOLDING:
 			draw_arc(Vector2.ZERO, body_radius + 8.0, 0.0, TAU, 32, Color(0.4, 0.9, 1.0, 0.9), 2.0)
+	_draw_gaze(body_radius + 7.0)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 	# A imagem: pés no chão, sobe junto com o salto, virada para o campo

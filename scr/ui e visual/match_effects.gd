@@ -17,6 +17,11 @@ var manager: MatchManager
 
 @export var intro_time: float = 3.0       # duração da apresentação de início (s); clique pula
 @export var goal_time: float = 3.0        # duração da animação de gol (s)
+## Faixa diagonal com "GOL!", autor e placar grandes. Desligada por padrão: o aviso do gol agora é o do placar
+## (ScoreHud, caixa no topo, com o logo do time). Ligue para voltar à animação antiga.
+@export var show_goal_splash: bool = false
+## Confete pela tela toda quando sai um gol (vale com ou sem a faixa)
+@export var goal_confetti: bool = true
 @export var show_end_card: bool = true    # tela final própria (logo dos times + MVP)
 
 
@@ -220,6 +225,12 @@ func _on_goal_scored(goal: Dictionary) -> void:
 	var screen: Vector2 = _screen()
 	_goal_until_msec = Time.get_ticks_msec() + int(goal_time * 1000.0)
 
+	# Sem a faixa: só o confete (o aviso do gol fica por conta do placar)
+	if not show_goal_splash:
+		if goal_confetti:
+			_confetti_only(accent)
+		return
+
 	var root := Control.new()
 	_full_rect(root)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE   # o jogo continua por baixo
@@ -320,6 +331,23 @@ func _on_goal_scored(goal: Dictionary) -> void:
 
 
 	# Some no fim
+	await get_tree().create_timer(maxf(goal_time - 0.4, 0.5)).timeout
+	if is_instance_valid(root):
+		var out := create_tween()
+		out.tween_property(root, "modulate:a", 0.0, 0.4)
+		out.tween_callback(root.queue_free)
+
+
+## Só o confete do gol (sem flash, faixa nem textos)
+func _confetti_only(accent: Color) -> void:
+	var root := Control.new()
+	_full_rect(root)
+	root.mouse_filter = Control.MOUSE_FILTER_IGNORE   # o jogo continua por baixo
+	add_child(root)
+	var confetti := _Confetti.new()
+	_full_rect(confetti)
+	root.add_child(confetti)
+	confetti.burst(110, [accent, accent.lightened(0.4), Color.WHITE, Color(1.0, 0.85, 0.25)])
 	await get_tree().create_timer(maxf(goal_time - 0.4, 0.5)).timeout
 	if is_instance_valid(root):
 		var out := create_tween()
@@ -510,6 +538,8 @@ func _build_end_card(winner: int) -> void:
 	again.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	again.custom_minimum_size = Vector2(280.0, 58.0)
 	again.add_theme_font_size_override("font_size", 22)
+	again.mouse_entered.connect(func() -> void: Sfx.play(&"ui_hover", 0.7, 0.03))
+	again.pressed.connect(func() -> void: Sfx.play(&"ui_click"))
 	again.pressed.connect(func() -> void:
 		_clear_end_card()
 		manager.return_to_formation())

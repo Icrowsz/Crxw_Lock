@@ -2,11 +2,11 @@ class_name MatchEffects
 extends CanvasLayer
 ## Efeitos visuais da partida (o MatchManager cria este nó sozinho: show_match_effects):
 ##  - APRESENTAÇÃO DE INÍCIO: os dois selos entram dos lados, "VS", e a partida começa.
-##  - ANIMAÇÃO DE GOL: flash, faixa na cor do time com "GOL!", selo, autor, assistência, placar,
-##    confete e a torcida pulando (veja Crowd).
+##  - ANIMAÇÃO DE GOL: flash na cor do time e confete, com a torcida pulando (veja Crowd). O aviso "GOL!" com autor,
+##    assistência e placar é do score_hud.
 ##  - AVISO DE TEMPO: faixa no 2º tempo e na prorrogação.
-##  - TELA FINAL: selo (logo) de cada time com o placar, vencedor em destaque e o MVP ao lado,
-##    com confete e o botão "Jogar novamente".
+##  - TELA FINAL: selo (logo) de cada time com o placar, vencedor em destaque e o MVP ao lado (imagem OU vídeo; a moldura
+##    se adapta ao formato dele, veja MvpMedia), com confete e o botão "Jogar novamente".
 ##  - TORCIDA e brilho no gramado: o Crowd é colocado como filho do Field.
 ##
 ## As cores, nomes e ícones vêm do TeamStyle (o que o jogador escolheu na formação).
@@ -215,9 +215,7 @@ class _VersusBg extends Control:
 
 func _on_goal_scored(goal: Dictionary) -> void:
 	var team: int = int(goal["team"])
-	var own_goal: bool = bool(goal.get("own_goal", false))
 	var accent: Color = TeamStyle.color_of(team)
-	var screen: Vector2 = _screen()
 	_goal_until_msec = Time.get_ticks_msec() + int(goal_time * 1000.0)
 
 	var root := Control.new()
@@ -233,91 +231,11 @@ func _on_goal_scored(goal: Dictionary) -> void:
 	root.add_child(flash)
 	create_tween().tween_property(flash, "color:a", 0.0, 0.55)
 
-	# Faixa inclinada que cruza a tela
-	var band_h: float = clampf(screen.y * 0.36, 220.0, 340.0)
-	var band := Control.new()
-	band.size = Vector2(screen.x * 1.6, band_h)
-	band.pivot_offset = band.size * 0.5
-	band.rotation = deg_to_rad(-6.0)
-	band.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(band)
-	var fill := ColorRect.new()
-	fill.size = band.size
-	fill.color = Color(accent.darkened(0.3), 0.94)
-	fill.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	band.add_child(fill)
-	for edge_y in [0.0, band_h - 6.0]:
-		var edge := ColorRect.new()
-		edge.position = Vector2(0.0, edge_y)
-		edge.size = Vector2(band.size.x, 6.0)
-		edge.color = Color(1, 1, 1, 0.9) if edge_y == 0.0 else accent.lightened(0.45)
-		edge.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		band.add_child(edge)
-	var band_home: Vector2 = Vector2(screen.x * 0.5, screen.y * 0.4) - band.size * 0.5
-	band.position = band_home + Vector2(-screen.x * 1.4, 0.0)
-	create_tween().tween_property(band, "position", band_home, 0.3) \
-		.set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
-
-	# Conteúdo: selo + GOL! + autor/assistência
-	var content := CenterContainer.new()
-	content.anchor_left = 0.0
-	content.anchor_right = 1.0
-	content.anchor_top = 0.4 - band_h / screen.y * 0.5
-	content.anchor_bottom = 0.4 + band_h / screen.y * 0.5
-	content.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(content)
-	var row := HBoxContainer.new()
-	row.add_theme_constant_override("separation", 32)
-	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	content.add_child(row)
-	var badge: TeamBadge = _badge(team, band_h * 0.52)
-	badge.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	row.add_child(badge)
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 4)
-	col.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(col)
-	var title: Label = _label("GOL CONTRA!" if own_goal else "GOL!", int(band_h * 0.46))
-	col.add_child(title)
-	var scorer: String = String(goal.get("scorer", ""))
-	var who: String = ("Gol contra de %s" if own_goal else "Gol de %s") % scorer
-	col.add_child(_label(who, int(band_h * 0.14), Color(1, 0.95, 0.7)))
-	var assist: String = String(goal.get("assist", ""))
-	if assist != "":
-		col.add_child(_label("Assistência: %s" % assist, int(band_h * 0.1), Color(1, 1, 1, 0.85)))
-
-	# Placar logo abaixo da faixa
-	var score_holder := CenterContainer.new()
-	score_holder.anchor_left = 0.0
-	score_holder.anchor_right = 1.0
-	score_holder.anchor_top = 0.4 + band_h / screen.y * 0.5 + 0.03
-	score_holder.anchor_bottom = score_holder.anchor_top + 0.12
-	score_holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	root.add_child(score_holder)
-	var score_label: Label = _label(_score_line(), 46)
-	score_holder.add_child(score_label)
-
-	# Entradas: GOL! estoura, o resto aparece
-	for c in [badge, col, score_label]:
-		c.modulate.a = 0.0
-	await get_tree().process_frame
-	if not is_instance_valid(root):
-		return
-	title.pivot_offset = title.size * 0.5
-	title.scale = Vector2(2.0, 2.0)
-	var pop := create_tween().set_parallel(true)
-	pop.tween_property(col, "modulate:a", 1.0, 0.15).set_delay(0.12)
-	pop.tween_property(title, "scale", Vector2.ONE, 0.4).set_delay(0.12) \
-		.set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
-	pop.tween_property(badge, "modulate:a", 1.0, 0.2).set_delay(0.2)
-	pop.tween_property(score_label, "modulate:a", 1.0, 0.25).set_delay(0.5)
-
-	# Confete + torcida
+	# Confete (o aviso do gol, com autor/assistência/placar, é do score_hud)
 	var confetti := _Confetti.new()
 	_full_rect(confetti)
 	root.add_child(confetti)
 	confetti.burst(110, [accent, accent.lightened(0.4), Color.WHITE, Color(1.0, 0.85, 0.25)])
-
 
 	# Some no fim
 	await get_tree().create_timer(maxf(goal_time - 0.4, 0.5)).timeout
@@ -325,19 +243,6 @@ func _on_goal_scored(goal: Dictionary) -> void:
 		var out := create_tween()
 		out.tween_property(root, "modulate:a", 0.0, 0.4)
 		out.tween_callback(root.queue_free)
-
-
-## "Vermelho 1 × 0 Azul"
-func _score_line() -> String:
-	var parts: PackedStringArray = []
-	for t in manager.team_count:
-		parts.append(_team_name(t))
-	var scores: PackedStringArray = []
-	for t in manager.scores.size():
-		scores.append(str(manager.scores[t]))
-	if manager.team_count == 2:
-		return "%s  %s × %s  %s" % [parts[0], scores[0], scores[1], parts[1]]
-	return " × ".join(scores)
 
 
 # ---------- AVISOS DE TEMPO ----------
@@ -771,31 +676,32 @@ func _build_mvp_block(mvp: Dictionary, screen: Vector2) -> Control:
 	row.add_theme_constant_override("separation", 30)
 	row.mouse_filter = Control.MOUSE_FILTER_IGNORE
 
-	# Imagem do MVP numa moldura na cor do time
+	# Imagem OU vídeo do MVP numa moldura dourada que se adapta ao formato da mídia (quadrada, vertical, 16:9...).
+	# Vídeo: res://assets/mvp/<character_id>.ogv (ou mvp["video"], se o MatchManager o preencher).
 	var tex: Texture2D = mvp.get("image") as Texture2D
 	if tex == null:
 		tex = CharacterRoster.full_for(String(mvp.get("character_id", "")))
-	var frame := PanelContainer.new()
+	var video: VideoStream = MvpMedia.find_video(String(mvp.get("character_id", "")), mvp.get("video") as VideoStream)
 	var fsb := StyleBoxFlat.new()
 	fsb.bg_color = color.darkened(0.55)
 	fsb.set_corner_radius_all(14)
 	fsb.set_border_width_all(4)
 	fsb.border_color = Color(1.0, 0.85, 0.3)
 	fsb.set_content_margin_all(6)
-	frame.add_theme_stylebox_override("panel", fsb)
-	frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	row.add_child(frame)
 	var img_h: float = clampf(screen.y * 0.26, 150.0, 260.0)
-	if tex != null:
-		var rect := TextureRect.new()
-		rect.texture = tex
-		rect.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
-		rect.stretch_mode = TextureRect.STRETCH_KEEP_ASPECT_CENTERED
-		var aspect: float = float(tex.get_width()) / maxf(float(tex.get_height()), 1.0)
-		rect.custom_minimum_size = Vector2(minf(img_h * aspect, img_h * 1.4), img_h)
-		rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
-		frame.add_child(rect)
+	if tex != null or video != null:
+		var media := MvpMedia.new()
+		media.frame_style = fsb
+		media.max_size = Vector2(clampf(screen.x * 0.3, 220.0, 460.0), img_h)   # a maior caixa que a mídia pode ocupar
+		media.min_edge = 120.0
+		media.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		media.setup(tex, color, String(mvp.get("name", "?")), video)
+		row.add_child(media)
 	else:
+		var frame := PanelContainer.new()
+		frame.add_theme_stylebox_override("panel", fsb)
+		frame.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		row.add_child(frame)
 		var letter: Label = _label(String(mvp.get("name", "?")).substr(0, 1).to_upper(), int(img_h * 0.6), color.lightened(0.4))
 		letter.custom_minimum_size = Vector2(img_h * 0.8, img_h)
 		letter.vertical_alignment = VERTICAL_ALIGNMENT_CENTER

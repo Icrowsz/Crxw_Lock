@@ -5,7 +5,7 @@
 [ext_resource type="Texture2D" uid="uid://bc7e617k24xwc" path="res://img/mvps/shidou.jpg" id="3_hu5on"]
 [ext_resource type="Texture2D" uid="uid://bcg0i8pnou146" path="res://img/testes/shidou.png" id="4_hu5on"]
 
-[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_oj453")]
+[node name="Player" unique_id=1241627939 instance=ExtResource("1_oj453")]
 script = ExtResource("2_65f7p")
 chance_kablamo = 0.4
 chance_dragon = 0.45
@@ -41,7 +41,10 @@ big_bang_fx = null
 skill_icons = {}
 display_name = "Shidou Ryusei"
 mvp_image = ExtResource("3_hu5on")
-visual_root = NodePath("SprPlayer")
+mvp_title = "\"Zesty Dragon\""
+mvp_phrase = "“Aaah, that's so hot! That ball smashing into the net gives me a hard-on.”"
+mvp_title_color = Color(1, 0.65, 0.85, 1)
+goal_lines = Array[String](["“What a feeling! What a dopamine rush!”", "\"I think I have a stain on my shorts.\""])
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

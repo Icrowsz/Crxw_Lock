@@ -32,6 +32,8 @@ freedom_range = 110.0
 freedom_jump_time = 0.22
 freedom_run_time = 1.1
 freedom_speed_mult = 1.35
+freedom_toss_distance = 260.0
+freedom_toss_time = 0.7
 instinct_range = 90.0
 instinct_grab_time = 0.15
 instinct_ball_offset = 22.0
@@ -52,6 +54,10 @@ monster_texture = null
 skill_icons = {}
 display_name = "Meguru Bachira"
 mvp_image = ExtResource("3_dcfof")
+mvp_title = "\"Monster\""
+mvp_phrase = "“It's a monster's instinct! You get it?”"
+mvp_title_color = Color(1, 0.85, 0.2, 1)
+goal_lines = Array[String](["“If you just stand there watching, I'll make another one, okay?”", "\"Who's next to try to stop me?\""])
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

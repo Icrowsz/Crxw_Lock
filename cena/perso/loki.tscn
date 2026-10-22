@@ -5,7 +5,7 @@
 [ext_resource type="Texture2D" uid="uid://cdvlfwflocoyn" path="res://img/mvps/loki.jpg" id="3_ejyid"]
 [ext_resource type="Texture2D" uid="uid://bkctul2plmjrk" path="res://img/testes/loki.png" id="4_ejyid"]
 
-[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_1csnf")]
+[node name="Player" unique_id=1241627939 instance=ExtResource("1_1csnf")]
 script = ExtResource("2_0dl0w")
 run_speed_passive = 1.5
 charge_distance_per_step = 300.0
@@ -37,7 +37,10 @@ kick_fx = null
 skill_icons = {}
 display_name = "Julian Loki"
 mvp_image = ExtResource("3_ejyid")
-visual_root = NodePath("SprPlayer")
+mvp_title = "\"Godspeed\""
+mvp_phrase = "\"What a boring game.. Well, the coffin is closed.\""
+mvp_title_color = Color(1, 0.82, 0.15, 1)
+goal_lines = Array[String](["\"I see nothing but weak spots.\"", "\"Too slow.. Too slow.\""])
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

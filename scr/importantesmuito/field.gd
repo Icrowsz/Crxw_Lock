@@ -29,17 +29,20 @@ signal ball_reset_after_goal
 @export_group("Campo")
 @export var pitch_size: Vector2 = Vector2(2400, 1350)
 @export var margin: float = 500.0                      # grama além das linhas
+## Medidas na proporção do futebol real (campo de 105 x 68 m): grande área 16,5 x 40,3 m, pequena
+## área 5,5 x 18,3 m, marca do pênalti a 11 m e círculo central de 9,15 m de raio
 @export var center_circle_radius: float = 110.0
 @export var penalty_area_size: Vector2 = Vector2(220, 480)  # profundidade x largura
 @export var goal_area_size: Vector2 = Vector2(80, 220)
 @export var penalty_spot_distance: float = 150.0
+@export var penalty_arc_radius: float = 110.0         # a "meia-lua" da grande área (9,15 m)
 @export var line_width: float = 3.0
 
 @export_group("Gol")
-@export var goal_width: float = 220.0
-@export var goal_depth: float = 70.0
+@export var goal_width: float = 260.0                  # boca do gol (era 220)
+@export var goal_depth: float = 90.0                   # profundidade da rede (era 70)
 @export var crossbar_height: float = 80.0              # altura (Z) do travessão: Suspenso (50) passa por baixo, Voando (100) passa por cima
-@export var post_radius: float = 5.0
+@export var post_radius: float = 6.0
 @export var crossbar_thickness: float = 6.0
 @export var ball_hit_radius: float = 8.0               # "tamanho" da bola para bater na trave
 @export var post_bounce: float = 0.6
@@ -50,10 +53,12 @@ signal ball_reset_after_goal
 
 @export_group("Rede")
 @export var animate_nets: bool = true                  # rede deformável (false = rede estática antiga)
-@export var net_cell_size: float = 12.0                # tamanho de cada quadradinho da malha
-@export var net_stiffness: float = 90.0                # quanto a rede volta ao repouso
-@export var net_damping: float = 4.5                   # quanto ela demora para parar de balançar
-@export var net_bulge: float = 1.0                     # multiplicador de quanto ela estufa
+@export var net_cell_size: float = 10.0                # tamanho de cada quadradinho da malha (menor = tecido mais liso)
+@export var net_stiffness: float = 45.0                # quanto a rede volta ao repouso (baixo = flutua mais, estilo véu)
+@export var net_damping: float = 2.4                   # quanto ela demora para parar de balançar
+@export var net_coupling: float = 240.0                # velocidade das ondas que correm pela rede
+@export var net_bulge: float = 1.25                    # multiplicador de quanto ela estufa
+@export var net_idle_flutter: bool = true              # a rede respira com uma brisa leve mesmo parada
 
 @export_group("Cores")
 @export var grass_dark: Color = Color("2e7d32")
@@ -79,7 +84,7 @@ signal ball_reset_after_goal
 
 @export_group("Modo foto (F3)")
 @export var photo_mode_key: Key = KEY_F3
-@export var photo_modal_layer: int = 10                # telas acima desta camada (formação, pausa) bloqueiam o modo foto
+@export var photo_modal_layer: int = 100                # telas acima desta camada (formação, pausa) bloqueiam o modo foto
 @export var photo_zoom_range: Vector2 = Vector2(0.5, 3.0)   # limites do zoom, em vezes o zoom que a câmera já tinha
 
 var _prev_pos: Vector2 = Vector2.INF
@@ -200,7 +205,9 @@ func _build_nets() -> void:
 		net.cell_size = net_cell_size
 		net.stiffness = net_stiffness
 		net.damping = net_damping
+		net.coupling = net_coupling
 		net.bulge = net_bulge
+		net.idle_flutter = net_idle_flutter
 		add_child(net)
 		net.z_index = 1   # relativo ao campo (-4096): acima da grama, abaixo de todo o resto
 		_nets[dir] = net
@@ -473,8 +480,14 @@ func _draw_pitch_lines(n: Node2D) -> void:
 		n.draw_rect(Rect2(ga_x, -goal_area_size.y * 0.5, goal_area_size.x, goal_area_size.y),
 			line_color, false, line_width)
 
-		# Marca do pênalti
-		n.draw_circle(Vector2(gx - dir * penalty_spot_distance, 0.0), 4.0, line_color)
+		# Marca do pênalti e a meia-lua: só o pedaço do arco que fica FORA da grande área
+		var spot := Vector2(gx - dir * penalty_spot_distance, 0.0)
+		n.draw_circle(spot, 4.0, line_color)
+		var edge_gap: float = penalty_area_size.x - penalty_spot_distance   # do pênalti até a linha da área
+		if penalty_arc_radius > edge_gap:
+			var half_angle: float = acos(clampf(edge_gap / penalty_arc_radius, -1.0, 1.0))
+			var center_angle: float = 0.0 if dir < 0 else PI   # o arco abre para o meio do campo
+			n.draw_arc(spot, penalty_arc_radius, center_angle - half_angle, center_angle + half_angle, 32, line_color, line_width)
 
 		# Rede estática antiga (a rede deformável é o GoalNet)
 		if not animate_nets:

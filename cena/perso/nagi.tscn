@@ -5,7 +5,7 @@
 [ext_resource type="Texture2D" uid="uid://dtmaipte0k8i3" path="res://img/mvps/nagi.jpg" id="3_hdk36"]
 [ext_resource type="Texture2D" uid="uid://xcvnhj5eh2r8" path="res://img/testes/nagi.png" id="4_hdk36"]
 
-[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_uayoi")]
+[node name="Player" unique_id=1241627939 instance=ExtResource("1_uayoi")]
 script = ExtResource("2_hdk36")
 trap_range = 140.0
 trap_stop_distance = 32.0
@@ -52,7 +52,10 @@ bicycle_fx = null
 skill_icons = {}
 display_name = "Seishiro Nagi"
 mvp_image = ExtResource("3_hdk36")
-visual_root = NodePath("SprPlayer")
+mvp_title = "\"Lazy Genius\""
+mvp_phrase = "\"I'm the best player in the world.\""
+mvp_title_color = Color(0.95, 0.95, 1, 1)
+goal_lines = Array[String](["\"Okay... Can I go play Free Fire now?\"", "\"Soccer feels... So damn good..\""])
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)
