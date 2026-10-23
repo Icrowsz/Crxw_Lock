@@ -1,11 +1,11 @@
 [gd_scene format=3 uid="uid://bl884lugcjx06"]
 
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="1_e18gt"]
-[ext_resource type="Script" uid="uid://5ywp3s1bscqu" path="res://scr/perso/yukimiya.gd" id="2_1clbs"]
+[ext_resource type="Script" uid="uid://p0unibpc6fqp" path="res://scr/perso/yukimiya.gd" id="2_1clbs"]
 [ext_resource type="Texture2D" uid="uid://vb61hyg8okjv" path="res://img/mvps/yukimiya.jpg" id="3_qgf87"]
 [ext_resource type="Texture2D" uid="uid://2o7mpenngcn0" path="res://img/testes/yukimiya.png" id="4_qgf87"]
 
-[node name="Player" unique_id=1241627939 node_paths=PackedStringArray("visual_root") instance=ExtResource("1_e18gt")]
+[node name="Player" unique_id=1241627939 instance=ExtResource("1_e18gt")]
 script = ExtResource("2_1clbs")
 chance_gyro = 0.45
 chance_sword = 0.5
@@ -16,6 +16,8 @@ gyro_curve_min_deg = 25.0
 gyro_curve_max_deg = 55.0
 screw_leg_time = 0.4
 screw_speed_mult = 0.7
+show_trajectory = true
+trajectory_length = 650.0
 dribble_runs = 2
 dribble_run_mult = 0.6
 dribble_catch_margin = 14.0
@@ -36,7 +38,10 @@ kick_fx_blind = null
 skill_icons = {}
 display_name = "Yukimiya Kenyu"
 mvp_image = ExtResource("3_qgf87")
-visual_root = NodePath("SprPlayer")
+mvp_title = "\"Street Dribbler\""
+mvp_phrase = "\"The burden God gives us will never be greater than what we can bear.\""
+mvp_title_color = Color(1, 0.55, 0.1, 1)
+goal_lines = Array[String](["\"Are you guys blind or something?\"", "\"They didn't even see me walk by, those blind fools.\""])
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)

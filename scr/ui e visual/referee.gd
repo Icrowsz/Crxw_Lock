@@ -13,7 +13,7 @@ extends Node2D
 ## A bola de verdade fica escondida e parada no centro enquanto ele a "carrega" (uma bolinha desenhada na mão
 ## dele); ao colocar no chão ela reaparece e é solta.
 
-@export var walk_speed: float = 300.0
+@export var walk_speed: float = 1800.0
 @export var scale_factor: float = 1.2
 @export var shirt_color: Color = Color(0.97, 0.84, 0.18)
 @export var shorts_color: Color = Color(0.09, 0.09, 0.11)

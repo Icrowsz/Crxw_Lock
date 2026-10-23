@@ -47,6 +47,7 @@ signal ball_reset_after_goal
 @export var ball_hit_radius: float = 8.0               # "tamanho" da bola para bater na trave
 @export var post_bounce: float = 0.6
 @export var reset_delay: float = 2.0                   # tempo até a bola voltar ao centro após o gol
+@export var goal_replay: bool = true                   # replay rápido do gol antes de a bola voltar ao centro (goal_replay.gd)
 
 @export_group("Goleiros")
 @export var spawn_goalkeepers: bool = true             # cria um goleiro por time (se a cena não tiver)
@@ -169,6 +170,9 @@ func _ready() -> void:
 		_add_drawer(Vector2(gx, -goal_width * 0.5), _draw_post.bind(true))   # trave de trás (com travessão)
 		_add_drawer(Vector2(gx, goal_width * 0.5), _draw_post.bind(false))   # trave da frente
 	_build_nets()
+	# Replay de gol: grava as jogadas e toca o replay depois do gol (se já houver um GoalReplay na cena, usa ele)
+	if goal_replay and get_tree().get_first_node_in_group("goal_replay") == null:
+		add_child(GoalReplay.new())
 	_build_benches()
 	_build_flags()
 	_build_wind_particles()
@@ -321,6 +325,10 @@ func _register_goal(dir: int, entry: Vector2 = Vector2.ZERO) -> void:
 
 func _reset_after_delay() -> void:
 	await get_tree().create_timer(reset_delay).timeout
+	# O replay do gol segura a volta da bola ao centro até acabar (ou até o jogador pular)
+	for replay in get_tree().get_nodes_in_group("goal_replay"):
+		if replay.has_method("wait_if_busy"):
+			await replay.wait_if_busy()
 	reset_ball()
 	ball_reset_after_goal.emit()
 

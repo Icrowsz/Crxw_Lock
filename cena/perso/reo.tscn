@@ -39,6 +39,10 @@ face_offset = 46.0
 skill_icons = {}
 display_name = "Reo Mikage"
 mvp_image = ExtResource("3_s0rjy")
+mvp_title = "\"Chameleon\""
+mvp_phrase = "\"It's time for me to become someone who can dream of being the best in the world on my own.\""
+mvp_title_color = Color(0.65, 0.3, 0.95, 1)
+goal_lines = Array[String](["\"If I dribble, make moves, defend, run, and even score goals, who are you guys to compete?\"", "\"I swear I didn't bribe the ref to win. I'm just good.\""])
 
 [node name="SprPlayer" parent="." index="1" unique_id=395354675]
 scale = Vector2(0.2, 0.2)
