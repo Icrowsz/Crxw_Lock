@@ -50,7 +50,7 @@ enum PieceSkill { NONE, MAIN, OWN_GOAL, FOOTWORK, SEE_IT }
 
 @export_group("Go Beyond (reação One More Time)")
 @export_range(0.0, 1.0) var chance_go_beyond: float = 0.85   # valor final de chance
-@export var go_beyond_force_mult: float = 3.0
+@export var go_beyond_force_mult: float = 2.2
 @export var go_beyond_fx: KickFX                             # vazio = estilo padrão (_make_fx)
 
 @export_group("Pieces")

@@ -75,8 +75,8 @@ enum ServantType { WAITER, CLOWN }
 @export var impact_flight_time: float = 0.2
 
 @export_group("Emperor Impact (reação Herbivicus)")
-@export_range(0.0, 1.0) var chance_emperor: float = 0.75   # chance de gol (já é o valor final)
-@export var emperor_force_mult: float = 1.35               # mais forte que o Kaiser Impact (1.1)
+@export_range(0.0, 1.0) var chance_emperor: float = 0.8   # chance de gol (já é o valor final)
+@export var emperor_force_mult: float = 1.9               # mais forte que o Kaiser Impact (1.1)
 @export var emperor_flight_time: float = 0.3               # tempo Suspensa (o Kaiser Impact usa 0.2)
 @export var emperor_rose_radius: float = 260.0             # tamanho da rosa gigante (px)
 ## Aura do chute. Vazio = usa o estilo padrão (veja _make_emperor_fx)

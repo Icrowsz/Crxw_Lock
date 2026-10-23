@@ -53,7 +53,7 @@ enum ShotVariant { NONE, NERO, TERROR, VILLAIN }
 
 @export_group("Devour (reação Feeding)")
 @export_range(0.0, 1.0) var devour_chance: float = 0.80
-@export var devour_force_mult: float = 1.7         # "mais forte e veloz" (a velocidade da bola vem da força)
+@export var devour_force_mult: float = 2.4         # "mais forte e veloz" (a velocidade da bola vem da força)
 @export var devour_lion_time: float = 1.7          # quanto tempo o leão fica na bola (s)
 @export var devour_lion_size: float = 110.0        # tamanho do leão (raio do rosto, em px)
 

@@ -20,23 +20,23 @@ extends Node2D
 
 @export var rect: Rect2 = Rect2(0.0, -130.0, 90.0, 260.0)   # área da rede (coordenadas do Field)
 @export var front_is_min_x: bool = true     # a linha de fundo (boca do gol) é o lado de menor x?
-@export var cell_size: float = 10.0         # tamanho de cada quadradinho da malha
+@export var cell_size: float = 1000.0         # tamanho de cada quadradinho da malha
 @export var stiffness: float = 45.0         # força que devolve o véu ao repouso (baixa = flutua mais)
-@export var damping: float = 2.4            # quanto ele demora para parar de balançar
-@export var coupling: float = 240.0         # quanto cada ponto puxa os vizinhos (velocidade das ondas)
+@export var damping: float = 1.0            # quanto ele demora para parar de balançar
+@export var coupling: float = 120.0         # quanto cada ponto puxa os vizinhos (velocidade das ondas)
 @export var bulge: float = 1.25             # multiplicador geral do estufar
-@export var max_offset: float = 190.0       # deslocamento máximo de um ponto (px)
+@export var max_offset: float = 50.0       # deslocamento máximo de um ponto (px)
 @export var drag_gain: float = 0.6          # quanto a bola em movimento arrasta a rede
 @export_range(1, 4) var substeps: int = 2   # a simulação roda em passos menores (ondas rápidas ficam estáveis)
 @export_group("Esticar (chutes fortes)")
-@export var stretch_power: float = 2.0      # exagero nos chutes fortes (0 = proporcional ao chute)
-@export var pinch: float = 1.6              # quanto os lados são puxados para a bola (forma de bolsão)
-@export var puff: float = 0.9               # quanto o estufar "sobe" na tela
-@export var max_puff: float = 110.0         # altura máxima desse "subir" (px)
-@export var wobble: float = 1.0             # chute forte deixa a rede mais elástica (balança mais)
+@export var stretch_power: float = 0.6      # exagero nos chutes fortes (0 = proporcional ao chute)
+@export var pinch: float = 1.2              # quanto os lados são puxados para a bola (forma de bolsão)
+@export var puff: float = 0.4               # quanto o estufar "sobe" na tela
+@export var max_puff: float = 40.0         # altura máxima desse "subir" (px)
+@export var wobble: float = 0.7             # chute forte deixa a rede mais elástica (balança mais)
 @export var strain_range: float = 60.0      # deslocamento (px) em que a malha fica 100% tensa
 @export_group("Véu (brisa parada)")
-@export var idle_flutter: bool = true       # a rede respira mesmo sem chute
+@export var idle_flutter: bool = false       # a rede respira mesmo sem chute
 @export var flutter_amount: float = 2.4     # tamanho da brisa (px)
 @export var flutter_speed: float = 1.4
 @export_group("Cores")

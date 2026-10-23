@@ -54,7 +54,7 @@ const CURVE_ANIMS: Dictionary = {CurveVariant.CURVE: &"curve_shot", CurveVariant
 
 @export_group("Self Destruction (reação Cruel)")
 @export_range(0.0, 1.0) var chance_self_destruction: float = 0.93   # valor final de chance
-@export var self_destruction_force_mult: float = 1.8                # multiplica a força do Crash Shot
+@export var self_destruction_force_mult: float = 3.0                # multiplica a força do Crash Shot
 @export var self_destruction_fx: KickFX                             # vazio = estilo padrão (_make_fx)
 
 @export_group("Center of Gravity")
