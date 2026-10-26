@@ -90,7 +90,7 @@ enum ZeroVariant { NONE, ZERO_RESET, FAKE_VOLLEY }
 
 @export_group("Miracle (Five Stage Volley)")
 @export_range(0.0, 1.0) var five_chance: float = 0.80   # chance de gol do chute final
-@export var five_force_mult: float = 1.6                # força do chute final, em múltiplos do voleio normal ("bem forte")
+@export var five_force_mult: float = 2.1                # força do chute final, em múltiplos do voleio normal ("bem forte")
 @export var five_uses_qte: bool = true                  # o chute final tem QTE de voleio (errou = chute fraco e cai)
 @export var five_stages: int = 6                        # etapas no total: a 1ª é o Fake Volley parado, a última é o chute
 @export var five_stage_time: float = 0.65               # duração do movimento de cada etapa do meio
