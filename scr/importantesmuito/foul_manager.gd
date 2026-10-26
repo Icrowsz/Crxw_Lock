@@ -14,12 +14,14 @@ extends Node
 ##   2. Tela de preparação (set_piece_screen.gd): o time que sofreu a falta escolhe o COBRADOR (clique num
 ##      jogador dele; começa com o que caiu) e ele vai até a bola. Os dois times podem ARRASTAR os próprios
 ##      jogadores para onde quiserem (no pênalti ninguém entra na grande área) e cada um confirma.
-##   3. Turno da cobrança: o cobrador é o Protagonista e tem UMA ação, só Chutar ou Passe:
-##        Cobrar (o Chutar, renomeado) = 1.5x mais forte (kick_force_mult), chance 45%, e é o ÚNICO chute que abre a
-##        telinha de efeito (Kick Spin Picker);
-##        Passe  = alcance maior (+50).
-##   4. Acabou a ação: o turno do time que fez a falta termina normalmente e o jogo segue a ordem de sempre
-##      (o time que sofreu a falta ainda joga o turno dele depois).
+##   3. Turno da cobrança: o cobrador é o Protagonista e o time sofre a falta joga um turno com ações próprias:
+##        cobrador   = 1 ação geral (só Chutar ou Passe: a cobrança) + 2 de habilidade;
+##        secundários = 2 gerais + 1 de habilidade (pool compartilhada, como no turno normal).
+##      Cobrar (o Chutar, renomeado) = mais forte (kick_force_mult), chance 45%, e é o ÚNICO chute que abre a
+##      telinha de efeito (Kick Spin Picker). Passe = alcance maior (+50).
+##      Os secundários só podem Chutar/Passar DEPOIS da cobrança (quem bate primeiro é o cobrador); o resto vale antes.
+##   4. Acabou o turno da cobrança: a vez vai para o time que FEZ a falta (ele recomeça o turno dele, com ações novas,
+##      como na rodada bônus) e depois o jogo segue a ordem de sempre. O time que cobrou NÃO joga de novo em seguida.
 ##
 ## Para desligar tudo: enabled = false (ou use_fouls no MatchManager).
 
@@ -36,13 +38,18 @@ enum State { IDLE, SETUP, TAKER_TURN }
 
 @export var enabled: bool = true
 ## Chance de o juiz apitar quando alguém é derrubado por uma ação do adversário
-@export_range(0.0, 1.0) var whistle_chance: float = 0.35
+@export_range(0.0, 1.0) var whistle_chance: float = 0.9
 
 @export_group("Cobrança")
 @export_range(0.0, 1.0) var foul_shot_chance: float = 0.45      # chance do Chutar da falta
 @export_range(0.0, 1.0) var penalty_shot_chance: float = 0.45   # chance do Chutar do pênalti
 @export var kick_force_mult: float = 2    # o "Cobrar" (Chutar da cobrança) é bem mais forte
 @export var pass_range_bonus: float = 50.0   # o Passe da cobrança alcança mais (px)
+## Ações do turno da cobrança
+@export var taker_general_actions: int = 1       # a cobrança (Chutar ou Passe)
+@export var taker_skill_actions: int = 2
+@export var secondary_general_actions: int = 2   # pool compartilhada entre os secundários
+@export var secondary_skill_actions: int = 1
 ## Distância do cobrador até a bola (px, no chão). A bola fica na "ponta" dele: o círculo dele encosta nela, sem sobrepor.
 ## Menor que isso a bola entra "por baixo" do cobrador; maior abre um vão entre os dois.
 @export var taker_distance: float = 46.0
@@ -70,6 +77,8 @@ var _taker_origin: Vector2 = Vector2.ZERO
 var _saved: Dictionary = {}
 var _motion: Dictionary = {}   # Player -> Tween (jogadores sendo levados para algum lugar)
 var _screen: SetPieceScreen
+var _kick_done: bool = false   # o cobrador já usou a ação geral dele (a cobrança)
+var _scan_wait: float = 0.0    # intervalo entre as buscas do botão "Chutar"
 
 
 func _ready() -> void:
@@ -126,9 +135,10 @@ func clear_pending() -> void:
 	_pending = {}
 
 
-## true na vez do cobrador (é quando o Chutar vira "Cobrar" e abre a telinha de efeito)
+## true enquanto é a COBRANÇA em si: o cobrador agindo e a ação geral dele ainda não terminou
+## (é quando o Chutar vira "Cobrar" e abre a telinha de efeito; o MatchManager pergunta depois de gastar a ação)
 func is_taking() -> bool:
-	return state == State.TAKER_TURN
+	return state == State.TAKER_TURN and not _kick_done and manager.active_player == taker
 
 
 ## true enquanto a falta está em andamento (preparação ou cobrança)
@@ -136,11 +146,15 @@ func is_active() -> bool:
 	return state != State.IDLE
 
 
-## Durante a cobrança só existem Chutar e Passe (o MatchManager pergunta aqui em can_use_general)
+## Regras das ações gerais no turno da cobrança (o MatchManager pergunta aqui em can_use_general)
 func allows_general(action: int) -> bool:
 	if state != State.TAKER_TURN:
 		return true
-	return action == MatchManager.GeneralAction.SHOOT or action == MatchManager.GeneralAction.PASS
+	var is_kick: bool = action == MatchManager.GeneralAction.SHOOT or action == MatchManager.GeneralAction.PASS
+	if manager.active_player == taker:
+		return is_kick   # a ação geral do cobrador é a cobrança
+	# Os outros jogam à vontade, mas só batem na bola depois que o cobrador cobrou
+	return _kick_done or not is_kick
 
 
 # ---------- APITO ----------
@@ -397,7 +411,8 @@ func _begin_taker_turn() -> void:
 	taker.next_kick_force_mult *= kick_force_mult
 	taker.facing = taker.get_attack_dir()
 
-	# O time que sofreu a falta joga: o cobrador vira Protagonista com UMA ação (Chutar ou Passe)
+	# O time que sofreu a falta joga: o cobrador vira Protagonista
+	_kick_done = false
 	manager.current_team = fouled_team
 	manager._set_phase(MatchManager.Phase.CHOOSING_PROTAGONIST)
 	manager.select_protagonist(taker)
@@ -405,25 +420,31 @@ func _begin_taker_turn() -> void:
 		on_turn_end()
 		manager._end_turn()
 		return
-	manager.protagonist_general_left = 1
-	manager.protagonist_skill_left = 0
-	manager.secondary_general_left = 0
-	manager.secondary_skill_left = 0
+	manager.protagonist_general_left = taker_general_actions
+	manager.protagonist_skill_left = taker_skill_actions
+	manager.secondary_general_left = secondary_general_actions
+	manager.secondary_skill_left = secondary_skill_actions
 	manager.state_changed.emit()
 	set_piece_started.emit(kind, fouled_team, taker)
 
 
-## O MatchManager chama no começo de _end_turn(): fecha a cobrança e devolve o turno ao time que fez a falta
-## (que simplesmente termina o turno dele), sem nenhuma outra mudança no fluxo.
+## O MatchManager chama no começo de _end_turn(): fecha a cobrança e passa a vez para o time que FEZ a falta.
+## Usa o mesmo mecanismo da rodada bônus: com in_bonus_turn ligado, o _end_turn() chama o _end_bonus_turn(), que
+## devolve a vez ao _resume_team (aqui, o time da falta) com a escolha de protagonista aberta e ações novas.
+## O turno de quem cobrou não conta como rodada (não emite turn_ended/turn_started), então não gasta recarga.
 func on_turn_end() -> void:
 	_pending = {}
 	if state != State.TAKER_TURN:
 		return
 	_rename_shoot_button(false)
 	_restore_taker()
-	manager.current_team = fouling_team
+	_kick_done = false
+	if not manager.in_bonus_turn:   # (se a falta foi numa rodada bônus, ela segue o caminho dela)
+		manager.in_bonus_turn = true
+		manager._resume_team = fouling_team
 	state = State.IDLE
 	set_piece_finished.emit(kind, fouled_team)
+	SetPieceScreen.toast(self, "Vez de %s!" % manager.get_team_name(fouling_team), TeamStyle.color_of(fouling_team), 1.4)
 
 
 # ---------- NOME DO BOTÃO: Chutar -> Cobrar ----------
@@ -453,9 +474,21 @@ func _collect_buttons(node: Node) -> void:
 		_collect_buttons(child)
 
 
-func _process(_delta: float) -> void:
-	if state == State.TAKER_TURN:
-		_rename_shoot_button(true)   # o menu pode recriar os botões a cada mudança de fase
+func _process(delta: float) -> void:
+	if state != State.TAKER_TURN:
+		return
+	# A cobrança acabou quando a ação geral do cobrador foi gasta e o menu voltou
+	if not _kick_done and manager.protagonist_general_left <= 0 and manager.phase == MatchManager.Phase.CHOOSING_ACTION:
+		_kick_done = true
+	# O botão só se chama "Cobrar" durante a cobrança; o menu pode recriar os botões, então procura de novo a cada 0,1 s
+	_scan_wait -= delta
+	if _scan_wait > 0.0:
+		return
+	_scan_wait = 0.1
+	if is_taking():
+		_rename_shoot_button(true)
+	elif not _renamed.is_empty():
+		_rename_shoot_button(false)
 
 
 func _restore_taker() -> void:
@@ -483,5 +516,6 @@ func _abort() -> void:
 		_screen.queue_free()
 	_screen = null
 	_pending = {}
+	_kick_done = false
 	state = State.IDLE
 	taker = null

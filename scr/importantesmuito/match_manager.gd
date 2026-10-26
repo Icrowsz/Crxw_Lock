@@ -265,6 +265,7 @@ func _ready() -> void:
 
 
 func _setup() -> void:
+	GameMode.apply_to(self)
 	for p: Player in get_tree().get_nodes_in_group("players"):
 		register_player(p)
 

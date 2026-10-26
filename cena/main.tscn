@@ -48,6 +48,7 @@ goal_replay = false
 script = ExtResource("1_3tt73")
 
 [node name="Bola" parent="." unique_id=235203312 instance=ExtResource("4_mk8v6")]
+position = Vector2(0, 2)
 trail_length = 300
 trail_team_color = false
 
