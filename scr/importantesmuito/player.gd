@@ -13,6 +13,9 @@ signal clicked(player: Player)
 signal run_finished
 ## Alguém tentou pular (emitido no começo do jump). O Scars do Bunny escuta isto para redirecionar o pulo.
 signal jumped
+## Alguém caiu (knock_down). by_mistake = true quando a queda foi culpa do próprio jogador (errou o QTE do
+## chute): essas quedas nunca viram falta. O FoulManager (foul_manager.gd) escuta este sinal.
+signal knocked_down(by_mistake: bool)
 signal slide_finished
 ## Fim da mira: direção escolhida (Vector2.ZERO = cancelado)
 signal aim_finished(direction: Vector2)
@@ -129,13 +132,13 @@ const ACTION_TIMEOUT: float = 3.0
 ## O jogador escolhe um PONTO da bola (telinha do Chutar). Quanto mais longe do centro, mais efeito.
 @export var spin_curve_deg: float = 30.0          # curva total (graus) quando acerta a lateral da bola
 @export var spin_curve_time: float = 0.6          # por quanto tempo a bola vai curvando (s)
-@export_range(0.0, 0.9) var spin_curve_power_loss: float = 0.4   # alcance perdido na curva máxima (efeito sempre alcança menos que o reto)
-@export_range(0.0, 0.9) var spin_rise_power_loss: float = 0.3    # alcance perdido quando acerta embaixo na borda ("sobe"; o tempo maior no ar já é compensado)
-@export_range(0.0, 1.0) var spin_down_power_mult: float = 0.7    # alcance que sobra quando acerta em cima (máximo)
+@export_range(0.0, 0.9) var spin_curve_power_loss: float = 0.1   # alcance perdido na curva máxima (efeito sempre alcança menos que o reto)
+@export_range(0.0, 0.9) var spin_rise_power_loss: float = 0.1    # alcance perdido quando acerta embaixo na borda ("sobe"; o tempo maior no ar já é compensado)
+@export_range(0.0, 1.0) var spin_down_power_mult: float = 0.1    # alcance que sobra quando acerta em cima (máximo)
 @export_range(0.0, 0.5) var spin_deadzone: float = 0.12          # perto do centro = sem efeito nenhum (reta)
 ## SUBIDA: quanto mais EMBAIXO da bola, mais ela sobe: meio caminho = Suspensa, na borda = Voando.
 ## Quanto mais sobe, mais "flutuante" é o voo (gravidade menor = mais tempo no ar, arco bem visível).
-@export_range(0.15, 1.0) var spin_rise_hang_scale: float = 0.5    # gravidade da bola na subida máxima (0.5 = ~40% mais tempo no ar)
+@export_range(0.15, 1.0) var spin_rise_hang_scale: float = 0.8    # gravidade da bola na subida máxima (0.5 = ~40% mais tempo no ar)
 @export_range(0.0, 1.0) var spin_rise_trail_from: float = 0.3     # a partir de quanta subida a bola deixa o rastro do arco
 
 @export_group("Chance de gol (disputa com o goleiro)")
@@ -177,6 +180,7 @@ var runs_this_turn: int = 0
 var slides_this_turn: int = 0
 ## Rodadas que o jogador já passou derrubado (o MatchManager o levanta sozinho depois de 2)
 var rounds_down: int = 0
+var _fall_by_mistake: bool = false   # marcado por knock_down_by_mistake() só durante a queda
 
 ## Efeitos vindos de habilidades de OUTROS jogadores (ex: Orbital Orbital / Sharp Sharp do
 ## Kurona). Quem aplica é quem desliga; reset_for_new_match zera tudo.
@@ -887,7 +891,7 @@ func kick_ball(ball: Ball, direction: Vector2, kind: KickType, qte_success: bool
 
 	# Errou o QTE: o jogador se desequilibra e cai (Levantar, ou espera 2 rodadas)
 	if not qte_success:
-		knock_down()
+		knock_down_by_mistake()   # erro dele mesmo: não é falta
 
 
 ## Tira a zona morta do centro e reescala (0..1, com sinal): perto do centro não tem efeito nenhum
@@ -1090,11 +1094,35 @@ func hop_over(peak: float = 34.0, duration: float = 0.45) -> void:
 
 # ---------- DERRUBADO / LEVANTAR ----------
 
+## Alguma habilidade protege este jogador de ser derrubado agora? (ex: Safe Spots do Niko, para os aliados dentro
+## dos portos seguros). Quem protege entra no grupo "control_sources" e implementa protects_from_knockdown(p).
+## Diferente dos outros ganchos, vale também para quem protege a si mesmo.
+## ← MERGE: adicionado (era o que faltava no arquivo mais recente).
+func is_knockdown_immune() -> bool:
+	for src in get_tree().get_nodes_in_group("control_sources"):
+		if src.has_method("protects_from_knockdown") and src.protects_from_knockdown(self):
+			return true
+	return false
+
+
 func knock_down() -> void:
+	if is_knockdown_immune():
+		_fall_by_mistake = false   # não caiu: a marca de erro não pode sobrar para a próxima queda
+		return   # ← MERGE: ex: dentro de um Safe Spot do Niko
 	land()  # quem estava suspenso cai no chão também
 	is_down = true
 	rounds_down = 0
 	_play_oneshot(ANIM_FALL)
+	var by_mistake: bool = _fall_by_mistake
+	_fall_by_mistake = false
+	knocked_down.emit(by_mistake)
+
+
+## Queda por erro do PRÓPRIO jogador (ex: errou o QTE do chute): igual ao knock_down(), mas NÃO conta como falta.
+## Use isto (e não knock_down) em qualquer habilidade que faça o jogador cair por culpa dele mesmo.
+func knock_down_by_mistake() -> void:
+	_fall_by_mistake = true
+	knock_down()
 
 
 ## Ação geral temporária: só existe enquanto o jogador está derrubado
@@ -2061,8 +2089,11 @@ func _draw() -> void:
 ## Só existe uma por vez: uma fala nova substitui a anterior.
 class GoalQuote extends CanvasLayer:
 	static var current: GoalQuote
+	## Argumentos da última fala (o replay do gol mostra a mesma fala de novo). Vazio = o último gol não teve fala.
+	static var last: Dictionary = {}
 
 	static func show_quote(host: Node, face: Texture2D, who: String, text: String, color: Color, hold: float) -> void:
+		last = {"face": face, "who": who, "text": text, "color": color}
 		if current != null and is_instance_valid(current):
 			current.queue_free()
 		current = GoalQuote.new()

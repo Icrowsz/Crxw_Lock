@@ -75,6 +75,7 @@ enum Phase {
 	KEEPERS_ACTING,         # Entre turnos: os goleiros estão agindo sozinhos
 	FORMATION,              # Antes da partida: cada time monta a própria formação
 	TEAM_EFFECTS,           # Fim de turno: efeitos que agem sozinhos (ex: 1-2 do Kurona)
+	SET_PIECE,              # Falta/pênalti: apito e preparação da cobrança (foul_manager.gd)
 }
 enum PassVariant { GROUND, HIGH }
 ## Passe alto em andamento: NONE -> FLYING (pairando no nível Voando) -> RECEIVED (Suspenso, no alvo)
@@ -105,6 +106,10 @@ const PASS_VARIANT_NAMES := {
 @export var show_score_hud: bool = true     # cria sozinho o placar, o aviso de gol e o resumo final
 @export var show_match_effects: bool = true
 @export var keeper_wait_timeout: float = 8.0   # trava de segurança: máximo que o jogo espera os goleiros
+
+@export_group("Faltas e replay")
+@export var use_fouls: bool = true         # faltas e pênaltis (foul_manager.gd)
+@export var use_goal_replay: bool = true   # replay rápido depois de cada gol (goal_replay.gd)
 
 @export_group("Tempo de jogo")
 @export var rounds_per_half: int = 15         # rodadas de cada tempo (1º + 2º = tempo normal)
@@ -170,6 +175,9 @@ var phase: Phase = Phase.CHOOSING_PROTAGONIST
 var effects: MatchEffects
 ## Banco de reservas, substituições e pausas (criado no _setup)
 var bench: BenchManager
+## Faltas e pênaltis (foul_manager.gd) e replay do gol (goal_replay.gd): criados no _setup
+var fouls: FoulManager
+var replay: GoalReplay
 ## true enquanto a tela de pausa está aberta: ninguém age
 var paused: bool = false
 
@@ -275,6 +283,19 @@ func _setup() -> void:
 	bench.manager = self
 	add_child(bench)
 
+	fouls = FoulManager.new()
+	fouls.manager = self
+	fouls.enabled = use_fouls
+	add_child(fouls)
+
+	# O Field pode já ter criado um GoalReplay (grupo "goal_replay"): usa esse em vez de duplicar
+	replay = get_tree().get_first_node_in_group("goal_replay") as GoalReplay
+	if replay == null:
+		replay = GoalReplay.new()
+		add_child(replay)
+	replay.enabled = use_goal_replay
+	replay.bind(self)
+
 	if show_score_hud:
 		var hud := ScoreHud.new()
 		hud.manager = self
@@ -329,6 +350,11 @@ func _start_match() -> void:
 func _on_ball_reset_after_goal() -> void:
 	if match_over or phase == Phase.FORMATION:
 		return
+	# Replay rápido do gol (pausas pedidas durante ele ficam agendadas até acabar)
+	if replay != null:
+		await replay.play_pending()
+		if match_over or phase == Phase.FORMATION:
+			return
 	_awaiting_goal_reset = false
 	# Pausas pedidas durante o gol: a tela abre agora, ANTES de os jogadores voltarem, então a
 	# formação editada já vale neste reset
@@ -429,6 +455,8 @@ func return_to_formation() -> void:
 
 	match_over = false
 	winner = -1
+	if fouls != null:
+		fouls.reset()
 	scores.fill(0)
 	goal_log.clear()
 	player_stats.clear()
@@ -592,6 +620,10 @@ func _end_turn() -> void:
 	if match_over:
 		return
 
+	# Fim da cobrança de falta: o turno volta ao time que fez a falta, que termina o dele normalmente
+	if fouls != null:
+		fouls.on_turn_end()
+
 	if in_bonus_turn:
 		_end_bonus_turn()
 		return
@@ -699,7 +731,7 @@ func _on_player_clicked(player: Player) -> void:
 	# Só o time da vez pode ser clicado, e nunca durante uma ação, mira ou escolha de variante
 	if phase == Phase.EXECUTING or phase == Phase.AIMING or phase == Phase.MATCH_OVER \
 			or phase == Phase.KEEPERS_ACTING or phase == Phase.FORMATION or _repositioning \
-			or phase == Phase.TEAM_EFFECTS \
+			or phase == Phase.TEAM_EFFECTS or phase == Phase.SET_PIECE \
 			or phase == Phase.CHOOSING_PASS_VARIANT or player.team != current_team:
 		return
 
@@ -804,6 +836,9 @@ func total_actions_left() -> int:
 func can_use_general(action: GeneralAction) -> bool:
 	if not can_act() or general_left_for(active_player, action) <= 0:
 		return false
+	# Cobrança de falta/pênalti: só existem Chutar e Passe
+	if fouls != null and not fouls.allows_general(action):
+		return false
 
 	var p: Player = active_player
 
@@ -894,9 +929,10 @@ func do_general_action(action: GeneralAction) -> void:
 			var qte_ok: bool = true
 			if kind != Player.KickType.GROUND and not actor.skips_qte():
 				qte_ok = await _run_qte(kind)
-			# Telinha do efeito: o jogador clica na bola para escolher como ela vai (curva, sobe, desce)
-			# (só abre se o personagem tem o efeito ligado: Player.kick_spin_enabled)
-			if kick_spin_enabled and actor.kick_spin_enabled and not match_over:
+			# Telinha do efeito (curva, sobe, desce): EXCLUSIVA da cobrança de falta/pênalti ("Cobrar").
+			# O Chutar comum não abre mais. (só abre se o personagem tem o efeito ligado: Player.kick_spin_enabled)
+			var set_piece_kick: bool = fouls != null and fouls.is_taking()
+			if set_piece_kick and kick_spin_enabled and actor.kick_spin_enabled and not match_over:
 				actor.pending_spin_point = await _pick_kick_spin(actor, ball)
 			await actor.kick_ball(ball, kick_dir, kind, qte_ok)
 			_after_action()
@@ -1617,6 +1653,11 @@ func _after_action() -> void:
 	if match_over:
 		return
 
+	# Falta apitada durante a ação: a jogada para e o time que sofreu a falta cobra (foul_manager.gd)
+	if fouls != null and fouls.has_pending():
+		fouls.start_foul()
+		return
+
 	# Complemento gratuito esperando (ex: Draconic Header): o turno não acaba sozinho
 	var followup: bool = active_player != null and active_player.has_free_followup()
 
@@ -1781,6 +1822,8 @@ func _end_match(winning_team: int) -> void:
 		active_player.cancel_aim()
 	_clear_roles()
 	_set_phase(Phase.MATCH_OVER)
+	if replay != null:
+		await replay.play_pending(true)   # replay do gol que decidiu o jogo, antes da tela do MVP
 	# Abertura do MVP: a tela escurece, título + frase digitada, e SÓ ENTÃO a tela final abre
 	var intro: MvpIntro = null
 	if not mvp.is_empty() and (str(mvp.get("title", "")) != "" or str(mvp.get("phrase", "")) != ""):

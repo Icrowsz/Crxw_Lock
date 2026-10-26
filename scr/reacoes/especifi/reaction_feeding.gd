@@ -53,7 +53,7 @@ func find_partner(trigger: Player) -> Player:
 		return null
 
 	# 1) O Barou precisa estar com o Predator Eye ativo
-	if not barou._predator_active():
+	if not barou._eye_active():   # o Predator Eye do Barou (no barou.gd)
 		return null
 
 	# 2) ...e na situação do Nero (ele no chão + bola no chão ao alcance)

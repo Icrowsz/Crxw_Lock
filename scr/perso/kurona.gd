@@ -40,7 +40,7 @@ enum BiteVariant { NONE, BITE, UNDERWATER }
 @export_group("Moon / Satellite")
 @export var moon_range: float = 400.0
 @export_range(0.1, 1.0) var moon_first_run_mult: float = 0.5   # duração reduzida do Correr do Kurona
-@export var moon_ally_speed_mult: float = 1.4                  # velocidade aumentada do Correr do aliado
+@export var moon_ally_speed_mult: float = 1.1                  # velocidade aumentada do Correr do aliado
 @export_range(0.0, 1.0) var moon_shot_bonus: float = 0.0       # chance base do Moon (o documento não dá o número)
 @export var moon_cooldown: int = 2
 @export var satellite_reach: float = 180.0                     # até onde ele salta para pegar a bola suspensa

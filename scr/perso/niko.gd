@@ -1,71 +1,90 @@
 class_name Niko
 extends Player
-## Niko Ikki. Herda tudo do Player (ações gerais) e adiciona as habilidades próprias:
+## Niko Ikki (verde Blue Lock, com torres e radar: veja niko_fx.gd).
 ##
-## 1. Watchtower (ação de habilidade): cria uma torre de observação verde translúcida onde o
-##      Niko está (alcance 400). Dentro dela, INIMIGOS não podem usar habilidades. Dura até o
-##      Niko sair do alcance ou 3 rodadas. Recarga de 3 rodadas, contada a partir do fim das 3 rodadas.
-##    1.1 Body Core (variante: aparece no lugar do Watchtower enquanto a torre existe): o Niko
-##      escolhe um inimigo dentro da torre, se aproxima e os dois disputam fisicamente
-##      (75% Niko x 25% oponente). Se o Niko vencer, o inimigo fica proibido de usar ações
-##      GERAIS por 3 rodadas, ou até o Niko se afastar dele.
-## 2. Tactical (ação de habilidade): passe rasteiro curvilíneo. Vale com a bola em qualquer um
-##      dos 3 níveis (chão, suspenso, voando), desde que o Niko consiga alcançá-la. Alcance 550,
-##      recarga de 2 rodadas.
-## 3. Metavision (ação de habilidade): +1 ação de habilidade para os Secundários, o Pular passa
-##      a chegar ao nível Voando e os chutes que vieram de um passe do Niko ganham +5%.
-##      Dura 3 rodadas, recarga de 3 rodadas a partir do fim do efeito.
+## 1. Watchtower (recarga 2, compartilhada; só na DEFESA): QTE fácil e, passando, cria uma torre de vigia fixa onde ele
+##    está (alcance 300). Dentro dela os inimigos não usam habilidades. Dura 2 rodadas ou até o Niko sair de perto.
+##    - Body Core (variante: enquanto a torre existe; uso único por torre): Niko no chão vai até um inimigo dentro da
+##      torre (QTE fácil) e começa a marcá-lo (60%). Ganhando, bloqueia DUAS ações gerais que ele escolhe.
+##    - Safe Spots (variante: no ATAQUE, recarga compartilhada com a Watchtower): QTE fácil e, passando, escolhe dois
+##      pontos (alcance 600) que viram "portos seguros" de 200 de área: os aliados dentro não podem ser derrubados e
+##      têm +5% nos chutes. Duram 2 rodadas.
+## 2. Tactical (recarga 2, compartilhada): Niko no chão com a bola no chão. Aliado a até 200 = passe rasteiro curvo;
+##    mais longe (até 475) = cruzamento por cima que chega ao aliado no chão. O aliado faz um QTE fácil e, passando,
+##    ganha +4% no próximo chute (bússola verde sobre ele até chutar).
+##    - Bomber Tact (variante: Niko e bola SUSPENSOS): escolhe dois aliados (500) e cruza para o primeiro, que salta,
+##      domina e desce com a bola; QTE fácil do primeiro (+4% no próximo chute). Se o primeiro assistir o segundo, o
+##      segundo ganha +5%.
+## 3. Def Metavision (recarga 3 depois do fim do efeito): +1 ação de habilidade extra para os secundários; +10% no Body
+##    Core, +100 de área e +3% nas Safe Spots, +2% no Tactical e no Bomber Tact. Um radar pequeno sai dele o tempo todo.
 ##
-## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
-## -> renomeie o nó raiz para "Niko". Animações opcionais (se faltar alguma, nada quebra):
-## "watchtower", "body_core", "tactical", "metavision".
+## Cena: Nova Cena Herdada de player.tscn -> este script no nó raiz -> renomeie o nó para "Niko".
+## Animações opcionais: watchtower, body_core, safe_spots, tactical, bomber_tact, metavision.
+##
+## PEÇAS NO RESTO DO PROJETO: o player.gd precisa do gancho protects_from_knockdown (Safe Spots); está na versão
+## atualizada do player.gd que acompanha este arquivo.
 
-const SKILL_TOWER: StringName = &"watchtower"   # o mesmo botão vira Body Core dentro da torre
-const SKILL_TACTICAL: StringName = &"tactical"
+const SKILL_TOWER: StringName = &"watchtower"     # também é o id de Body Core e Safe Spots
+const SKILL_TACTICAL: StringName = &"tactical"    # também é o id do Bomber Tact
 const SKILL_METAVISION: StringName = &"metavision"
-
-const CD_TOWER: StringName = &"cd_watchtower"
-const CD_TACTICAL: StringName = &"cd_tactical"
+const CD_TOWER: StringName = &"cd_watchtower"     # Watchtower e Safe Spots
+const CD_TACTICAL: StringName = &"cd_tactical"    # Tactical e Bomber Tact
 const CD_METAVISION: StringName = &"cd_metavision"
 
-const TOWER_COLOR := Color(0.3, 1.0, 0.5)
+enum TowerVariant { NONE, WATCHTOWER, BODY_CORE, SAFE_SPOTS }
+enum TacticalVariant { NONE, TACTICAL, BOMBER }
 
-@export_group("Watchtower")
-@export var tower_radius: float = 270.0
-@export var tower_rounds: int = 3                 # duração total em rodadas (contando a atual)
-@export var tower_cooldown: int = 3               # recarga, contada a partir do fim das rodadas da torre
+@export_group("QTE fácil (Watchtower, Body Core, Safe Spots, Tactical)")
+@export var easy_qte_keys: int = 2
+@export var easy_qte_time: float = 0.5
 
-@export_group("Body Core")
-@export_range(0.0, 1.0) var body_core_win_chance: float = 0.75   # chance do Niko na disputa física
-@export var body_core_rounds: int = 3             # quanto tempo o inimigo fica sem ações gerais (contando a atual)
-@export var body_core_break_distance: float = 160.0   # o efeito acaba se o Niko ficar mais longe que isso
+@export_group("Watchtower / Body Core")
+@export var tower_radius: float = 230.0
+@export var tower_rounds: int = 2                 # duração total em rodadas (contando a atual)
+@export var tower_cooldown: int = 2               # recarga, contada a partir do fim das rodadas da torre
+@export_range(0.0, 1.0) var body_core_win_chance: float = 0.60
+@export var body_core_blocked_actions: int = 2    # quantas ações gerais o Niko escolhe bloquear
+@export var body_core_rounds: int = 3             # quanto tempo a marcação dura (contando a atual)
+@export var body_core_break_distance: float = 120.0   # a marcação acaba se o Niko ficar mais longe que isso
 @export var body_core_contact_distance: float = 44.0  # distância entre os dois na hora da disputa
 @export var body_core_approach_time: float = 0.45
 
-@export_group("Tactical")
-@export var tactical_range: float = 475.0
-@export var tactical_cooldown: int = 2
-## Quanto a bola se desvia da reta, como fração da distância do passe (0.25 = 25%)
-@export_range(0.0, 0.6) var tactical_curve: float = 0.25
+@export_group("Safe Spots")
+@export var safe_spot_range: float = 600.0        # alcance para escolher os dois pontos
+@export var safe_spot_radius: float = 120.0
+@export var safe_spot_rounds: int = 2             # o documento não dá a duração: igual à Watchtower
+@export_range(0.0, 1.0) var safe_spot_shot_bonus: float = 0.05
+@export_range(0.3, 1.0) var safe_spot_tower_scale: float = 0.55   # tamanho da torre pequena
 
-@export_group("Metavision")
+@export_group("Tactical / Bomber Tact")
+@export var tactical_range: float = 475.0
+@export var tactical_ground_max: float = 360.0    # até aqui o passe vai rasteiro; acima, vira cruzamento
+@export var tactical_cooldown: int = 2
+## Quanto a bola se desvia da reta no passe rasteiro, como fração da distância (0.25 = 25%)
+@export_range(0.0, 0.6) var tactical_curve: float = 0.25
+@export_range(0.0, 1.0) var tactical_shot_bonus: float = 0.04
+@export var cross_rise_time: float = 0.2
+@export var cross_fall_time: float = 0.55
+@export var bomber_range: float = 500.0
+@export_range(0.0, 1.0) var bomber_assist_bonus: float = 0.05
+
+@export_group("Def Metavision")
 @export var metavision_rounds: int = 3                          # rodadas depois da atual (igual ao Metavision do Isagi)
-@export_range(0.0, 1.0) var metavision_pass_bonus: float = 0.05 # +5% nos chutes que vieram de um passe do Niko
 @export var metavision_extra_ally_skills: int = 1               # ações de habilidade extras para os Secundários
 @export var metavision_cooldown: int = 3                        # recarga, contada a partir do fim do efeito
+@export_range(0.0, 1.0) var meta_body_core_bonus: float = 0.10
+@export var meta_spot_radius_bonus: float = 100.0
+@export_range(0.0, 1.0) var meta_spot_shot_bonus: float = 0.03
+@export_range(0.0, 1.0) var meta_tactical_bonus: float = 0.02
 
-@export_group("Visual do passe")
-## Aura + partículas do Tactical. Vazio = usa o estilo padrão do Niko (veja _make_kick_fx)
-@export var kick_fx: KickFX
-
-@export_group("Descrição (hover)")
+@export_group("Visual / Descrição")
+@export var kick_fx: KickFX                   # vazio = NikoFX.kick_fx()
 ## Imagem de cada habilidade no balão do menu. Chaves: watchtower, tactical, metavision.
 ## Sem imagem, o balão aparece só com o texto.
 @export var skill_icons: Dictionary = {}
 
-
-# ---------- Torre ----------
-var _tower: _TowerZone = null
+# ---------- Watchtower ----------
+var _tower: NikoFX.Tower = null
 var _tower_on: bool = false
 var _tower_center: Vector2 = Vector2.ZERO
 var _tower_until_round: int = -1
@@ -73,11 +92,23 @@ var _tower_until_round: int = -1
 # ---------- Body Core ----------
 var _core_target: Player = null
 var _core_until_round: int = -1
+var _core_blocked: Array[int] = []              # ações gerais (MatchManager.GeneralAction) bloqueadas no alvo
+var _core_used: bool = false                    # uso único por Watchtower
 
-# ---------- Metavision / passes ----------
+# ---------- Safe Spots ----------
+var _spot_centers: Array[Vector2] = []
+var _spot_fx: Array[NikoFX.Tower] = []
+var _spots_until_round: int = -1
+
+# ---------- Tactical / Bomber Tact ----------
+var _marks: Dictionary = {}                     # aliado -> NikoFX.Mark (bússola enquanto ele tem o bônus)
+var _bomber_first: Player = null
+var _bomber_second: Player = null
+
+# ---------- Metavision ----------
 var _metavision_until_round: int = -1
-## O último toque "de passe" na bola foi do Niko (e ele não chutou depois)?
-var _pass_valid: bool = false
+var _meta_was_active: bool = false
+var _radar: NikoFX.Radar = null
 
 # ---------- Texto flutuante (resultado da disputa) ----------
 var _popup_text: String = ""
@@ -92,55 +123,126 @@ func _init() -> void:
 
 func _ready() -> void:
 	super()
-	add_to_group("control_sources")  # os adversários perguntam por aqui se estão bloqueados
+	add_to_group("control_sources")  # os outros perguntam por aqui se estão bloqueados / protegidos
 	if kick_fx == null:
-		kick_fx = _make_kick_fx()
+		kick_fx = NikoFX.kick_fx()
+	_radar = NikoFX.make_radar()
+	add_child(_radar)
 	_hook_manager.call_deferred()    # o MatchManager entra na árvore no mesmo frame
 
 
-## Verde Blue Lock para o rastro do Tactical
-func _make_kick_fx() -> KickFX:
-	var fx := KickFX.new()
-	fx.color = Color(0.3, 1.0, 0.5)
-	fx.trail_width = 12.0
-	fx.particle_color = Color(0.75, 1.0, 0.8)
-	fx.amount = 18
-	fx.lifetime = 0.5
-	fx.speed_min = 15.0
-	fx.speed_max = 60.0
-	fx.scale_min = 0.15
-	fx.scale_max = 0.3
-	fx.burst_amount = 10
-	fx.burst_speed = 180.0
-	return fx
+func _exit_tree() -> void:
+	_end_tower()
+	_end_spots()
+	_clear_marks()
 
 
 func _hook_manager() -> void:
 	var m: MatchManager = _get_manager()
 	if m:
 		m.pass_completed.connect(_on_pass_completed)
+		m.turn_ended.connect(_on_turn_ended)
+		m.round_started.connect(_on_round_started)
 
 
-func _exit_tree() -> void:
-	if _tower and is_instance_valid(_tower):
-		_tower.queue_free()
+## O primeiro aliado do Bomber Tact assistiu o segundo: o segundo ganha o bônus de assistência
+func _on_pass_completed(passer: Player, target: Player) -> void:
+	if _bomber_first != null and passer == _bomber_first and target == _bomber_second:
+		_mark_ally(target, bomber_assist_bonus + _meta_tactical_extra())
+		_bomber_first = null
+		_bomber_second = null
 
 
-## Qualquer passe do Niko (geral, alto ou Tactical) conta para o bônus da Metavision
-func _on_pass_completed(passer: Player, _target: Player) -> void:
-	if passer == self:
-		_pass_valid = true
+## A assistência do Bomber Tact só vale no turno em que o cruzamento aconteceu
+func _on_turn_ended(ended_team: int) -> void:
+	if ended_team == team:
+		_bomber_first = null
+		_bomber_second = null
 
 
-## Um chute do próprio Niko não é um passe: o bônus não vale para o que vier depois dele
-func kick_ball(ball: Ball, direction: Vector2, kind: KickType, qte_success: bool = true,
-		chance_override: float = -1.0, ignore_self_collision: bool = false,
-		fx: KickFX = null, anim: StringName = &"", on_kick: Callable = Callable()) -> void:
-	_pass_valid = false
-	await super(ball, direction, kind, qte_success, chance_override, ignore_self_collision, fx, anim)
+func _on_round_started(new_round: int) -> void:
+	if _spots_until_round >= 0 and new_round > _spots_until_round:
+		_end_spots()
 
 
-# ---------- WATCHTOWER ----------
+# ---------- AUXILIARES ----------
+
+func _body_point() -> Vector2:
+	return global_position + Vector2(0.0, -height)
+
+
+## Lado do campo em que o Niko está AGORA (metade do próprio gol; considera a troca de lado do 2º tempo)
+func _is_defense_side() -> bool:
+	var field := get_tree().get_first_node_in_group("field") as Field
+	var x: float = global_position.x if field == null else field.to_local(global_position).x
+	return x * get_attack_dir() < 0.0
+
+
+## QTE fácil de uma tecla ou duas. Quem pula QTE (skips_qte) passa direto.
+func _easy_qte(title: String) -> bool:
+	var m: MatchManager = _get_manager()
+	if m == null or skips_qte():
+		return true
+	var qte := QTE.new()
+	m.add_child(qte)
+	qte.start(QTE.EASY_KEYS, easy_qte_keys, easy_qte_time, title)
+	var ok: bool = await qte.finished
+	return ok
+
+
+## Companheiros (menos o Niko e os derrubados) a até range_px
+func _allies_within(range_px: float) -> Array[Player]:
+	var list: Array[Player] = []
+	for other: Player in get_tree().get_nodes_in_group("players"):
+		if other != self and other.team == team and not other.is_down \
+				and global_position.distance_to(other.global_position) <= range_px:
+			list.append(other)
+	return list
+
+
+func _ball_arrived(ball: Ball, to: Player) -> bool:
+	return ball.global_position.distance_to(to.global_position) <= to.body_radius + ball.collision_radius + 10.0
+
+
+func _meta_tactical_extra() -> float:
+	return meta_tactical_bonus if is_metavision_active() else 0.0
+
+
+## O aliado ganha +X% no próximo chute (a bússola some quando ele chutar e gastar o bônus)
+func _mark_ally(ally: Player, bonus: float) -> void:
+	ally.next_shot_bonus = maxf(ally.next_shot_bonus, bonus)
+	var old: Variant = _marks.get(ally)
+	if old != null and is_instance_valid(old):
+		old.release()
+	_marks[ally] = NikoFX.mark(ally)
+	NikoFX.ping(self, ally.global_position, 46.0, 0.45)
+	NikoFX.blips(self, ally.global_position + Vector2(0.0, -ally.height - 20.0), 8)
+
+
+func _clear_marks() -> void:
+	for key in _marks.keys():
+		var m: Variant = _marks[key]
+		if m != null and is_instance_valid(m):
+			m.release()
+	_marks.clear()
+
+
+func _show_popup(text: String, color: Color) -> void:
+	_popup_text = text
+	_popup_color = color
+	_popup_left = 1.4
+	queue_redraw()
+
+
+# ---------- HABILIDADE 1: WATCHTOWER / BODY CORE / SAFE SPOTS ----------
+
+func _tower_variant() -> TowerVariant:
+	if is_down:
+		return TowerVariant.NONE
+	if is_tower_active():
+		return TowerVariant.BODY_CORE
+	return TowerVariant.WATCHTOWER if _is_defense_side() else TowerVariant.SAFE_SPOTS
+
 
 ## A torre existe agora? Confere (e encerra) sozinha: acabou o tempo ou o Niko saiu do alcance.
 func is_tower_active() -> bool:
@@ -171,29 +273,28 @@ func suppresses_skills_of(p: Player) -> bool:
 	return is_tower_active() and p.team != team and _tower_contains(p.global_position)
 
 
+## QTE fácil e, passando, a torre aparece onde o Niko está
 func _use_watchtower() -> bool:
 	var m: MatchManager = _get_manager()
-	var field := get_tree().get_first_node_in_group("field") as Field
-	if m == null or field == null:
+	if m == null:
 		return false
+	if not await _easy_qte("Torre!"):
+		_show_popup("Falhou", Color(1.0, 0.6, 0.5))
+		return true   # errou o QTE: gastou a ação e não cria a torre
 	if not await play_action(&"watchtower"):   # a torre aparece no frame de impacto
 		return false
 
 	_tower_center = global_position
 	_tower_until_round = m.round_number + tower_rounds - 1   # a rodada atual conta
+	_core_used = false
 	start_cooldown(CD_TOWER, tower_cooldown, _tower_until_round + 1)
-
-	_tower = _TowerZone.new()
-	_tower.radius = tower_radius
-	_tower.color = TOWER_COLOR
-	field.add_child(_tower)
-	_tower.global_position = _tower_center
-	_tower.appear()
+	_tower = NikoFX.tower(self, _tower_center, tower_radius)
 	_tower_on = true
+	NikoFX.ping(self, _tower_center, tower_radius * 0.5, 0.6)
 	return true
 
 
-# ---------- BODY CORE (variante do Watchtower) ----------
+# ---------- BODY CORE (variante da Watchtower) ----------
 
 ## Inimigos que dá para escolher: os que estão dentro da torre
 func _valid_core_targets() -> Array[Player]:
@@ -201,7 +302,7 @@ func _valid_core_targets() -> Array[Player]:
 	if not is_tower_active():
 		return list
 	for other: Player in get_tree().get_nodes_in_group("players"):
-		if other.team != team and _tower_contains(other.global_position):
+		if other.team != team and not other.is_down and _tower_contains(other.global_position):
 			list.append(other)
 	return list
 
@@ -221,12 +322,17 @@ func is_body_core_active() -> bool:
 func _clear_body_core() -> void:
 	_core_target = null
 	_core_until_round = -1
+	_core_blocked.clear()
 	queue_redraw()
 
 
-## Chamado pelo Player de quem está sendo checado: "este adversário está proibido de usar ações gerais?"
-func suppresses_generals_of(p: Player) -> bool:
-	return is_body_core_active() and p == _core_target
+## Chamado pelo Player de quem está sendo checado: "esta ação geral foi tirada deste adversário?"
+func blocks_general_action(p: Player, action: int) -> bool:
+	return is_body_core_active() and p == _core_target and action in _core_blocked
+
+
+func _core_win_chance() -> float:
+	return clampf(body_core_win_chance + (meta_body_core_bonus if is_metavision_active() else 0.0), 0.0, 1.0)
 
 
 func _use_body_core() -> bool:
@@ -238,7 +344,7 @@ func _use_body_core() -> bool:
 	# dela) e atrapalharia a leitura: some logo depois de ser desenhado. A torre já mostra o alcance.
 	_hide_own_range_preview.call_deferred()
 	var in_tower := func(other: Player) -> bool:
-		return _tower_contains(other.global_position)
+		return _tower_contains(other.global_position) and not other.is_down
 	var target: Player = await m.pick_ally_for_skill(self, tower_radius * 2.0, true, in_tower)
 	if target == null:
 		return false   # cancelou: não gasta a ação
@@ -254,15 +360,27 @@ func _use_body_core() -> bool:
 			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		await tw.finished
 
+	_core_used = true   # uso único por Watchtower (gasta mesmo se errar)
 	face_towards(target.global_position - global_position)
+	if not await _easy_qte("Marcação!"):
+		_show_popup("Falhou", Color(1.0, 0.6, 0.5))
+		return true
 	if not await play_action(&"body_core"):
 		return false
 
-	# Disputa física: 75% Niko x 25% oponente
-	if randf() < body_core_win_chance:
+	# Começa a marcar: 60% (+10% com a Def Metavision)
+	if randf() < _core_win_chance():
+		var options: Array[int] = [MatchManager.GeneralAction.RUN, MatchManager.GeneralAction.JUMP,
+			MatchManager.GeneralAction.SLIDE, MatchManager.GeneralAction.SHOOT, MatchManager.GeneralAction.PASS]
+		var chosen: Array = await _ActionPicker.pick(self, options, body_core_blocked_actions)
+		_core_blocked.clear()
+		for a in chosen:
+			_core_blocked.append(int(a))
 		_core_target = target
 		_core_until_round = m.round_number + body_core_rounds - 1   # a rodada atual conta
 		_show_popup("BODY CORE!", Color(0.5, 1.0, 0.6))
+		NikoFX.ping(self, target.global_position, 56.0, 0.5)
+		NikoFX.blips(self, target.global_position + Vector2(0.0, -target.height - 14.0), 10)
 	else:
 		_show_popup("Perdeu a disputa", Color(1.0, 0.6, 0.5))
 	queue_redraw()
@@ -274,38 +392,172 @@ func _hide_own_range_preview() -> void:
 	range_preview = 0.0
 
 
-# ---------- TACTICAL ----------
+# ---------- SAFE SPOTS (variante da Watchtower, no ataque) ----------
 
-## Alcance do passe: 550 + bônus de alcance de passe vindo de outros jogadores (ex: Orbital Orbital)
-func _tactical_range() -> float:
-	return tactical_range + pass_range_bonus
+func is_safe_spots_active() -> bool:
+	var m: MatchManager = _get_manager()
+	return m != null and _spots_until_round >= 0 and m.round_number <= _spots_until_round
 
 
-func _has_ally_in_tactical_range() -> bool:
-	for other: Player in get_tree().get_nodes_in_group("players"):
-		if other != self and other.team == team \
-				and global_position.distance_to(other.global_position) <= _tactical_range():
+func _spot_radius() -> float:
+	return safe_spot_radius + (meta_spot_radius_bonus if is_metavision_active() else 0.0)
+
+
+func _spot_shot_bonus() -> float:
+	return safe_spot_shot_bonus + (meta_spot_shot_bonus if is_metavision_active() else 0.0)
+
+
+func _in_safe_spot(pos: Vector2) -> bool:
+	if not is_safe_spots_active():
+		return false
+	for center: Vector2 in _spot_centers:
+		if pos.distance_to(center) <= _spot_radius():
 			return true
 	return false
 
 
+func _end_spots() -> void:
+	for fx: NikoFX.Tower in _spot_fx:
+		if fx != null and is_instance_valid(fx):
+			fx.disappear()
+	_spot_fx.clear()
+	_spot_centers.clear()
+	_spots_until_round = -1
+
+
+## Aliados dentro de um porto seguro não podem ser derrubados (o Player pergunta por aqui em knock_down)
+func protects_from_knockdown(p: Player) -> bool:
+	return p.team == team and _in_safe_spot(p.global_position)
+
+
+## +5% (+3% com a Def Metavision) nos chutes dos companheiros dentro de um porto seguro
+func shot_bonus_for_ally(shooter: Player, _ball: Ball) -> float:
+	if shooter.team == team and _in_safe_spot(shooter.global_position):
+		return _spot_shot_bonus()
+	return 0.0
+
+
+## O Niko dentro de um porto seguro também ganha o bônus nos próprios chutes
+func get_shot_chance(kind: KickType) -> float:
+	var base: float = super(kind)
+	if _in_safe_spot(global_position):
+		base += _spot_shot_bonus()
+	return base
+
+
+## QTE fácil e, passando, escolhe dois pontos no alcance de 600: as torres pequenas aparecem
+func _use_safe_spots() -> bool:
+	var m: MatchManager = _get_manager()
+	if m == null:
+		return false
+	if not await _easy_qte("Portos seguros!"):
+		_show_popup("Falhou", Color(1.0, 0.6, 0.5))
+		return true   # errou o QTE: gastou a ação e não cria os pontos
+
+	var first: Vector2 = await m.pick_point_for_skill(self, safe_spot_range)
+	if first == Vector2.INF:
+		return false   # cancelou: não gasta a ação
+	var preview: NikoFX.Tower = NikoFX.tower(self, first, _spot_radius(), safe_spot_tower_scale)   # o 1º já aparece
+	var second: Vector2 = await m.pick_point_for_skill(self, safe_spot_range)
+	if second == Vector2.INF:
+		if preview != null and is_instance_valid(preview):
+			preview.disappear()
+		return false
+	if not await play_action(&"safe_spots"):
+		if preview != null and is_instance_valid(preview):
+			preview.disappear()
+		return false
+
+	_end_spots()
+	_spot_centers = [first, second]
+	_spot_fx = [preview, NikoFX.tower(self, second, _spot_radius(), safe_spot_tower_scale)]
+	_spots_until_round = m.round_number + safe_spot_rounds - 1   # a rodada atual conta
+	start_cooldown(CD_TOWER, tower_cooldown, _spots_until_round + 1)
+	NikoFX.ping(self, first, _spot_radius() * 0.5, 0.6)
+	NikoFX.ping(self, second, _spot_radius() * 0.5, 0.6)
+	return true
+
+
+# ---------- HABILIDADE 2: TACTICAL / BOMBER TACT ----------
+
+## Alcance do passe: 475 + bônus de alcance de passe vindo de outros jogadores (ex: Orbital Orbital)
+func _tactical_range() -> float:
+	return tactical_range + pass_range_bonus
+
+
+func _tactical_variant() -> TacticalVariant:
+	var ball: Ball = _get_ball()
+	if is_down or ball == null or get_kick_type(ball) == KickType.NONE:
+		return TacticalVariant.NONE
+	if height_level == Heights.Level.GROUND and ball.get_level() == Heights.Level.GROUND \
+			and not _allies_within(_tactical_range()).is_empty():
+		return TacticalVariant.TACTICAL
+	if height_level == Heights.Level.SUSPENDED and ball.get_level() == Heights.Level.SUSPENDED \
+			and _allies_within(bomber_range).size() >= 2:
+		return TacticalVariant.BOMBER
+	return TacticalVariant.NONE
+
+
+## Cruzamento: a bola sobe a Voando no meio do caminho e chega ao aliado no nível pedido
+## (no chão: Tactical; suspensa: Bomber Tact). Devolve false se a partida acabou no meio.
+func _cross_to(m: MatchManager, ball: Ball, target: Player, end_height: float) -> bool:
+	ball.register_touch(self)   # o cruzamento não usa kick(), então registra o toque aqui
+	m.clear_pending_pass()
+	if kick_fx:
+		ball.fx_during_hover = true
+		ball.play_fx(kick_fx)
+	var start: Vector2 = ball.global_position
+	var to_target: Vector2 = target.global_position - start
+	var dist: float = to_target.length()
+	var gap: float = ball.collision_radius + target.body_radius + 2.0   # a bola chega ENCOSTANDO no alvo
+	var end_point: Vector2 = start
+	if dist > 0.001:
+		end_point = start + to_target / dist * maxf(dist - gap, 0.0)
+	var rise: Tween = ball.hover_to((start + end_point) * 0.5, Heights.FLYING_HEIGHT, cross_rise_time)
+	await rise.finished
+	var fall: Tween = ball.hover_to(end_point, end_height, cross_fall_time)
+	await fall.finished
+	if end_height <= Heights.GROUND_HEIGHT + 0.5:
+		ball.release_hover()
+		ball.velocity = Vector2.ZERO
+		ball.vel_z = 0.0
+		ball.height = 0.0
+		ball.fx_during_hover = false
+		ball.register_touch(self)
+	m.pass_completed.emit(self, target)
+	return not m.match_over
+
+
 func _use_tactical() -> bool:
+	if _tactical_variant() == TacticalVariant.BOMBER:
+		return await _use_bomber_tact()
 	var m: MatchManager = _get_manager()
 	var ball: Ball = _get_ball()
 	if m == null or ball == null:
 		return false
-
 	var target: Player = await m.pick_ally_for_skill(self, _tactical_range())
 	if target == null:
 		return false   # cancelou: não gasta a ação
+	if _tactical_variant() != TacticalVariant.TACTICAL:
+		return false   # a bola rolou enquanto ele escolhia o alvo
 
-	# A bola pode ter rolado enquanto ele escolhia o alvo
-	if get_kick_type(ball) == KickType.NONE:
-		return false
-
-	var bend: float = _best_curve_side(ball.global_position, target.global_position)
-	await m.run_curved_ground_pass(self, target, ball, tactical_curve, bend, &"tactical", kick_fx)
 	start_cooldown(CD_TACTICAL, tactical_cooldown)
+	if global_position.distance_to(target.global_position) <= tactical_ground_max:
+		# Até 200: passe rasteiro curvo (como sempre foi o Tactical)
+		var bend: float = _best_curve_side(ball.global_position, target.global_position)
+		await m.run_curved_ground_pass(self, target, ball, tactical_curve, bend, &"tactical", kick_fx)
+	else:
+		# Acima disso: cruzamento por cima, que chega ao aliado no chão
+		face_towards(target.global_position - global_position)
+		if not await play_action(&"tactical", ANIM_PASS_HIGH):
+			return true
+		if not await _cross_to(m, ball, target, Heights.GROUND_HEIGHT):
+			return true
+	if not _ball_arrived(ball, target):
+		return true   # interceptado: ninguém recebe a bola
+	# O aliado faz um QTE fácil na hora de receber: passando, ganha +4% no próximo chute
+	if await _easy_qte("Recepção!"):
+		_mark_ally(target, tactical_shot_bonus + _meta_tactical_extra())
 	return true
 
 
@@ -328,7 +580,56 @@ func _best_curve_side(from: Vector2, to: Vector2) -> float:
 	return best_side
 
 
-# ---------- METAVISION ----------
+## Bomber Tact: cruza para o 1º aliado, que salta, domina e desce com a bola; QTE fácil dele; assistência para o 2º
+func _use_bomber_tact() -> bool:
+	var m: MatchManager = _get_manager()
+	var ball: Ball = _get_ball()
+	if m == null or ball == null:
+		return false
+	var first: Player = await m.pick_ally_for_skill(self, bomber_range)
+	if first == null:
+		return false   # cancelou: não gasta a ação
+	var not_first := func(other: Player) -> bool:
+		return other != first and not other.is_down
+	var second: Player = await m.pick_ally_for_skill(self, bomber_range, false, not_first)
+	if second == null or _tactical_variant() != TacticalVariant.BOMBER:
+		return false
+
+	start_cooldown(CD_TACTICAL, tactical_cooldown)
+	face_towards(first.global_position - global_position)
+	if not await play_action(&"bomber_tact", ANIM_PASS_HIGH):
+		return true
+	# A bola chega SUSPENSA no primeiro...
+	if not await _cross_to(m, ball, first, Heights.SUSPENDED_HEIGHT):
+		return true
+	# ...que salta, domina e desce com ela
+	first.height_level = Heights.Level.SUSPENDED
+	var up := create_tween()
+	up.tween_property(first, "height", Heights.SUSPENDED_HEIGHT, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	await up.finished
+	var down := create_tween()
+	down.tween_property(first, "height", Heights.GROUND_HEIGHT, 0.35).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
+	var settle: Tween = ball.hover_to(first.global_position, Heights.GROUND_HEIGHT, 0.35)
+	await down.finished
+	first.land()
+	if settle.is_valid() and settle.is_running():
+		await settle.finished
+	ball.release_hover()
+	ball.velocity = Vector2.ZERO
+	ball.vel_z = 0.0
+	ball.height = 0.0
+	ball.fx_during_hover = false
+	ball.register_touch(first)
+	NikoFX.ping(self, first.global_position, 50.0, 0.45)
+
+	if await _easy_qte("Domínio!"):
+		_mark_ally(first, tactical_shot_bonus + _meta_tactical_extra())
+	_bomber_first = first      # se o primeiro assistir o segundo neste turno, o segundo ganha +5%
+	_bomber_second = second
+	return true
+
+
+# ---------- HABILIDADE 3: DEF METAVISION ----------
 
 func is_metavision_active() -> bool:
 	var m: MatchManager = _get_manager()
@@ -342,46 +643,32 @@ func _use_metavision() -> bool:
 	_metavision_until_round = m.round_number + metavision_rounds
 	start_cooldown(CD_METAVISION, metavision_cooldown, _metavision_until_round + 1)
 	m.secondary_skill_left += metavision_extra_ally_skills
+	NikoFX.ping(self, global_position, 90.0, 0.7)
+	NikoFX.blips(self, _body_point(), 14)
 	queue_redraw()
 	return true
 
 
-## Com a Metavision ativa, o Pular chega ao nível Voando
-func jump() -> void:
-	if not is_metavision_active():
-		await super()
-		return
-	height_level = Heights.Level.FLYING
-	var tw := create_tween()
-	tw.tween_property(self, "height", Heights.FLYING_HEIGHT, jump_rise_time * 1.5) \
-		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	await tw.finished
-
-
-## +5% nos chutes de companheiros que vieram de um passe do Niko: a bola ainda é "dele"
-## (último toque) ou só passou pelo chutador (que a recebeu direto do Niko)
-func shot_bonus_for_ally(shooter: Player, ball: Ball) -> float:
-	if not is_metavision_active() or not _pass_valid or shooter == self or ball == null:
-		return 0.0
-	if ball.last_toucher == self \
-			or (ball.last_toucher == shooter and ball.previous_toucher == self):
-		return metavision_pass_bonus
-	return 0.0
-
-
 # ---------- SISTEMA DE HABILIDADES (menu) ----------
+
+func _tower_name() -> String:
+	match _tower_variant():
+		TowerVariant.BODY_CORE:
+			if is_body_core_active():
+				return "Body Core (ativo)"
+			return "Body Core (usado)" if _core_used else "Body Core"
+		TowerVariant.SAFE_SPOTS:
+			return skill_label("Safe Spots", CD_TOWER)
+	return skill_label("Watchtower", CD_TOWER)
+
 
 func get_skills() -> Array[Dictionary]:
 	var list: Array[Dictionary] = []
-	var tower_name: String
-	if is_tower_active():
-		tower_name = "Body Core (ativo)" if is_body_core_active() else "Body Core"
-	else:
-		tower_name = skill_label("Watchtower", CD_TOWER)
-	list.append({"id": SKILL_TOWER, "name": tower_name})
-	list.append({"id": SKILL_TACTICAL, "name": skill_label("Tactical", CD_TACTICAL)})
-	var meta_name: String = "Metavision (ativa)" if is_metavision_active() \
-		else skill_label("Metavision", CD_METAVISION)
+	list.append({"id": SKILL_TOWER, "name": _tower_name()})
+	var tactical_name: String = "Bomber Tact" if _tactical_variant() == TacticalVariant.BOMBER else "Tactical"
+	list.append({"id": SKILL_TACTICAL, "name": skill_label(tactical_name, CD_TACTICAL)})
+	var meta_name: String = "Def Metavision (ativa)" if is_metavision_active() \
+		else skill_label("Def Metavision", CD_METAVISION)
 	list.append({"id": SKILL_METAVISION, "name": meta_name})
 	return list
 
@@ -391,13 +678,17 @@ func can_use_skill(skill_id: StringName = &"default") -> bool:
 		return false
 	match skill_id:
 		SKILL_TOWER:
-			if is_tower_active():   # variante Body Core
-				return not is_body_core_active() and not _valid_core_targets().is_empty()
-			return not is_on_cooldown(CD_TOWER)
+			match _tower_variant():
+				TowerVariant.BODY_CORE:
+					return not _core_used and not is_body_core_active() \
+						and height_level == Heights.Level.GROUND and not _valid_core_targets().is_empty()
+				TowerVariant.WATCHTOWER:
+					return not is_on_cooldown(CD_TOWER)
+				TowerVariant.SAFE_SPOTS:
+					return not is_on_cooldown(CD_TOWER) and not is_safe_spots_active()
+			return false
 		SKILL_TACTICAL:
-			return not is_on_cooldown(CD_TACTICAL) \
-				and get_kick_type(_get_ball()) != KickType.NONE \
-				and _has_ally_in_tactical_range()
+			return not is_on_cooldown(CD_TACTICAL) and _tactical_variant() != TacticalVariant.NONE
 		SKILL_METAVISION:
 			return not is_metavision_active() and not is_on_cooldown(CD_METAVISION)
 	return false
@@ -406,8 +697,11 @@ func can_use_skill(skill_id: StringName = &"default") -> bool:
 func use_skill(skill_id: StringName = &"default") -> bool:
 	match skill_id:
 		SKILL_TOWER:
-			if is_tower_active():
-				return await _use_body_core()
+			match _tower_variant():
+				TowerVariant.BODY_CORE:
+					return await _use_body_core()
+				TowerVariant.SAFE_SPOTS:
+					return await _use_safe_spots()
 			return await _use_watchtower()
 		SKILL_TACTICAL:
 			return await _use_tactical()
@@ -429,22 +723,40 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 	var text: String = ""
 	match skill_id:
 		SKILL_TOWER:
-			if is_tower_active():
-				title = "Body Core"
-				text = "Niko vai até um inimigo dentro da torre e disputam fisicamente (%d%% de vencer). Ganhando, o inimigo fica sem ações gerais por %d rodadas, ou até Niko se afastar." % [
-					_pct(body_core_win_chance), body_core_rounds]
-			else:
-				title = "Watchtower"
-				text = ("Cria uma torre onde Niko está: dentro do círculo, os inimigos não podem usar habilidades. Dura %d rodadas.\n"
-					+ "Recarga: %d rodadas.") % [tower_rounds, tower_cooldown]
+			match _tower_variant():
+				TowerVariant.BODY_CORE:
+					title = "Body Core"
+					text = ("Niko vai até um inimigo dentro da torre (QTE fácil) e começa a marcá-lo (%d%% de chance). Ganhando, "
+						+ "bloqueia %d ações gerais que você escolher.\nUso único durante a Watchtower.") % [
+						_pct(_core_win_chance()), body_core_blocked_actions]
+				TowerVariant.SAFE_SPOTS:
+					title = "Safe Spots"
+					text = ("QTE fácil e, passando, escolha dois pontos (alcance %d). Eles viram portos seguros de %d de área: aliados "
+						+ "dentro não podem ser derrubados e têm +%d%% nos chutes. Duram %d rodadas.\nRecarga: %d rodadas.") % [
+						int(safe_spot_range), int(_spot_radius()), _pct(_spot_shot_bonus()), safe_spot_rounds, tower_cooldown]
+				_:
+					title = "Watchtower"
+					text = ("QTE fácil e, passando, cria uma torre onde Niko está (alcance %d): dentro do círculo, os inimigos não podem "
+						+ "usar habilidades. Dura %d rodadas ou até Niko sair de perto.\nRecarga: %d rodadas.") % [
+						int(tower_radius), tower_rounds, tower_cooldown]
 		SKILL_TACTICAL:
-			title = "Tactical"
-			text = "Passe rasteiro curvo para um aliado.\nRecarga: %d rodadas." % tactical_cooldown
+			if _tactical_variant() == TacticalVariant.BOMBER:
+				title = "Bomber Tact"
+				text = ("Escolha dois aliados (%d): cruza para o primeiro, que salta, domina e desce com a bola. QTE fácil dele: +%d%% no "
+					+ "próximo chute. Se ele assistir o segundo, o segundo ganha +%d%%.\nRecarga: %d rodadas.") % [
+					int(bomber_range), _pct(tactical_shot_bonus + _meta_tactical_extra()),
+					_pct(bomber_assist_bonus + _meta_tactical_extra()), tactical_cooldown]
+			else:
+				title = "Tactical"
+				text = ("Aliado a até %d: passe rasteiro curvo. Mais longe (até %d): cruzamento que chega nele no chão. Ele faz um QTE "
+					+ "fácil e, passando, ganha +%d%% no próximo chute.\nRecarga: %d rodadas.") % [
+					int(tactical_ground_max), int(tactical_range), _pct(tactical_shot_bonus + _meta_tactical_extra()), tactical_cooldown]
 		SKILL_METAVISION:
-			title = "Metavision"
-			text = ("Por %d rodadas: +%d ação de habilidade extra para os aliados, Pular mais alto e +%d%% de chance de gol nos chutes depois de um passe do Niko.\n"
-				+ "Recarga: %d rodadas.") % [
-				metavision_rounds, metavision_extra_ally_skills, _pct(metavision_pass_bonus), metavision_cooldown]
+			title = "Def Metavision"
+			text = ("Por %d rodadas: +%d ação de habilidade extra para os aliados, +%d%% no Body Core, +%d de área e +%d%% nas Safe Spots e "
+				+ "+%d%% no Tactical e no Bomber Tact.\nRecarga: %d rodadas após o fim.") % [
+				metavision_rounds, metavision_extra_ally_skills, _pct(meta_body_core_bonus), int(meta_spot_radius_bonus),
+				_pct(meta_spot_shot_bonus), _pct(meta_tactical_bonus), metavision_cooldown]
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D
@@ -457,9 +769,13 @@ func reset_for_new_match() -> void:
 	super()
 	_end_tower()
 	_tower_until_round = -1
+	_core_used = false
 	_clear_body_core()
+	_end_spots()
+	_clear_marks()
+	_bomber_first = null
+	_bomber_second = null
 	_metavision_until_round = -1
-	_pass_valid = false
 	_popup_left = 0.0
 	queue_redraw()
 
@@ -472,26 +788,33 @@ func _process(delta: float) -> void:
 	# Body Core no instante em que ele se afasta do alvo (e não voltam se ele retornar)
 	is_tower_active()
 	var core: bool = is_body_core_active()
+	# Radar pequeno saindo do Niko durante a Def Metavision
+	var meta: bool = is_metavision_active()
+	if _radar != null and _radar.active != meta:
+		_radar.active = meta
+	# A Def Metavision muda a área das Safe Spots na hora (+100)
+	if meta != _meta_was_active:
+		_meta_was_active = meta
+		for fx: NikoFX.Tower in _spot_fx:
+			if fx != null and is_instance_valid(fx):
+				fx.set_radius(_spot_radius())
+	# A bússola some do aliado assim que ele gasta o bônus (chutou)
+	for key in _marks.keys():
+		var ally: Player = key as Player if is_instance_valid(key) else null
+		if ally == null or ally.next_shot_bonus <= 0.0:
+			var fx_mark: Variant = _marks[key]
+			if fx_mark != null and is_instance_valid(fx_mark):
+				fx_mark.release()
+			_marks.erase(key)
 	if _popup_left > 0.0:
 		_popup_left -= delta
 	if core or _popup_left > 0.0:
 		queue_redraw()
 
 
-func _show_popup(text: String, color: Color) -> void:
-	_popup_text = text
-	_popup_color = color
-	_popup_left = 1.4
-	queue_redraw()
-
-
 func _draw() -> void:
 	super()
 	var center := Vector2(0.0, -height)
-
-	# Aura verde enquanto a Metavision está valendo
-	if is_metavision_active():
-		draw_arc(center, placeholder_radius + 6.0, 0.0, TAU, 40, Color(0.35, 1.0, 0.6, 0.9), 2.0)
 
 	# Body Core ativo: linha até o alvo + anel tracejado verde nele
 	if _core_target != null and is_instance_valid(_core_target):
@@ -513,75 +836,98 @@ func _draw() -> void:
 
 
 # ====================================================================
-# Torre de observação (círculo de alcance + desenho da torre)
+# Escolha das ações gerais bloqueadas pelo Body Core
 # ====================================================================
 
-## Círculo verde translúcido no chão (acima da grama, abaixo de jogadores e bola)
-class _TowerZone extends Node2D:
-	var radius: float = 400.0
-	var color: Color = Color(0.3, 1.0, 0.5)
-	var _time: float = 0.0
-	var _body: _TowerBody
-	var _fade: Tween
+## Janelinha verde: o jogador marca N ações gerais e confirma. Devolve a lista (MatchManager.GeneralAction como int).
+class _ActionPicker extends CanvasLayer:
+	signal done(chosen: Array)
+
+	var options: Array[int] = []
+	var need: int = 2
+	var _selected: Array[int] = []
+	var _buttons: Dictionary = {}
+	var _confirm: Button
+	var _hint: Label
+
+	static func pick(host: Node, option_list: Array[int], count: int) -> Array:
+		var picker := _ActionPicker.new()
+		picker.options = option_list
+		picker.need = count
+		var scene: Node = host.get_tree().current_scene
+		(scene if scene != null else host).add_child(picker)
+		var chosen: Array = await picker.done
+		picker.queue_free()
+		return chosen
 
 	func _ready() -> void:
-		z_as_relative = false
-		z_index = -4000   # o campo fica em -4096
-		modulate.a = 0.0
-		_body = _TowerBody.new()
-		_body.color = color
-		add_child(_body)
-		_body.z_as_relative = false
+		layer = 100
+		process_mode = Node.PROCESS_MODE_ALWAYS
+		var root := Control.new()
+		root.set_anchors_preset(Control.PRESET_FULL_RECT)
+		add_child(root)
+		var dim := ColorRect.new()
+		dim.color = Color(0.0, 0.0, 0.0, 0.55)
+		dim.set_anchors_preset(Control.PRESET_FULL_RECT)
+		root.add_child(dim)   # bloqueia cliques no jogo por trás
+		var center := CenterContainer.new()
+		center.set_anchors_preset(Control.PRESET_FULL_RECT)
+		root.add_child(center)
 
-	func appear() -> void:
-		_body.z_index = int(global_position.y)   # mesma regra de profundidade dos jogadores (a posição já foi definida)
-		_kill_fade()
-		_fade = create_tween()
-		_fade.tween_property(self, "modulate:a", 1.0, 0.4)
+		var panel := PanelContainer.new()
+		var style := StyleBoxFlat.new()
+		style.bg_color = Color(0.04, 0.1, 0.07, 0.96)
+		style.border_color = Color(NikoFX.GREEN, 0.9)
+		style.set_border_width_all(2)
+		style.set_corner_radius_all(14)
+		style.set_content_margin_all(22)
+		panel.add_theme_stylebox_override("panel", style)
+		center.add_child(panel)
 
-	func disappear() -> void:
-		_kill_fade()
-		_fade = create_tween()
-		_fade.tween_property(self, "modulate:a", 0.0, 0.4)
-		_fade.tween_callback(queue_free)
+		var box := VBoxContainer.new()
+		box.add_theme_constant_override("separation", 14)
+		panel.add_child(box)
+		var title := Label.new()
+		title.text = "BODY CORE"
+		title.add_theme_font_size_override("font_size", 26)
+		title.add_theme_color_override("font_color", NikoFX.GREEN)
+		title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		box.add_child(title)
+		_hint = Label.new()
+		_hint.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_hint.add_theme_color_override("font_color", NikoFX.LIGHT_GREEN)
+		box.add_child(_hint)
 
-	func _kill_fade() -> void:
-		if _fade and _fade.is_valid():
-			_fade.kill()
+		var row := HBoxContainer.new()
+		row.add_theme_constant_override("separation", 10)
+		row.alignment = BoxContainer.ALIGNMENT_CENTER
+		box.add_child(row)
+		for action in options:
+			var b := Button.new()
+			b.text = MatchManager.GENERAL_ACTION_NAMES[action]
+			b.toggle_mode = true
+			b.custom_minimum_size = Vector2(110.0, 48.0)
+			b.toggled.connect(_on_toggled.bind(action))
+			row.add_child(b)
+			_buttons[action] = b
 
-	func _process(delta: float) -> void:
-		_time += delta
-		queue_redraw()
+		_confirm = Button.new()
+		_confirm.text = "Confirmar"
+		_confirm.custom_minimum_size = Vector2(0.0, 44.0)
+		_confirm.pressed.connect(func() -> void: done.emit(_selected.duplicate()))
+		box.add_child(_confirm)
+		_refresh()
 
-	func _draw() -> void:
-		draw_circle(Vector2.ZERO, radius, Color(color, 0.12))
-		draw_arc(Vector2.ZERO, radius, 0.0, TAU, 128, Color(color, 0.7), 3.0)
-		# Anel interno que pulsa devagar (a torre "vigiando")
-		var pulse: float = fmod(_time * 0.35, 1.0)
-		draw_arc(Vector2.ZERO, radius * pulse, 0.0, TAU, 96, Color(color, 0.35 * (1.0 - pulse)), 2.0)
+	func _on_toggled(on: bool, action: int) -> void:
+		if on:
+			_selected.append(action)
+			while _selected.size() > need:   # passou do limite: solta a escolha mais antiga
+				var oldest: int = _selected.pop_front()
+				(_buttons[oldest] as Button).set_pressed_no_signal(false)
+		else:
+			_selected.erase(action)
+		_refresh()
 
-
-## A torre em si, "em pé" (sobe na tela, igual às traves do campo)
-class _TowerBody extends Node2D:
-	var color: Color = Color(0.3, 1.0, 0.5)
-
-	func _draw() -> void:
-		var fill := Color(color, 0.5)
-		var edge := Color(color, 0.95)
-		var h: float = 90.0
-		# Sombra no chão
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.4))
-		draw_circle(Vector2.ZERO, 28.0, Color(0, 0, 0, 0.25))
-		draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-		# Pernas e travessas em X
-		draw_line(Vector2(-22, 0), Vector2(-14, -h), edge, 3.0)
-		draw_line(Vector2(22, 0), Vector2(14, -h), edge, 3.0)
-		draw_line(Vector2(-22, 0), Vector2(14, -h), Color(edge, 0.5), 2.0)
-		draw_line(Vector2(22, 0), Vector2(-14, -h), Color(edge, 0.5), 2.0)
-		# Plataforma, cabine, telhado e a "janela"
-		draw_rect(Rect2(-20, -h - 4, 40, 6), fill)
-		draw_rect(Rect2(-16, -h - 30, 32, 26), fill)
-		draw_rect(Rect2(-16, -h - 30, 32, 26), edge, false, 2.0)
-		draw_colored_polygon(PackedVector2Array([
-			Vector2(-22, -h - 30), Vector2(22, -h - 30), Vector2(0, -h - 50)]), Color(edge, 0.7))
-		draw_circle(Vector2(0, -h - 17), 5.0, Color(1, 1, 1, 0.75))
+	func _refresh() -> void:
+		_hint.text = "Escolha %d ações gerais para bloquear (%d/%d)" % [need, _selected.size(), need]
+		_confirm.disabled = _selected.size() != need

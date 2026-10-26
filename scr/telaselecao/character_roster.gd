@@ -25,7 +25,7 @@ const CHARACTERS: Array[Dictionary] = [
 	{"id": "karasu", "name": "Karasu", "role": "meio", "scene": "res://cena/perso/karasu.tscn"},
 	{"id": "kiyora", "name": "Kiyora", "role": "meio", "scene": "res://cena/perso/kiyora.tscn"},
 	{"id": "kunigami", "name": "Kunigami", "role": "atacante", "scene": "res://cena/perso/kunigami.tscn"},
-	{"id": "kurona", "name": "Kurona", "role": "meio", "scene": "res://cena/perso/kurona.tscn"},
+	{"id": "kurona", "name": "Kurona", "role": "lateral", "scene": "res://cena/perso/kurona.tscn"},
 	{"id": "loki", "name": "Loki", "role": "lateral", "scene": "res://cena/perso/loki.tscn"},
 	{"id": "lorenzo", "name": "Lorenzo", "role": "zagueiro", "scene": "res://cena/perso/lorenzo.tscn"},
 	{"id": "nagi", "name": "Nagi", "role": "atacante", "scene": "res://cena/perso/nagi.tscn"},

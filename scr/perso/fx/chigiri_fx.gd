@@ -1,11 +1,14 @@
 class_name ChigiriFX
 extends RefCounted
 ## Efeitos visuais do Chigiri, no estilo do hiori_fx.gd / kurona_fx.gd. Tudo por código (nenhuma imagem).
-## VERMELHO/ROSA com detalhes de VELOCIDADE (riscos, imagens residuais, ondas de choque), principalmente nos chutes:
-##  - Panther:  a pantera vermelha translúcida que SEGUE o Chigiri (corre atrás quando ele anda, senta e balança a cauda
-##              quando ele para) e DÁ O BOTE na bola nos chutes, arranhando-a com garras;
+## VERMELHO vivo (com rosa-quente só nos brilhos) e detalhes de VELOCIDADE (riscos, imagens residuais, ondas de choque):
+##  - Wind:     o VENTO vermelho que segue o Chigiri quando ele CORRE ou USA uma habilidade (fita de velocidade + riscos),
+##              bem leve: poucas partículas e nenhum desenho redesenhado a cada quadro;
+##  - ClawMark: a marca de 3 garras que ele deixa no chão onde PAROU, ao fim da corrida (ou de um avanço);
+##  - Dots:     pontilhado de retícula vermelho-escuro que se abre do impacto (como na arte de referência);
+##  - Flare:    clarão vermelho no impacto dos chutes e passes;
 ##  - Dash:     a faixa de velocidade que o avanço deixa (rastro afunilado, linhas paralelas e imagens residuais);
-##  - Claws:    três arranhões diagonais (a garra da pantera) na hora do chute;
+##  - Claws:    três arranhões diagonais (garras) na hora do chute;
 ##  - Shock:    onda de choque achatada no chão;
 ##  - Zone:     a GOLDEN ZONE: o ÚNICO lugar com dourado. Brilho (bloom) bem marcante: camadas de luz aditiva, raios
 ##              girando, anéis, brilhos viajando e faíscas douradas subindo.
@@ -15,10 +18,11 @@ extends RefCounted
 ## (Glow > Enabled, HDR Threshold 1.0, Background = Canvas). Sem isso o brilho continua aparecendo: as camadas aditivas
 ## de luz são o bloom "falso" e funcionam em qualquer configuração.
 
-const RED := Color(0.95, 0.16, 0.22)
-const RED_DEEP := Color(0.62, 0.06, 0.12)
-const PINK := Color(1.0, 0.45, 0.62)
-const PINK_HOT := Color(1.0, 0.78, 0.84)
+const RED := Color(0.93, 0.07, 0.14)
+const RED_BRIGHT := Color(1.0, 0.22, 0.27)
+const RED_DEEP := Color(0.5, 0.03, 0.09)
+const PINK := Color(1.0, 0.4, 0.5)
+const PINK_HOT := Color(1.0, 0.8, 0.85)
 
 # O dourado só existe na Golden Zone
 const GOLD := Color(1.0, 0.78, 0.2, 0.745)
@@ -31,11 +35,15 @@ const _KEY_SOFT := &"chigiri_soft_tex"
 const _KEY_PICK := &"chigiri_pick"
 const _KEY_FADE := &"chigiri_fade"
 const _KEY_ADD := &"chigiri_additive"
+const _KEY_DOTS := &"chigiri_dots_pick"
 
 ## Acima de tudo (jogadores e bola usam z_index = y como profundidade)
 const FX_Z: int = 3000
 ## Camada no chão (rastro de velocidade e a Golden Zone): translúcida por cima do campo
 const GROUND_Z: int = 2900
+## Camada "embaixo de tudo": acima da grama e das linhas (o Field fica em -4096), mas ABAIXO de todos os jogadores e da bola
+## (eles usam z_index = y, de uns -700 a +700). Usada pelo rastro de velocidade (Dash) e pela marca de garras.
+const FLOOR_Z: int = -4000
 
 
 # ---------- RECURSOS COMPARTILHADOS ----------
@@ -93,14 +101,14 @@ static func _additive() -> CanvasItemMaterial:
 	return m
 
 
-## Cada partícula nasce vermelha, rosa ou rosa-quente
+## Cada partícula nasce vermelha (a maioria), vermelho-vivo ou, de vez em quando, rosa-quente (o brilho)
 static func _pick() -> Gradient:
 	if Engine.has_meta(_KEY_PICK):
 		return Engine.get_meta(_KEY_PICK) as Gradient
 	var g := Gradient.new()
 	g.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CONSTANT
-	g.offsets = PackedFloat32Array([0.0, 0.4, 0.75])
-	g.colors = PackedColorArray([RED, PINK, PINK_HOT])
+	g.offsets = PackedFloat32Array([0.0, 0.3, 0.6, 0.8, 0.95])
+	g.colors = PackedColorArray([RED, RED_BRIGHT, RED, RED_DEEP, PINK_HOT])
 	Engine.set_meta(_KEY_PICK, g)
 	return g
 
@@ -160,12 +168,13 @@ static func _add(from: Node, node: Node) -> void:
 # ---------- EFEITOS ----------
 
 ## Riscos de velocidade saindo de "pos" na direção "dir" (alinhados com o movimento)
-static func streaks(from: Node, pos: Vector2, dir: Vector2, amount: int = 12, strong: bool = false) -> void:
+static func streaks(from: Node, pos: Vector2, dir: Vector2, amount: int = 12, strong: bool = false, z: int = FX_Z) -> void:
 	if not _ok(from):
 		return
 	var p: CPUParticles2D = _particles(streak_texture(), amount, 0.32 if strong else 0.25,
 		1000.0 if strong else 700.0, 0.7 if strong else 0.5, 1.3 if strong else 0.9)
 	p.particle_flag_align_y = true
+	p.z_index = z
 	p.direction = dir.normalized()
 	p.spread = 9.0
 	p.damping_min = 600.0
@@ -185,24 +194,45 @@ static func sparks(from: Node, pos: Vector2, amount: int = 10) -> void:
 	_launch(from, p, pos)
 
 
-## O estouro de um chute: riscos para frente, faíscas, ondas de choque e as garras da pantera
+## O estouro de um chute: riscos para frente, faíscas, ondas de choque e as garras
 static func kick_burst(from: Node, pos: Vector2, dir: Vector2) -> void:
 	if not _ok(from):
 		return
-	streaks(from, pos, dir, 16, true)
-	streaks(from, pos, -dir, 8, false)
-	sparks(from, pos, 12)
-	shock(from, pos, 70.0)
+	flare(from, pos, 130.0)
+	dots(from, pos, 26)
+	streaks(from, pos, dir, 26, true)
+	streaks(from, pos, -dir, 12, false)
+	sparks(from, pos, 18)
+	shock(from, pos, 90.0)
 	claws(from, pos, dir)
+
+
+## Pontilhado de retícula (bolinhas vermelho-escuras) que se abre do impacto, como nas artes do Chigiri
+static func dots(from: Node, pos: Vector2, amount: int = 22) -> void:
+	if not _ok(from):
+		return
+	var p: CPUParticles2D = _particles(soft_texture(), amount, 0.55, 280.0, 0.04, 0.13)
+	if Engine.has_meta(_KEY_DOTS):
+		p.color_initial_ramp = Engine.get_meta(_KEY_DOTS) as Gradient
+	else:
+		var g := Gradient.new()
+		g.interpolation_mode = Gradient.GRADIENT_INTERPOLATE_CONSTANT
+		g.offsets = PackedFloat32Array([0.0, 0.4, 0.8])
+		g.colors = PackedColorArray([RED_DEEP, RED, RED_BRIGHT])
+		Engine.set_meta(_KEY_DOTS, g)
+		p.color_initial_ramp = g
+	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = 10.0
+	_launch(from, p, pos)
 
 
 ## Faíscas que acompanham a bola por "seconds" segundos (filhas do sprite dela: seguem a altura)
 static func ball_trail(ball: Ball, seconds: float = 0.8) -> void:
 	if ball == null or not ball.is_inside_tree():
 		return
-	var p: CPUParticles2D = _particles(spark_texture(), 12, 0.4, 40.0, 0.4, 0.8)
+	var p: CPUParticles2D = _particles(spark_texture(), 18, 0.5, 50.0, 0.5, 1.0)
 	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
-	p.emission_sphere_radius = 6.0
+	p.emission_sphere_radius = 7.0
 	p.explosiveness = 0.0
 	var holder: Node = ball.sprite if ball.sprite != null else ball
 	holder.add_child(p)
@@ -216,6 +246,15 @@ static func ball_trail(ball: Ball, seconds: float = 0.8) -> void:
 			p.queue_free())
 
 
+## Clarão vermelho do impacto: luz suave aditiva que cresce e some (o "estouro" do chute / passe)
+static func flare(from: Node, pos: Vector2, radius: float = 130.0) -> void:
+	if not _ok(from):
+		return
+	var f := Flare.new(radius)
+	_add(from, f)
+	f.global_position = pos
+
+
 ## Onda de choque achatada no chão
 static func shock(from: Node, pos: Vector2, radius: float = 70.0) -> void:
 	if not _ok(from):
@@ -225,7 +264,7 @@ static func shock(from: Node, pos: Vector2, radius: float = 70.0) -> void:
 	s.global_position = pos
 
 
-## Três arranhões diagonais (a garra da pantera) cruzando "pos" na direção "dir"
+## Três arranhões diagonais (garras) cruzando "pos" na direção "dir"
 static func claws(from: Node, pos: Vector2, dir: Vector2) -> void:
 	if not _ok(from):
 		return
@@ -243,13 +282,27 @@ static func dash(from: Node, radius: float = 16.0) -> Dash:
 	return d
 
 
-## A pantera que segue o "owner_player"
-static func panther(owner_player: Player) -> Panther:
+## O vento vermelho que segue o "owner_player" (corrida e habilidades). Ao parar, ele deixa a marca de garras.
+static func wind(owner_player: Player) -> Wind:
 	if not _ok(owner_player):
 		return null
-	var p := Panther.new(owner_player)
-	_add(owner_player, p)
-	return p
+	var w := Wind.new(owner_player)
+	var scene: Node = owner_player.get_tree().current_scene
+	(scene if scene != null else owner_player).add_child.call_deferred(w)
+	return w
+
+
+## Marca de 3 garras no chão em "pos", na direção "dir". Some sozinha depois de "seconds"; no máximo "max_marks" ao mesmo tempo
+static func claw_mark(from: Node, pos: Vector2, dir: Vector2, seconds: float = 6.0, max_marks: int = 8) -> void:
+	if not _ok(from):
+		return
+	var marks: Array[Node] = from.get_tree().get_nodes_in_group(&"chigiri_claw_marks")
+	while marks.size() >= maxi(max_marks, 1):
+		marks[0].queue_free()   # a mais antiga some para dar lugar à nova
+		marks.remove_at(0)
+	var m := ClawMark.new(dir, seconds)
+	_add(from, m)
+	m.global_position = pos
 
 
 ## A Golden Zone (o único dourado do Chigiri)
@@ -315,11 +368,33 @@ class Shock extends Node2D:
 	func _draw() -> void:
 		var u: float = _t / 0.4
 		draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.5))
-		draw_arc(Vector2.ZERO, radius * (0.2 + 0.8 * u), 0.0, TAU, 40, Color(ChigiriFX.PINK, 0.8 * (1.0 - u)), 4.0 * (1.0 - u) + 1.0, true)
+		draw_arc(Vector2.ZERO, radius * (0.2 + 0.8 * u), 0.0, TAU, 40, Color(ChigiriFX.RED_BRIGHT, 0.9 * (1.0 - u)), 4.0 * (1.0 - u) + 1.0, true)
 		draw_arc(Vector2.ZERO, radius * (0.1 + 0.6 * u), 0.0, TAU, 32, Color(ChigiriFX.RED, 0.6 * (1.0 - u)), 2.0, true)
 		for i in 8:   # marquinhas de velocidade saindo em raios
 			var d: Vector2 = Vector2.from_angle(TAU * float(i) / 8.0)
-			draw_line(d * radius * (0.35 + 0.65 * u), d * radius * (0.5 + 0.8 * u), Color(ChigiriFX.PINK_HOT, 0.7 * (1.0 - u)), 2.0)
+			draw_line(d * radius * (0.35 + 0.65 * u), d * radius * (0.5 + 0.8 * u), Color(ChigiriFX.RED_BRIGHT, 0.8 * (1.0 - u)), 2.0)
+
+
+# ---------- CLARÃO DO IMPACTO ----------
+
+class Flare extends Sprite2D:
+	var _radius: float
+
+	func _init(radius: float) -> void:
+		_radius = radius
+		texture = ChigiriFX.soft_texture()
+		material = ChigiriFX._additive()
+		modulate = Color(ChigiriFX.RED, 0.95)
+		z_as_relative = false
+		z_index = ChigiriFX.FX_Z
+		scale = Vector2.ONE * _radius / 128.0 * 0.5
+
+	func _ready() -> void:
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(self, "scale", Vector2.ONE * _radius / 128.0 * 2.0, 0.3).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+		tw.tween_property(self, "modulate:a", 0.0, 0.3)
+		tw.chain().tween_callback(queue_free)
 
 
 # ---------- ARRANHÕES ----------
@@ -352,8 +427,8 @@ class Claws extends Node2D:
 			var b: Vector2 = off + along * (30.0 * grow * 2.0 - 30.0)
 			var width: float = 7.0 * (1.0 - float(absi(i - 1)) * 0.25)
 			draw_polygon(PackedVector2Array([a, a.lerp(b, 0.5) + across * width * 0.5, b, a.lerp(b, 0.5) - across * width * 0.5]),
-				PackedColorArray([Color(ChigiriFX.RED, 0.9 * fade), Color(ChigiriFX.PINK, 0.95 * fade),
-					Color(ChigiriFX.PINK_HOT, 0.9 * fade), Color(ChigiriFX.PINK, 0.95 * fade)]))
+				PackedColorArray([Color(ChigiriFX.RED, 0.95 * fade), Color(ChigiriFX.RED_BRIGHT, 0.95 * fade),
+					Color(1.0, 0.45, 0.5, 0.9 * fade), Color(ChigiriFX.RED_BRIGHT, 0.95 * fade)]))
 
 
 # ---------- FAIXA DE VELOCIDADE DO AVANÇO ----------
@@ -368,7 +443,7 @@ class Dash extends Node2D:
 		radius = r
 		top_level = true
 		z_as_relative = false
-		z_index = ChigiriFX.GROUND_Z
+		z_index = ChigiriFX.FLOOR_Z
 
 	func add_point(gp: Vector2) -> void:
 		if points.is_empty() or points[points.size() - 1].distance_to(gp) >= 4.0:
@@ -395,143 +470,207 @@ class Dash extends Node2D:
 		for i in range(1, n):
 			var t: float = float(i) / float(n)
 			var w: float = lerpf(2.0, radius, t)
-			draw_line(points[i - 1], points[i], Color(ChigiriFX.RED.lerp(ChigiriFX.PINK, t), 0.55 * t * l), w)
+			draw_line(points[i - 1], points[i], Color(ChigiriFX.RED_DEEP.lerp(ChigiriFX.RED_BRIGHT, t), 0.7 * t * l), w)
 		# Linhas de velocidade paralelas, mais curtas
 		var dir: Vector2 = (points[n - 1] - points[maxi(n - 4, 0)]).normalized()
 		var side: Vector2 = dir.orthogonal()
 		for k in 2:
 			var off: Vector2 = side * (radius * 0.9) * (1.0 if k == 0 else -1.0)
 			var from_i: int = int(float(n) * 0.35)
-			draw_line(points[from_i] + off, points[n - 1] + off * 0.7, Color(ChigiriFX.PINK_HOT, 0.45 * l), 1.5)
+			draw_line(points[from_i] + off, points[n - 1] + off * 0.7, Color(ChigiriFX.RED_BRIGHT, 0.55 * l), 1.5)
 		# Imagens residuais (vultos que ficam para trás)
 		for i in range(0, n, 7):
 			var t2: float = float(i) / float(n)
 			draw_circle(points[i], radius * (0.7 + 0.3 * t2), Color(ChigiriFX.RED, 0.16 * t2 * l))
 
 
-# ---------- A PANTERA ----------
+# ---------- O VENTO VERMELHO ----------
 
-class Panther extends Node2D:
+## Vento de velocidade que segue o dono. LEVE de propósito: 3 fitas (Line2D) + 1 sistema de 16 riscos, sem _draw.
+## Aparece sozinho quando o dono está CORRENDO, e também durante as habilidades (hold(true) no começo, hold(false) no fim)
+## desde que ele esteja de fato se movendo. Quando o movimento ACABA (e andou o bastante) deixa a marca de garras.
+class Wind extends Node2D:
+	const MAX_POINTS: int = 14
+	const MIN_MARK_TRAVEL: float = 45.0     # andou menos que isso: sem marca
+	const MOVING_SPEED: float = 90.0        # px/s para contar como "em movimento"
+	const STOPPED_SPEED: float = 40.0       # abaixo disso (ou sem correr/habilidade) = parou
+
 	var owner_player: Player
-	var unit: float = 20.0           # tamanho (1 unidade do desenho)
-	var _t: float = 0.0
-	var _phase: float = 0.0
-	var _alpha: float = 0.0
-	var _speed: float = 0.0
-	var _face: float = 1.0
+	## Marca de garras ao parar (ligue/desligue)
+	var mark_on_stop: bool = true
+	var mark_seconds: float = 6.0
+	var max_marks: int = 8
+
+	var _trail: Array[Vector2] = []         # posições globais recentes (a mais antiga primeiro)
+	var _lines: Array[Line2D] = []
+	var _streaks: CPUParticles2D
 	var _prev: Vector2 = Vector2.ZERO
-	var _pounce_t: float = 1.0       # >= 1 = sem bote
-	var _pounce_from: Vector2 = Vector2.ZERO
-	var _pounce_to: Vector2 = Vector2.ZERO
+	var _speed: float = 0.0
+	var _dir: Vector2 = Vector2.RIGHT
+	var _hold: int = 0                      # habilidades em andamento
+	var _moving: bool = false
+	var _travel: float = 0.0                # quanto andou neste movimento
 
 	func _init(p: Player) -> void:
 		owner_player = p
-		top_level = true
+		_prev = p.global_position
+		top_level = true                    # os pontos são globais: este nó fica sempre na origem
 		z_as_relative = false
+		z_index = p.z_index - 1             # logo abaixo do Chigiri (veja _physics_process)
+		_build()
 
-	func _ready() -> void:
-		global_position = _home()
-		_prev = global_position
+	func _build() -> void:
+		# Fita: some na ponta de trás e engrossa perto de quem corre
+		var grad := Gradient.new()
+		grad.offsets = PackedFloat32Array([0.0, 1.0])
+		grad.colors = PackedColorArray([Color(ChigiriFX.RED_DEEP, 0.0), Color(ChigiriFX.RED_BRIGHT, 0.8)])
+		var taper := Curve.new()
+		taper.add_point(Vector2(0.0, 0.0))
+		taper.add_point(Vector2(1.0, 1.0))
+		for width in [8.0, 3.5, 3.5]:
+			var line := Line2D.new()
+			line.width = width
+			line.width_curve = taper
+			line.gradient = grad
+			line.begin_cap_mode = Line2D.LINE_CAP_ROUND
+			line.end_cap_mode = Line2D.LINE_CAP_ROUND
+			add_child(line)
+			_lines.append(line)
+		# Riscos de vento saindo para trás
+		_streaks = ChigiriFX._particles(ChigiriFX.streak_texture(), 16, 0.3, 520.0, 0.5, 1.0)
+		_streaks.particle_flag_align_y = true
+		_streaks.spread = 14.0
+		_streaks.explosiveness = 0.0
+		_streaks.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+		_streaks.emission_sphere_radius = owner_player.placeholder_radius * 0.9
+		_streaks.emitting = false
+		_streaks.z_as_relative = true      # herda a camada do vento (embaixo do Chigiri), não a de cima de tudo
+		_streaks.z_index = 0
+		add_child(_streaks)
 
-	## Onde ela fica quando não está fazendo nada: atrás do Chigiri
-	func _home() -> Vector2:
-		return owner_player.global_position + Vector2(-owner_player.facing * (owner_player.placeholder_radius + 38.0), 8.0)
+	## Habilidade começou (true) / acabou (false). O vento só aparece se ele se mover; sem se mover dá só um sopro.
+	func hold(on: bool) -> void:
+		if on:
+			_hold += 1
+			if _hold == 1 and is_instance_valid(owner_player) and owner_player.is_inside_tree():
+				ChigiriFX.streaks(owner_player, owner_player.global_position, Vector2(-owner_player.facing, 0.0), 10, false, owner_player.z_index - 1)
+		else:
+			_hold = maxi(_hold - 1, 0)
 
-	## Salta até "to" (a bola), arranha e volta para o Chigiri
-	func pounce(to: Vector2) -> void:
-		_pounce_t = 0.0
-		_pounce_from = global_position
-		_pounce_to = to
-
-	func _process(delta: float) -> void:
+	func _physics_process(delta: float) -> void:
 		if not is_instance_valid(owner_player):
 			queue_free()
 			return
-		_t += delta
-		var target: Vector2 = _home()
-		var pos: Vector2 = global_position
-		if _pounce_t < 1.0:
-			_pounce_t += delta / 0.5
-			var u: float = clampf(_pounce_t, 0.0, 1.0)
-			if u < 0.5:
-				pos = _pounce_from.lerp(_pounce_to, 1.0 - pow(1.0 - u * 2.0, 3.0))
-			else:
-				pos = _pounce_to.lerp(target, 1.0 - pow(1.0 - (u - 0.5) * 2.0, 2.0))
-		else:
-			pos += (target - pos) * (1.0 - exp(-7.0 * delta))
-		global_position = pos
-		_speed = lerpf(_speed, pos.distance_to(_prev) / maxf(delta, 0.001), 1.0 - exp(-10.0 * delta))
-		if _speed > 40.0 and absf(pos.x - _prev.x) > 0.2:
-			_face = signf(pos.x - _prev.x)
-		else:
-			_face = owner_player.facing
+		if not owner_player.is_inside_tree():
+			return
+		global_position = Vector2.ZERO
+		z_index = owner_player.z_index - 1   # a profundidade dele muda com o y: o vento acompanha, sempre embaixo
+		var pos: Vector2 = owner_player.global_position
+		var step: float = pos.distance_to(_prev)
+		if step > 120.0:   # teletransporte (reposicionamento): não vira vento nem marca
+			_trail.clear()
+			_moving = false
+			_travel = 0.0
+			_speed = 0.0
+			_prev = pos
+			return
+		_speed = lerpf(_speed, step / maxf(delta, 0.001), 1.0 - exp(-14.0 * delta))
+		var active: bool = owner_player.state == Player.State.RUNNING or _hold > 0
+
+		if active and _speed > MOVING_SPEED:
+			_moving = true
+			_travel += step
+			if step > 0.01:
+				_dir = (pos - _prev) / step
+		elif _moving and (not active or _speed < STOPPED_SPEED):
+			_stop(pos)
+
+		if _moving:
+			_trail.append(pos)
+			if _trail.size() > MAX_POINTS:
+				_trail.remove_at(0)
+		elif not _trail.is_empty():
+			_trail.remove_at(0)   # o vento recolhe em ~0,2 s
+		_update_lines()
+
+		_streaks.emitting = _moving
+		if _moving:
+			_streaks.position = pos
+			_streaks.direction = -_dir
 		_prev = pos
-		z_index = int(owner_player.global_position.y) - 1
-		_phase += delta * (4.0 + _speed * 0.03)
-		_alpha = move_toward(_alpha, 1.0, delta * 2.0)
-		queue_redraw()
+
+	## Terminou o movimento: deixa a marca de garras onde ele parou
+	func _stop(pos: Vector2) -> void:
+		_moving = false
+		if mark_on_stop and _travel >= MIN_MARK_TRAVEL:
+			ChigiriFX.claw_mark(self, pos, _dir, mark_seconds, max_marks)
+		_travel = 0.0
+
+	## Fita central + duas laterais paralelas, seguindo a trilha
+	func _update_lines() -> void:
+		var n: int = _trail.size()
+		var r: float = owner_player.placeholder_radius
+		for k in _lines.size():
+			var line: Line2D = _lines[k]
+			if n < 2:
+				if line.get_point_count() > 0:
+					line.clear_points()
+				continue
+			var side: float = float([0.0, 0.7, -0.7][k]) * r
+			var pts := PackedVector2Array()
+			pts.resize(n)
+			for i in n:
+				var span: Vector2 = _trail[mini(i + 1, n - 1)] - _trail[maxi(i - 1, 0)]
+				var perp: Vector2 = span.orthogonal().normalized() if span.length() > 0.01 else Vector2.ZERO
+				pts[i] = _trail[i] + perp * side
+			line.points = pts
+
+
+# ---------- MARCA DE GARRAS NO CHÃO ----------
+
+## Três arranhões diagonais no chão. Desenha UMA vez (sem _draw por quadro) e só mexe na opacidade para sumir.
+class ClawMark extends Node2D:
+	var dir: Vector2 = Vector2.RIGHT
+	var life: float = 6.0
+
+	func _init(d: Vector2, seconds: float) -> void:
+		dir = d.normalized() if d.length() > 0.01 else Vector2.RIGHT
+		life = maxf(seconds, 1.0)
+		z_as_relative = false
+		z_index = ChigiriFX.FLOOR_Z   # no chão: todo jogador e a bola passam por cima
+		add_to_group(&"chigiri_claw_marks")
+
+	func _ready() -> void:
+		modulate.a = 0.0
+		scale = Vector2(1.4, 1.4)
+		var tw := create_tween()
+		tw.tween_property(self, "modulate:a", 1.0, 0.1)
+		tw.parallel().tween_property(self, "scale", Vector2.ONE, 0.14).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		tw.tween_interval(maxf(life - 1.6, 0.0))
+		tw.tween_property(self, "modulate:a", 0.0, 1.5)
+		tw.tween_callback(queue_free)
 
 	func _draw() -> void:
-		var s: float = unit
-		var f: float = _face
-		var run: float = clampf(_speed / 260.0, 0.0, 1.0)            # 0 parada, 1 disparada
-		var air: float = sin(clampf(_pounce_t, 0.0, 1.0) * PI) if _pounce_t < 1.0 else 0.0
-		var a: float = _alpha
-		var fill := Color(ChigiriFX.RED, 0.30 * a)
-		var line := Color(ChigiriFX.PINK, 0.62 * a)
-		# Parada: agachada e respirando; correndo: corpo alto e arqueando a cada passada
-		var sy: float = -0.72 + (1.0 - run) * 0.14 - air * 0.6 + sin(_t * 2.2) * 0.03 * (1.0 - run) + sin(_phase * 2.0) * 0.05 * run
-		var arch: float = sin(_phase * 2.0) * 0.1 * run - air * 0.1
-
-		# Linhas de velocidade atrás dela
-		if run > 0.25:
-			for i in 3:
-				var yy: float = sy - 0.15 + float(i) * 0.22
-				draw_line(Vector2(-1.6 * f, yy) * s, Vector2((-1.6 - 1.2 * run - float(i) * 0.3) * f, yy) * s, Color(ChigiriFX.PINK_HOT, 0.4 * a), 1.5)
-
-		# Rabo comprido, balançando (mais solto quando parada)
-		var tail := PackedVector2Array()
-		for i in 9:
-			var u: float = float(i) / 8.0
-			tail.append(Vector2((-1.2 - u * 1.3) * f, sy - u * 0.35 + sin(_t * (3.0 + 4.0 * run) + u * 3.5) * (0.16 + 0.1 * (1.0 - run)) * u) * s)
-		draw_polyline(tail, Color(ChigiriFX.RED, 0.45 * a), 0.2 * s, true)
-		draw_polyline(tail, line, 1.5, true)
-
-		# Pernas: duas de cada lado em oposição; saltando, esticam para frente e para trás
-		var legs: Array = [[0.72, 0.0], [0.45, PI], [-0.62, PI * 0.5], [-0.9, PI * 1.5]]
-		for leg: Array in legs:
-			var hip := Vector2(float(leg[0]), sy + 0.3)
-			var swing: float = sin(_phase + float(leg[1])) * 0.85 * run
-			if air > 0.0:
-				swing = lerpf(swing, 1.15 if float(leg[0]) > 0.0 else -1.15, air)
-			var lift: float = maxf(0.0, cos(_phase + float(leg[1]))) * 0.16 * run
-			var paw: Vector2 = hip + Vector2(sin(swing), cos(swing)) * (0.78 - lift)
-			var knee: Vector2 = (hip + paw) * 0.5 + Vector2(-0.14 * signf(float(leg[0]) + 0.1), 0.0)
-			var pts := PackedVector2Array([Vector2(hip.x * f, hip.y) * s, Vector2(knee.x * f, knee.y) * s, Vector2(paw.x * f, paw.y) * s])
-			draw_polyline(pts, Color(ChigiriFX.RED, 0.4 * a), 0.2 * s, true)
-			draw_polyline(pts, line, 1.5, true)
-
-		# Corpo e pescoço
-		var body_pts: Array[Vector2] = [Vector2(-1.25, sy + 0.05), Vector2(-0.9, sy - 0.3 + arch), Vector2(-0.1, sy - 0.34 - arch),
-			Vector2(0.8, sy - 0.3 + arch), Vector2(1.15, sy - 0.12), Vector2(1.1, sy + 0.22), Vector2(0.5, sy + 0.32),
-			Vector2(-0.3, sy + 0.28), Vector2(-1.0, sy + 0.3)]
-		var body := PackedVector2Array()
-		for bp: Vector2 in body_pts:
-			body.append(Vector2(bp.x * f, bp.y) * s)
-		draw_colored_polygon(body, fill)
-		draw_polyline(body + PackedVector2Array([body[0]]), line, 1.5, true)
-
-		# Cabeça: redonda, focinho curto e orelhas pontudas
-		var head: Vector2 = Vector2(1.55, sy - 0.3 + (air * -0.1))
-		draw_circle(Vector2(head.x * f, head.y) * s, 0.3 * s, fill)
-		draw_arc(Vector2(head.x * f, head.y) * s, 0.3 * s, 0.0, TAU, 16, line, 1.5)
-		draw_colored_polygon(PackedVector2Array([Vector2((head.x + 0.18) * f, head.y + 0.02) * s, Vector2((head.x + 0.5) * f, head.y + 0.1) * s,
-			Vector2((head.x + 0.2) * f, head.y + 0.22) * s]), fill)
-		for ear in [-0.12, 0.14]:
-			draw_colored_polygon(PackedVector2Array([Vector2((head.x + float(ear) - 0.1) * f, head.y - 0.22) * s,
-				Vector2((head.x + float(ear)) * f, head.y - 0.5) * s, Vector2((head.x + float(ear) + 0.1) * f, head.y - 0.24) * s]), fill)
-		# Olho: uma fenda rosa-quente
-		draw_line(Vector2((head.x + 0.12) * f, head.y - 0.06) * s, Vector2((head.x + 0.28) * f, head.y - 0.1) * s, Color(ChigiriFX.PINK_HOT, 0.95 * a), 2.0)
+		var along: Vector2 = dir.rotated(-0.7)       # arranhões na diagonal do movimento
+		var across: Vector2 = along.orthogonal()
+		for i in 3:
+			var c: float = float(i) - 1.0
+			var length: float = 70.0 - absf(c) * 12.0   # o do meio é o mais comprido
+			var off: Vector2 = across * c * 17.0
+			var a: Vector2 = off - along * length * 0.5
+			var b: Vector2 = off + along * length * 0.5
+			var bend: Vector2 = across * c * 5.0         # leve curva, como unha arrastando
+			var mid: Vector2 = a.lerp(b, 0.5) + bend
+			var w: float = 7.5
+			# Fundo escuro (a "fenda") e o corte vermelho vivo por cima
+			var pts := PackedVector2Array([a + across * w * 0.7, mid + across * w, b, mid - across * w, a - across * w * 0.7])
+			draw_colored_polygon(pts, Color(ChigiriFX.RED_DEEP, 0.85))
+			var inner := PackedVector2Array([a + across * w * 0.35, mid + across * w * 0.55, b, mid - across * w * 0.55, a - across * w * 0.35])
+			draw_colored_polygon(inner, Color(ChigiriFX.RED, 0.95))
+			draw_line(a.lerp(b, 0.12), a.lerp(b, 0.85) + bend * 0.4, Color(ChigiriFX.PINK, 0.8), 1.5, true)   # brilho do corte
+		# Lascas de terra/grama voadas em volta
+		for dot in [Vector2(-34.0, 20.0), Vector2(30.0, -24.0), Vector2(-24.0, -30.0), Vector2(38.0, 16.0)]:
+			draw_circle(dot.rotated(dir.angle()), 2.6, Color(ChigiriFX.RED_DEEP, 0.7))
 
 
 # ---------- A GOLDEN ZONE ----------

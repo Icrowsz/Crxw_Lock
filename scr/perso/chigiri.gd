@@ -1,7 +1,8 @@
 class_name Chigiri
 extends Player
 ## Chigiri Hyoma. Herda tudo do Player; script único. Visual: chigiri_fx.gd (vermelho/rosa com detalhes de velocidade,
-## uma pantera vermelha translúcida que o segue e a Golden Zone dourada com bloom). Cena: player.tscn herdada, script no
+## vento vermelho quando ele corre ou usa habilidades, marca de 3 garras onde ele para, e a Golden Zone dourada com bloom).
+## Cena: player.tscn herdada, script no
 ## nó raiz, nó raiz "Chigiri".
 ##
 ## 1. Match Cut-In (recarga 2, compartilhada): Chigiri e bola no chão. Domina a bola (colada nele), dash de 150 para o lado
@@ -77,10 +78,14 @@ enum ZoneVariant { NONE, CREATE, SHOT }
 @export var enable_golden_bloom: bool = false
 
 @export_group("Visual / Descrição")
-## Aura + partículas dos chutes. Vazio = vermelho/rosa de velocidade (veja _make_kick_fx)
+## Aura + partículas dos chutes e passes. Vazio = vermelho vivo de velocidade (veja _make_kick_fx)
 @export var kick_fx: KickFX
 ## Imagem de cada habilidade no balão. Chaves: match_cut_in, red_princess, non_stop, golden_zone.
 @export var skill_icons: Dictionary = {}
+## Marca de 3 garras no chão onde ele para depois de correr / avançar
+@export var claw_mark_on_stop: bool = true
+@export var claw_mark_seconds: float = 6.0     # quanto tempo a marca fica antes de sumir
+@export var max_claw_marks: int = 8            # marcas ao mesmo tempo (a mais antiga some)
 
 var _zone_until_round: int = -1
 var _zone_center: Vector2 = Vector2.ZERO
@@ -88,7 +93,7 @@ var _zone_fx: ChigiriFX.Zone = null
 var _pant_used: bool = false
 var _zone_bonus_on: bool = false          # o bônus de alcance do Passe está aplicado agora
 var _cutin_free: bool = false             # o Non-Stop deu um Match Cut-In grátis
-var _panther: ChigiriFX.Panther = null
+var _wind: ChigiriFX.Wind = null
 var _found_ball: bool = false             # um dash achou a bola no caminho
 var _rise_on_kick: bool = false
 var _carry_dir: Vector2 = Vector2.RIGHT
@@ -103,7 +108,7 @@ func _ready() -> void:
 	super()
 	if kick_fx == null:
 		kick_fx = _make_kick_fx()
-	_panther = ChigiriFX.panther(self)
+	_ensure_wind()
 	_hook_manager.call_deferred()
 
 
@@ -114,20 +119,21 @@ func _exit_tree() -> void:
 ## Vermelho/rosa com cara de velocidade: faixa larga, lascas em disparada e um estouro forte
 func _make_kick_fx() -> KickFX:
 	var fx := KickFX.new()
-	fx.color = Color(1.0, 0.2, 0.28, 1.0)
-	fx.trail_width = 18.0
-	fx.shape = KickFX.Shape.SQUARE
-	fx.particle_color = Color(1.0, 0.55, 0.7, 1.0)
-	fx.amount = 28
-	fx.lifetime = 0.4
-	fx.speed_min = 80.0
-	fx.speed_max = 240.0
+	fx.color = Color(0.85, 0.03, 0.1, 1.0)            # vermelho intenso (como a referência), não rosa
+	fx.additive = false                               # o campo é verde: mistura normal mantém o vermelho
+	fx.trail_width = 30.0
+	fx.shape = KickFX.Shape.DOT                       # manchas redondas
+	fx.particle_color = Color(1.0, 0.12, 0.18, 1.0)
+	fx.amount = 44
+	fx.lifetime = 0.55
+	fx.speed_min = 90.0
+	fx.speed_max = 280.0
 	fx.gravity = Vector2.ZERO
 	fx.spin = 0.0
-	fx.scale_min = 0.1
-	fx.scale_max = 0.3
-	fx.burst_amount = 22
-	fx.burst_speed = 340.0
+	fx.scale_min = 0.12
+	fx.scale_max = 0.38
+	fx.burst_amount = 36
+	fx.burst_speed = 400.0
 	return fx
 
 
@@ -232,14 +238,12 @@ func _drop_ball(ball: Ball) -> void:
 		ball.fx_during_hover = false
 
 
-## Quando o chute sai: a bola sobe (se pedido), estouro de velocidade e a pantera dá o bote
+## Quando o chute sai: a bola sobe (se pedido) e o estouro de velocidade
 func _on_kick_fx(ball: Ball, dir: Vector2, _speed: float) -> void:
 	if _rise_on_kick:
 		var rise: float = maxf(0.0, Heights.SUSPENDED_HEIGHT - ball.height)
 		ball.vel_z = Heights.lift_for_peak(rise, ball.gravity)
 	ChigiriFX.kick_burst(self, ball.global_position, dir)
-	if _panther != null and is_instance_valid(_panther):
-		_panther.pounce(ball.global_position)
 
 
 ## Lado do dash curto: perpendicular à mira, para longe do inimigo mais próximo
@@ -408,8 +412,6 @@ func _use_red_princess() -> bool:
 		ball.fx_during_hover = true
 		ball.play_fx(kick_fx)
 	ChigiriFX.kick_burst(self, ball.global_position, target.global_position - global_position)
-	if _panther != null and is_instance_valid(_panther):
-		_panther.pounce(ball.global_position)
 
 	var start: Vector2 = ball.global_position
 	var to_target: Vector2 = target.global_position - start
@@ -650,7 +652,28 @@ func has_free_followup() -> bool:
 	return _cutin_free
 
 
+## O vento vermelho acompanha as habilidades: liga no começo e desliga no fim
 func use_skill(skill_id: StringName = &"default") -> bool:
+	_ensure_wind()
+	if _wind != null and is_instance_valid(_wind):
+		_wind.hold(true)
+	var result: bool = await _use_skill_inner(skill_id)
+	if _wind != null and is_instance_valid(_wind):
+		_wind.hold(false)
+	return result
+
+
+## Recria o vento se ele sumiu (ex: a cena trocou e levou ele junto) e aplica as opções da marca de garras
+func _ensure_wind() -> void:
+	if _wind == null or not is_instance_valid(_wind):
+		_wind = ChigiriFX.wind(self)
+	if _wind != null:
+		_wind.mark_on_stop = claw_mark_on_stop
+		_wind.mark_seconds = claw_mark_seconds
+		_wind.max_marks = max_claw_marks
+
+
+func _use_skill_inner(skill_id: StringName) -> bool:
 	match skill_id:
 		SKILL_CUTIN:
 			return await _use_cutin(false)
@@ -725,6 +748,7 @@ func reset_for_new_match() -> void:
 
 func _physics_process(delta: float) -> void:
 	super(delta)
+	_ensure_wind()
 	var inside: bool = _in_golden_zone()
 	if _zone_fx != null and is_instance_valid(_zone_fx):
 		_zone_fx.inside = inside
