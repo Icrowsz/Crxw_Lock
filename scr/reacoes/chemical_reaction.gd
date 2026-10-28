@@ -5,7 +5,10 @@ extends RefCounted
 ##   - quem são os dois personagens (character_id de cada um);
 ##   - as condições para usar (find_partner);
 ##   - a recarga (em rodadas), a cor e as falas da cutscene.
-##
+
+## CARNIVAL; Shidou X Sae / CRUEL; Rin X Charles / FEEDING; Barou X Lorenzo / HERBIVICUS; Kaiser X Ness
+## MIRACLE; Nagi X Reo / BEYOND; Isagi X Hiori / SACRIFICE; Hiori X Karasu / SUPERSTAR; Kaiser X Kiyora
+
 ## Quem EXECUTA o movimento é o "trigger" (ex: Shidou, que dá o chute). O outro é o "partner"
 ## (ex: Sae, que deu o passe). A habilidade do trigger é quem chama o ReactionManager.play().
 

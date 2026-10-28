@@ -27,10 +27,14 @@ var manager: MatchManager
 var _window: Window
 var _body: VBoxContainer
 var _selected: Player = null
-var _player_option: OptionButton
+var _player_btn: Button
+var _picker: _PickerWindow
+var _icon_cache: Dictionary = {}   # textura -> miniatura
+var _swap_index: int = 0
+var _add_index: int = 0
 var _height_option: OptionButton
-var _swap_option: OptionButton
-var _add_option: OptionButton
+var _swap_btn: Button
+var _add_btn: Button
 var _add_team: OptionButton
 var _add_count: SpinBox
 var _drag_check: CheckButton
@@ -101,12 +105,8 @@ func _build() -> void:
 
 	# ----- Jogador
 	_section("Jogador")
-	_player_option = OptionButton.new()
-	_compact(_player_option)
-	_player_option.fit_to_longest_item = false
-	_player_option.add_theme_constant_override("icon_max_width", 28)
-	_player_option.item_selected.connect(_on_player_chosen)
-	_body.add_child(_player_option)
+	_player_btn = _picker_button("Escolher jogador", _open_player_picker)
+	_body.add_child(_player_btn)
 	_drag_check = _check("Arrastar jogadores com o mouse", false, func(_v: bool) -> void: _end_drag())
 	_info = UiStyle.make_label("", 15, UiStyle.MUTED_COLOR)
 	_info.custom_minimum_size.x = 0.0
@@ -131,7 +131,7 @@ func _build() -> void:
 
 	var swap_row := HBoxContainer.new()
 	_body.add_child(swap_row)
-	_swap_option = _character_option(swap_row)
+	_swap_btn = _character_button(swap_row, func(i: int) -> void: _swap_index = i, _swap_index)
 	var swap_btn := _make_button("Trocar", _swap_selected)
 	swap_row.add_child(swap_btn)
 
@@ -139,7 +139,7 @@ func _build() -> void:
 	_section("Adicionar personagens")
 	var add_row := HBoxContainer.new()
 	_body.add_child(add_row)
-	_add_option = _character_option(add_row)
+	_add_btn = _character_button(add_row, func(i: int) -> void: _add_index = i, _add_index)
 	_add_team = OptionButton.new()
 	_compact(_add_team)
 	for t in 2:
@@ -218,23 +218,71 @@ func _buttons_row(items: Array) -> void:
 		row.add_child(_make_button(String(it[0]), it[1]))
 
 
-## Lista de personagens (com rostinho) para trocar/adicionar
-func _character_option(parent: Control) -> OptionButton:
-	var o := OptionButton.new()
-	_compact(o)
-	o.fit_to_longest_item = false
-	o.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	o.add_theme_constant_override("icon_max_width", 28)
+## Botão que mostra a escolha atual (rostinho pequeno + nome) e, ao clicar, abre a janelinha de escolha
+func _picker_button(text: String, on_press: Callable) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+	b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	UiStyle.style_button(b)
+	_compact(b)
+	b.pressed.connect(on_press)
+	return b
+
+
+## Botão de personagem do Roster: mostra o escolhido; a janelinha lista todos (com busca)
+func _character_button(parent: Control, on_index: Callable, start_index: int) -> Button:
+	var b := _picker_button("", Callable())
+	b.pressed.connect(func() -> void:
+		_open_picker("Escolher personagem", _roster_entries(), func(v: Variant) -> void:
+			on_index.call(int(v))
+			_show_roster_choice(b, int(v))))
+	_show_roster_choice(b, start_index)
+	parent.add_child(b)
+	return b
+
+
+func _roster_entries() -> Array[Dictionary]:
+	var list: Array[Dictionary] = []
 	for i in _roster.size():
 		var c: Dictionary = _roster[i]
-		var face: Texture2D = CharacterRoster.face_for(String(c["id"]))
-		if face != null:
-			o.add_item(String(c["name"]), i)
-			o.set_item_icon(o.item_count - 1, face)
-		else:
-			o.add_item(String(c["name"]), i)
-	parent.add_child(o)
-	return o
+		list.append({"label": String(c["name"]), "icon": CharacterRoster.face_for(String(c["id"])), "value": i})
+	return list
+
+
+func _show_roster_choice(b: Button, index: int) -> void:
+	if _roster.is_empty():
+		b.text = "(nenhum personagem)"
+		return
+	var c: Dictionary = _roster[clampi(index, 0, _roster.size() - 1)]
+	b.text = " " + String(c["name"])
+	b.icon = _small_icon(CharacterRoster.face_for(String(c["id"])))
+
+
+## Miniatura do rosto (o popup do OptionButton mostra a imagem no tamanho original, por isso não usamos ele)
+func _small_icon(tex: Texture2D, px: int = 30) -> Texture2D:
+	if tex == null:
+		return null
+	if _icon_cache.has(tex):
+		return _icon_cache[tex]
+	var img: Image = tex.get_image()
+	if img == null or img.is_empty():
+		return null
+	if img.is_compressed():
+		img.decompress()
+	var s: float = float(px) / float(maxi(img.get_width(), img.get_height()))
+	img.resize(maxi(1, int(img.get_width() * s)), maxi(1, int(img.get_height() * s)), Image.INTERPOLATE_LANCZOS)
+	var small := ImageTexture.create_from_image(img)
+	_icon_cache[tex] = small
+	return small
+
+
+func _open_picker(title: String, entries: Array[Dictionary], on_pick: Callable) -> void:
+	if _picker == null:
+		_picker = _PickerWindow.new()
+		_picker.trainer = self
+		add_child(_picker)
+	_picker.open(title, entries, on_pick, Vector2i(_window.position.x + _window.size.x + 10, _window.position.y))
 
 
 # ---------- LISTA DE JOGADORES ----------
@@ -255,37 +303,37 @@ func _refresh_players() -> void:
 	if ids == _ids:
 		return
 	_ids = ids
-	_player_option.clear()
-	var keep: int = -1
-	for i in players.size():
-		var p: Player = players[i]
-		_player_option.add_item("T%d · %s  (%s)" % [p.team, p.get_display_name(), p.name], i)
-		var face: Texture2D = p.get_face_image()
-		if face != null:
-			_player_option.set_item_icon(i, face)
-		_player_option.set_item_metadata(i, p)
-		if p == _selected:
-			keep = i
-	if keep >= 0:
-		_player_option.select(keep)
-	elif not players.is_empty():
-		_select(players[0])
-	else:
+	if _selected != null and not players.has(_selected):
 		_selected = null
+	if _selected == null and not players.is_empty():
+		_select(players[0])
+	elif _selected == null:
+		_player_btn.text = "Escolher jogador"
+		_player_btn.icon = null
 
 
-func _on_player_chosen(index: int) -> void:
-	var p: Player = _player_option.get_item_metadata(index) as Player
-	_select(p)
+## Lista de todos os jogadores na janelinha de escolha
+func _open_player_picker() -> void:
+	_open_picker("Escolher jogador", _player_entries(), func(v: Variant) -> void: _select(v as Player))
+
+
+func _player_entries() -> Array[Dictionary]:
+	var list: Array[Dictionary] = []
+	for p in _all_players():
+		list.append({"label": _player_label(p), "icon": p.get_face_image(), "value": p})
+	return list
+
+
+func _player_label(p: Player) -> String:
+	return "T%d · %s  (%s)" % [p.team, p.get_display_name(), p.name]
 
 
 func _select(p: Player) -> void:
 	_selected = p
 	if p == null:
 		return
-	for i in _player_option.item_count:
-		if _player_option.get_item_metadata(i) == p:
-			_player_option.select(i)
+	_player_btn.text = " " + _player_label(p)
+	_player_btn.icon = _small_icon(p.get_face_image())
 	_height_option.select(int(p.height_level))
 	_update_info()
 
@@ -398,7 +446,7 @@ func _remove_selected() -> void:
 func _swap_selected() -> void:
 	if _selected == null or not is_instance_valid(_selected) or _roster.is_empty():
 		return
-	var entry: Dictionary = _roster[_swap_option.selected]
+	var entry: Dictionary = _roster[_swap_index]
 	var old: Player = _selected
 	_forget(old)
 	var fresh: Player = CharacterRoster.replace_player(old, String(entry["id"]))
@@ -434,7 +482,7 @@ func _add_players() -> void:
 	if _roster.is_empty():
 		_toast("Nenhuma cena de personagem encontrada (veja CharacterRoster)")
 		return
-	var entry: Dictionary = _roster[_add_option.selected]
+	var entry: Dictionary = _roster[_add_index]
 	var scene := load(String(entry["scene"])) as PackedScene
 	if scene == null:
 		_toast("Não consegui carregar %s" % entry["scene"])
@@ -600,3 +648,96 @@ class _Marker extends Node2D:
 			return
 		draw_arc(Vector2(0.0, -18.0), 38.0, 0.0, TAU, 40, SEL_COLOR, 3.0)
 		draw_arc(Vector2(0.0, -18.0), 44.0, 0.0, TAU, 40, Color(SEL_COLOR, 0.35), 2.0)
+
+
+## Janela pequena de escolha (lista de botões com rostinho + busca). Reaproveitada para jogador e personagem.
+class _PickerWindow extends Window:
+	var trainer: TrainingMode
+	var _entries: Array[Dictionary] = []
+	var _on_pick: Callable
+	var _search: LineEdit
+	var _flow: HFlowContainer
+	var _empty: Label
+
+	func _init() -> void:
+		size = Vector2i(400, 480)
+		min_size = Vector2i(220, 200)
+		exclusive = false
+		transient = false
+		visible = false
+		close_requested.connect(hide)
+		window_input.connect(_on_window_input)
+
+		var back := PanelContainer.new()
+		UiStyle.style_panel(back, Color(UiStyle.ACCENT_COLOR, 0.45))
+		back.set_anchors_preset(Control.PRESET_FULL_RECT)
+		add_child(back)
+		var column := VBoxContainer.new()
+		column.add_theme_constant_override("separation", 6)
+		back.add_child(column)
+		_search = LineEdit.new()
+		_search.placeholder_text = "Buscar..."
+		_search.clear_button_enabled = true
+		_search.custom_minimum_size.x = 0.0
+		_search.text_changed.connect(func(_t: String) -> void: _rebuild())
+		column.add_child(_search)
+		var scroll := ScrollContainer.new()
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		column.add_child(scroll)
+		_flow = HFlowContainer.new()
+		_flow.add_theme_constant_override("h_separation", 6)
+		_flow.add_theme_constant_override("v_separation", 6)
+		_flow.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		scroll.add_child(_flow)
+		_empty = UiStyle.make_label("Nada encontrado", 16, UiStyle.MUTED_COLOR)
+		_empty.visible = false
+		column.add_child(_empty)
+
+	func open(window_title: String, entries: Array[Dictionary], on_pick: Callable, at: Vector2i) -> void:
+		title = window_title
+		_entries = entries
+		_on_pick = on_pick
+		_search.text = ""
+		_rebuild()
+		position = at
+		show()
+		move_to_foreground()
+		_search.grab_focus()
+
+	func _rebuild() -> void:
+		for c in _flow.get_children():
+			c.queue_free()
+		var query: String = _search.text.strip_edges().to_lower()
+		var shown: int = 0
+		for e in _entries:
+			var label: String = String(e["label"])
+			if query != "" and not label.to_lower().contains(query):
+				continue
+			shown += 1
+			var b := Button.new()
+			b.text = " " + label
+			b.icon = trainer._small_icon(e.get("icon") as Texture2D)
+			b.alignment = HORIZONTAL_ALIGNMENT_LEFT
+			b.clip_text = true
+			b.custom_minimum_size = Vector2(170.0, 40.0)
+			b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			b.add_theme_font_size_override("font_size", 16)
+			UiStyle.style_button(b)
+			b.pressed.connect(_choose.bind(e["value"]))
+			_flow.add_child(b)
+		_empty.visible = shown == 0
+
+	func _choose(value: Variant) -> void:
+		hide()
+		if _on_pick.is_valid():
+			_on_pick.call(value)
+
+	func _on_window_input(event: InputEvent) -> void:
+		if event is InputEventKey and event.pressed and not event.echo:
+			if event.keycode == KEY_ESCAPE:
+				hide()
+				set_input_as_handled()
+			elif (event.keycode == KEY_ENTER or event.keycode == KEY_KP_ENTER) and _flow.get_child_count() > 0:
+				(_flow.get_child(0) as Button).pressed.emit()
+				set_input_as_handled()

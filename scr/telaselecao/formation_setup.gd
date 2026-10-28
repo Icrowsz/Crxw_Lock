@@ -188,6 +188,7 @@ class _PerspectivePitch extends Control:
 	var spinning: bool = false          # girando: sem cliques
 	var locked: bool = false            # outra janela aberta: sem cliques
 	var selected: Node2D = null         # personagem com o seletor aberto
+	var tint: Color = Color(0, 0, 0, 0)
 
 	var _focal: float = 400.0
 	var _center: Vector2 = Vector2.ZERO
@@ -444,6 +445,8 @@ class _PerspectivePitch extends Control:
 			shadow.append(q + Vector2(0.0, 16.0))
 		draw_colored_polygon(shadow, Color(0, 0, 0, 0.35))
 		draw_colored_polygon(plate, Color(0.14, 0.42, 0.22))
+		if tint.a > 0.0:
+			draw_colored_polygon(plate, tint)
 		var bands: int = 12
 		for i in bands:
 			if i % 2 == 0:
@@ -580,6 +583,7 @@ func _ready() -> void:
 	_field.add_child(_overlay)
 
 	_build_ui()
+	FormationExtras.attach(self)
 	_pitch.slots = _overlay.slots
 	_begin_team(0)
 	_intro.call_deferred()

@@ -108,7 +108,7 @@ const PASS_VARIANT_NAMES := {
 @export var keeper_wait_timeout: float = 8.0   # trava de segurança: máximo que o jogo espera os goleiros
 
 @export_group("Faltas e replay")
-@export var use_fouls: bool = true         # faltas e pênaltis (foul_manager.gd)
+@export var use_fouls: bool = false         # faltas e pênaltis (foul_manager.gd)
 @export var use_goal_replay: bool = true   # replay rápido depois de cada gol (goal_replay.gd)
 
 @export_group("Tempo de jogo")

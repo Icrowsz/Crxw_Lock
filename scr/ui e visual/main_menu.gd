@@ -17,8 +17,10 @@ extends Control
 @export_file("*.tscn") var game_scene: String = "uid://vyuwdkpu5dcw"
 @export var game_title_left: String = "CRXW"
 @export var game_title_right: String = "LOCK"
-@export var subtitle: String = "A Blue Lock Game"
-@export var floating_faces: int = 35
+@export var subtitle: String = "Futebol de habilidades, turno a turno"
+@export var floating_faces: int = 14
+@export var signature: String = "Icrowsz"
+@export var signature_size: int = 28
 @export var fade_time: float = 0.35
 
 var _buttons: Array[Button] = []
@@ -90,6 +92,17 @@ func _build() -> void:
 	_error = UiStyle.make_label("", 20, UiStyle.BAD_COLOR)
 	_error.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	column.add_child(_error)
+
+	# Assinatura no canto inferior direito
+	if signature != "":
+		var sig: Label = UiStyle.make_label(signature, signature_size, Color(UiStyle.MUTED_COLOR, 0.8))
+		sig.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
+		sig.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+		sig.grow_vertical = Control.GROW_DIRECTION_BEGIN
+		sig.offset_right = -28.0
+		sig.offset_bottom = -18.0
+		sig.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(sig)
 
 	# Fade (entra clareando, sai escurecendo)
 	_fade = ColorRect.new()

@@ -51,6 +51,7 @@ static func apply_to(m: MatchManager) -> void:
 			panel.name = "TrainingMode"
 			panel.manager = m
 			m.add_child(panel)
+	FieldAtmosphere.ensure(m)   # clima e horário escolhidos na tela de formação
 	if show_status_hud and m.get_node_or_null("StatusHud") == null:
 		var hud := StatusHud.new()
 		hud.name = "StatusHud"
