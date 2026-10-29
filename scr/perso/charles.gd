@@ -42,6 +42,10 @@ extends Player
 ## Reação Química CRUEL (com o Rin, veja reaction_cruel.gd): o Rabona Cross anota o último uso em last_rabona e, quando
 ## cumpre as condições da reação, sai brilhando mais e com um demônio gigante amarelo/azul cobrindo o Charles.
 ##
+## Reação Química WEIRDOS (com o Shidou, veja reaction_weirdos.gd): com a Tricheur's Metavision ATIVA, um Rabona Cross cujo ponto
+## de chegada fica perto de um Shidou do time arma a reação (um demônio MENOR cobre o Charles e a bola sai com a aura da reação).
+## O Shidou então usa o Demonic Rush até a bola e o Draconic Header vira o THE RESULT. O Rabona anota isso em last_rabona["weirdos"].
+##
 ## Como montar a cena: igual aos outros — Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz ->
 ## renomeie o nó raiz para "Charles".
 
@@ -120,6 +124,8 @@ enum TrapEffect { GLISSANT, SURPRISE, MON_TOUR }
 @export var kick_fx: KickFX
 ## Aura do Rabona Cross quando ele cumpre as condições da reação Cruel. Vazio = padrão
 @export var charged_fx: KickFX
+## Tamanho do demônio do Charles na reação Weirdos (o do Cruel é 430: este é menor de propósito)
+@export var weirdos_demon_size: float = 250.0
 @export var show_pm_marks: bool = true
 ## Onde ficam os diabinhos de PM: x = distância da borda do Charles, do lado do gol que o time dele ataca (vira de lado
 ## sozinho no 2º tempo); y = altura (positivo = mais para baixo). O tamanho é o raio de cada diabinho.
@@ -339,9 +345,13 @@ func _use_rabona_cross(m: MatchManager) -> bool:
 
 	# Cruel (Charles + Rin): se este Rabona cumpre as condições da reação, um demônio gigante cobre o Charles
 	var charged: bool = ReactionCruel.is_rabona_charged(self)
+	# Weirdos (Charles + Shidou): Metavision ativa e o ponto perto de um Shidou do time = reação armada
+	var weirdos_target: Player = ReactionWeirdos.rabona_target(self, landing)
 	last_rabona = {}
 	if charged:
 		CruelFX.summon_charles_demon(self, global_position, height)
+	elif weirdos_target != null:
+		WeirdosFX.summon_small_demon(self, global_position, height, weirdos_demon_size)
 
 	if not await play_action(&"rabona_cross", ANIM_PASS_HIGH):
 		return false   # ação cancelada (ex: a partida reiniciou)
@@ -360,6 +370,9 @@ func _use_rabona_cross(m: MatchManager) -> bool:
 		ball.play_fx(charged_fx)
 		CruelFX.attach_ball_aura(ball, CruelFX.Style.RABONA)
 		CruelFX.rabona_burst(self, ball.sprite.global_position)
+	elif weirdos_target != null:
+		ball.play_fx(charged_fx)
+		WeirdosFX.rabona_armed(self, ball, ball.sprite.global_position)
 	elif kick_fx:
 		ball.play_fx(kick_fx)
 	CharlesFX.flame(self, ball.sprite.global_position, 16)
@@ -368,7 +381,8 @@ func _use_rabona_cross(m: MatchManager) -> bool:
 	await _fly_ball(ball, landing, spend, 0.9)
 	m.register_skill_pass(team, null)
 
-	last_rabona = {"landing": landing, "touches": ball.interaction_count}
+	last_rabona = {"landing": landing, "touches": ball.interaction_count,
+		"weirdos": weirdos_target, "round": m.round_number}
 	start_cooldown(CD_PASS, pass_cooldown)
 	return true
 

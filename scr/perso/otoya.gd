@@ -25,6 +25,11 @@ extends Player
 ##    Kurigama Combo (variante: bola e Otoya Suspensos e outro jogador próximo): um pouco mais de
 ##      força, um pouco de curva e 50%.
 ##
+## REAÇÃO QUÍMICA WORLD (com o Bachira, veja reaction_world.gd): se o Bachira usou o Bon nesta rodada (com este Otoya
+## furtivo) e ninguém tocou na bola, o Shuriken vira o GOTCHA: cutscene, chute com 2.1x de força, a bola sobe durante a
+## trajetória (até Voando) e 75% de chance de gol, com um Shuriken gigante cortando o campo. Só vale para o Shuriken
+## (não para o Kurigama Combo).
+##
 ## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
 ## -> renomeie o nó raiz para "Otoya".
 ##
@@ -76,6 +81,12 @@ const WHITE := Color(1.0, 1.0, 1.0)
 @export var kurigama_flight_time: float = 0.7       # por quanto tempo a bola é conduzida na curva
 @export var kurigama_radius: float = 130.0          # "outro jogador próximo"
 
+@export_group("Gotcha (Reação Química World, com o Bachira)")
+@export_range(0.0, 1.0) var chance_gotcha: float = 0.75   # chance de gol FINAL (não soma o +5% do furtivo)
+@export var gotcha_force_mult: float = 2.1                 # força do chute (x o voleio); nada mais soma
+## Aura do Gotcha (amarelo + verde limão). Vazio = usa o estilo padrão (veja _make_gotcha_fx)
+@export var gotcha_fx: KickFX
+
 @export_group("Visual do chute")
 ## Aura + partículas dos chutes e passes de habilidade. Vazio = verde limão com branco (veja _make_kick_fx)
 @export var kick_fx: KickFX
@@ -104,6 +115,8 @@ func _ready() -> void:
 	super()
 	if kick_fx == null:
 		kick_fx = _make_kick_fx()
+	if gotcha_fx == null:
+		gotcha_fx = _make_gotcha_fx()
 	_hook_manager.call_deferred()   # o MatchManager entra na árvore no mesmo frame
 
 
@@ -123,6 +136,25 @@ func _make_kick_fx() -> KickFX:
 	fx.scale_max = 0.3
 	fx.burst_amount = 12
 	fx.burst_speed = 200.0
+	return fx
+
+
+## Amarelo (Bachira) com verde limão (Otoya): a aura do Gotcha
+func _make_gotcha_fx() -> KickFX:
+	var fx := KickFX.new()
+	fx.color = WorldFX.YELLOW
+	fx.trail_width = 22.0
+	fx.particle_color = LIME
+	fx.amount = 40
+	fx.lifetime = 0.6
+	fx.speed_min = 30.0
+	fx.speed_max = 120.0
+	fx.gravity = Vector2(0.0, -60.0)
+	fx.spin = 320.0
+	fx.scale_min = 0.2
+	fx.scale_max = 0.4
+	fx.burst_amount = 24
+	fx.burst_speed = 320.0
 	return fx
 
 
@@ -497,12 +529,64 @@ func _use_shuriken() -> bool:
 	if is_stealth_active():
 		force *= stealth_force_mult   # melhoria do furtivo
 
-	next_kick_force_mult *= force   # gasto dentro do kick_ball
+	# World (Bachira + Otoya): com o Bon do Bachira desta rodada, o Shuriken vira o GOTCHA
+	var partner: Player = _world_partner() if variant == ShurikenSkill.SHURIKEN else null
+	var is_gotcha: bool = partner != null
+	var fx: KickFX = kick_fx
 	var chance: float = minf(base_chance + _shot_bonus(), 1.0)
-	# VOLLEY sempre: a bola sobe ao nível Suspenso (se já estiver suspensa, só segue)
-	await kick_ball(ball, dir, KickType.VOLLEY, true, chance, false, kick_fx, anim, on_kick)
+	var saved_peak: Heights.Level = volley_peak_level
+	if is_gotcha:
+		# A partida congela e roda a cutscene + diálogo. SÓ DEPOIS vem o chute.
+		# (A mira já foi confirmada: cancelar a mira não gasta a reação nem a recarga dela.)
+		var reaction: ReactionWorld = _world_rx_get()
+		await ReactionManager.get_for(self).play(reaction, self, partner)
+		reaction.mark_used(team, m.round_number)
+		chance = chance_gotcha                      # o número final é o do Gotcha: o +5% do furtivo não soma
+		next_shot_bonus = 0.0
+		next_kick_force_mult = gotcha_force_mult    # força final: nada mais soma
+		fx = gotcha_fx
+		anim = _anim_or(&"gotcha", &"shuriken")
+		on_kick = _gotcha_burst
+		volley_peak_level = Heights.Level.FLYING    # a bola sobe durante a trajetória
+	else:
+		next_kick_force_mult *= force   # gasto dentro do kick_ball
+
+	var touches: int = ball.interaction_count
+	# VOLLEY sempre: a bola sobe ao nível Suspenso (se já estiver suspensa, só segue); o Gotcha sobe até Voando
+	await kick_ball(ball, dir, KickType.VOLLEY, true, chance, false, fx, anim, on_kick)
+	volley_peak_level = saved_peak
+	if is_gotcha and ball.interaction_count == touches:
+		return false   # o chute não saiu (ação cancelada)
 	start_cooldown(CD_SHURIKEN, shuriken_cooldown)
 	return true
+
+
+## A reação World (criada na primeira vez que precisa; não depende de registro no ReactionManager)
+var _world_rx: ReactionWorld = null
+
+
+func _world_rx_get() -> ReactionWorld:
+	if _world_rx == null:
+		_world_rx = ReactionWorld.new()
+	return _world_rx
+
+
+## O Bachira (parceiro) se as condições da World estão cumpridas (furtivo, Bon desta rodada, bola intocada); senão null
+func _world_partner() -> Player:
+	return _world_rx_get().find_partner(self)
+
+
+## Usa a animação preferida se o personagem tiver; senão a reserva
+func _anim_or(preferred: StringName, fallback: StringName) -> StringName:
+	if _has_art and animated_sprite.sprite_frames.has_animation(preferred):
+		return preferred
+	return fallback
+
+
+## Chamado pelo kick_ball() logo depois que a bola do Gotcha sai: o Shuriken gigante cortando o campo + brilhos
+func _gotcha_burst(ball: Ball, _dir: Vector2, _speed: float) -> void:
+	WorldFX.gotcha_slash(self, ball)
+	WorldFX.result_burst(self, ball.sprite.global_position if ball.sprite != null else ball.global_position)
 
 
 ## Direção da bola no ponto u (0 = chute, 1 = fim da condução) do Kurigama Combo: sai desviada
@@ -564,6 +648,8 @@ func get_skills() -> Array[Dictionary]:
 	list.append({"id": SKILL_TIKI, "name": skill_label(tiki_name, CD_TIKI)})
 
 	var shuriken_name: String = "Kurigama Combo" if get_shuriken_skill() == ShurikenSkill.KURIGAMA else "Shuriken"
+	if get_shuriken_skill() == ShurikenSkill.SHURIKEN and _world_partner() != null:
+		shuriken_name = "Gotcha"   # reação World pronta
 	list.append({"id": SKILL_SHURIKEN, "name": skill_label(shuriken_name, CD_SHURIKEN)})
 	return list
 
@@ -623,6 +709,10 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 			if get_shuriken_skill() == ShurikenSkill.KURIGAMA:
 				title = "Kurigama Combo"
 				text = "Chute com curva em que a bola sobe. %d%% de chance de gol." % _pct(chance_kurigama)
+			elif _world_partner() != null:
+				title = "Gotcha (Reação World)"
+				text = "Com o Bachira: chute %.1fx mais forte, a bola sobe durante a trajetória e %d%% de chance de gol. Um Shuriken corta o campo." % [
+					gotcha_force_mult, _pct(chance_gotcha)]
 			else:
 				title = "Shuriken"
 				text = "Chute em que a bola sobe. %d%% de chance de gol." % _pct(chance_shuriken)

@@ -417,7 +417,7 @@ func _use_undead_pass() -> bool:
 ## O passe para este jogador carrega a reação Feeding? (alvo = Barou com o Predator Eye ativo e a reação fora de recarga)
 func _feeding_ready_for(target: Player) -> bool:
 	var barou := target as Barou
-	if barou == null or not barou._predator_active():
+	if barou == null or not barou._eye_active():
 		return false
 	var rm: ReactionManager = ReactionManager.get_for(self)
 	if rm == null:

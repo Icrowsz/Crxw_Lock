@@ -36,10 +36,11 @@ func _init() -> void:
 	}
 
 	# Falas de exemplo: troque pelas que você quiser (a ordem é a da cutscene)
+	_add_speaker("ego", "Ego", "res://img/rostinhos/ego.png", Color(0.27, 0.27, 0.27, 1.0))
 	_say("kiyora", "With my borderline decisions...")
 	_say("kiyora", "Not even the Gods know who I choose to side with.")
-	_say("base", "An Emperor that's willing to sacrifice everything...")
-	_say("base", "FOR HIS EVOLUTION!!!")
+	_say("ego", "An Emperor that's willing to sacrifice everything...")
+	_say("ego", "...For his evolution...")
 	_say("kaiser", "AAAARRRHHHH")
 
 

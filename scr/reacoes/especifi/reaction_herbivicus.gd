@@ -35,9 +35,10 @@ func _init() -> void:
 	}
 
 	# Falas de exemplo: troque pelas que você quiser (a ordem é a da cutscene)
+	_add_speaker("ego", "Ego", "res://img/rostinhos/ego.png", Color(0.27, 0.27, 0.27, 1.0))
 	_say("ness", "Okay, Kaiser.")
 	_say("ness", "Public execution it is.")
-	_say("base", "The magician will always have your back.")
+	_say("ego", "The magician will always have your back.")
 	_say("kaiser", "Kniet nieder, ihr Knechte.")
 	_say("kaiser", "Executed.")
 

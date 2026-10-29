@@ -12,6 +12,10 @@ extends CanvasLayer
 ## Controles: clique esquerdo / Enter / Espaço passam a fala (o 1º clique completa o texto);
 ## Esc pula a cutscene inteira. Sem clicar, a fala passa sozinha depois de um tempinho.
 ##
+## FALANTES DE FORA: a fala pode ser de alguém que não está na reação (narrador, outro personagem):
+## _say("narrador", "...") na reação. O rosto vem de reaction.speakers (veja _add_speaker) ou, sem cadastro,
+## de <faces_dir>/<id>.png. Sem imagem, aparece um círculo com a inicial. Fala com who vazio fica sem rosto.
+##
 ## Rosto de cada personagem: <reaction.faces_dir>/<character_id>.png (ou .webp/.jpg/.jpeg;
 ## também tenta o nome com a inicial maiúscula e o display_name). Sem imagem, usa a imagem de
 ## MVP do personagem e, por último, um círculo colorido com a inicial.
@@ -194,29 +198,33 @@ func _on_video_finished() -> void:
 		create_tween().tween_property(_video, "modulate:a", 0.0, 0.3)   # acabou antes do diálogo: some
 
 
-## Cor do personagem (contorno da fala e moldura do rosto)
-func _color_of(p: Player) -> Color:
-	if p != null and reaction.colors.has(p.character_id):
-		return reaction.colors[p.character_id] as Color
-	return _accent
-
-
-func _face_texture(p: Player) -> Texture2D:
-	var names: Array[String] = [p.character_id, p.character_id.capitalize(), p.get_display_name()]
+## Procura o rosto em <faces_dir>/<nome>.<ext> para cada nome da lista (devolve null se não achar)
+func _find_face(names: Array) -> Texture2D:
 	for n in names:
 		for ext in ["png", "webp", "jpg", "jpeg"]:
 			var path: String = "%s/%s.%s" % [reaction.faces_dir, n, ext]
 			if ResourceLoader.exists(path):
 				return load(path) as Texture2D
-	return p.get_mvp_image()
+	return null
+
+
+## O Player da reação (esquerda ou direita) com este character_id, ou null
+func _player_of(character_id: String) -> Player:
+	if _left != null and _left.character_id == character_id:
+		return _left
+	if _right != null and _right.character_id == character_id:
+		return _right
+	return null
 
 
 ## Rosto de quem fala, em cima da fala (com moldura na cor do personagem). Troca a cada fala.
-func _show_face(p: Player, color: Color) -> void:
+## "sp" é o que _speaker() devolve (nome, cor, imagem...).
+func _show_face(sp: Dictionary) -> void:
+	var color: Color = sp["color"]
 	if _face_holder != null:
 		_face_holder.queue_free()
 		_face_holder = null
-	if p == null:
+	if not bool(sp.get("has_face", true)):
 		return
 	var fs: float = _vs.y * 0.17
 	var holder := Control.new()
@@ -237,7 +245,7 @@ func _show_face(p: Player, color: Color) -> void:
 	holder.add_child(frame)
 	frame.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 
-	var tex: Texture2D = _face_texture(p)
+	var tex: Texture2D = sp.get("texture") as Texture2D
 	if tex != null:
 		var pic := TextureRect.new()
 		pic.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -253,7 +261,7 @@ func _show_face(p: Player, color: Color) -> void:
 	else:
 		# Sem imagem: a inicial do nome
 		var initial := Label.new()
-		initial.text = p.get_display_name().substr(0, 1).to_upper()
+		initial.text = String(sp["name"]).substr(0, 1).to_upper()
 		initial.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		initial.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		initial.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -306,17 +314,45 @@ func _dialogue() -> void:
 		_face_holder.visible = false
 
 
-func _speaker(character_id: String) -> Player:
-	if _left != null and _left.character_id == character_id:
-		return _left
-	if _right != null and _right.character_id == character_id:
-		return _right
-	return null
+## Quem fala nesta fala: um dos dois personagens da reação OU um falante de fora (narrador etc.).
+## Devolve {"name", "color", "texture" (ou null), "has_face"}. has_face é false só quando "who" é vazio.
+func _speaker(who: String) -> Dictionary:
+	var info: Dictionary = {"name": who.capitalize(), "color": _accent, "texture": null, "has_face": who != ""}
+	if who == "":
+		return info
+
+	var p: Player = _player_of(who)
+	if p != null:
+		info["name"] = p.get_display_name()
+		if reaction.colors.has(p.character_id):
+			info["color"] = reaction.colors[p.character_id]
+		var tex: Texture2D = _find_face([p.character_id, p.character_id.capitalize(), p.get_display_name()])
+		info["texture"] = tex if tex != null else p.get_mvp_image()
+		return info
+
+	# Falante de fora (cadastrado com _add_speaker ou só com <faces_dir>/<id>.png)
+	var guest: Dictionary = reaction.speakers.get(who, {})
+	if guest.has("name"):
+		info["name"] = String(guest["name"])
+	if reaction.colors.has(who):
+		info["color"] = reaction.colors[who]
+	if guest.has("color"):
+		info["color"] = guest["color"]
+	var face: Variant = guest.get("face", null)
+	var face_tex: Texture2D = null
+	if face is Texture2D:
+		face_tex = face
+	elif face != null and String(face) != "" and ResourceLoader.exists(String(face)):
+		face_tex = load(String(face)) as Texture2D
+	if face_tex == null:
+		face_tex = _find_face([who, who.capitalize(), String(info["name"])])
+	info["texture"] = face_tex
+	return info
 
 
-func _show_line(who: Player, text: String) -> void:
-	var color: Color = _color_of(who)
-	_show_face(who, color)
+func _show_line(sp: Dictionary, text: String) -> void:
+	var color: Color = sp["color"]
+	_show_face(sp)
 	_style_text(color)
 	_text_label.text = text
 	_text_label.visible_ratio = 0.0

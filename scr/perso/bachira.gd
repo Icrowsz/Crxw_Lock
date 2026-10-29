@@ -28,6 +28,10 @@ extends Player
 ## no Freedom e, no Unleash Instinct, a silhueta (o "monstro") ao lado dele. Dá para desligar com
 ## particles_fx; a silhueta aceita uma imagem sua em monster_texture.
 ##
+## REAÇÃO QUÍMICA WORLD (com o Otoya, veja reaction_world.gd): ao usar o Bon (qualquer variante) com um Otoya furtivo
+## do time, o monstro aparece MAIOR e com uma animação (world_monster_scale) e a bola sai armada. O Otoya então usa o
+## Shuriken na mesma rodada, sem ninguém tocar na bola, e ele vira o Gotcha. O Bon anota isso em last_bon.
+##
 ## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
 ## -> renomeie o nó raiz para "Bachira".
 ##
@@ -106,6 +110,15 @@ enum StepVariant { NONE, STEP, FREEDOM }
 @export var monster_texture: Texture2D
 ## Imagem de cada habilidade no balão do menu. Chaves: bon, step_overs, unleash_instinct.
 @export var skill_icons: Dictionary = {}
+
+@export_group("World (Reação Química com o Otoya)")
+## Quantas vezes maior que o normal o monstro aparece quando o Bon arma a reação World
+@export var world_monster_scale: float = 1.9
+## Por quanto tempo (s) o monstro grande fica na tela antes de sumir
+@export var world_monster_seconds: float = 1.9
+
+## O último Bon, para a reação World (veja reaction_world.gd): {"world": Otoya, "round": rodada, "touches": toques na bola}
+var last_bon: Dictionary = {}
 
 var _instinct_on: bool = false
 var _instinct_touches: int = 0          # qualquer toque na bola depois disto acaba com o Instinct
@@ -277,6 +290,16 @@ func _use_shot_skill() -> bool:
 	if variant == ShotVariant.NONE:
 		return false
 
+	# World (Bachira + Otoya): com um Otoya furtivo do time e a reação pronta, o monstro aparece maior e a bola
+	# sai "armada" (o Otoya confere isso em last_bon quando usar o Shuriken)
+	var world_target: Player = ReactionWorld.bon_target(self)
+	var touches_before: int = ball.interaction_count
+	last_bon = {}
+	if world_target != null:
+		WorldFX.bon_armed(self, ball, _ball_point(ball))
+		if particles_fx:
+			WorldFX.summon_big_monster(self, monster_texture, world_monster_scale, world_monster_seconds)
+
 	# Bee Shot e Monster Leap têm QTE fácil (o do Voleio); o Bon! no chão não tem
 	var qte_ok: bool = true
 	if variant != ShotVariant.BON and skills_use_qte and not skips_qte():
@@ -289,6 +312,8 @@ func _use_shot_skill() -> bool:
 			await _do_bee(ball, aim, qte_ok)
 		ShotVariant.LEAP:
 			await _do_leap(m, ball, aim, qte_ok)
+	if world_target != null and is_instance_valid(ball) and ball.interaction_count != touches_before:
+		last_bon = {"world": world_target, "round": m.round_number, "touches": ball.interaction_count}
 	start_cooldown(CD_SHOT, shot_cooldown)
 	return true
 
@@ -823,6 +848,7 @@ func reset_for_new_match() -> void:
 	_end_instinct(true)
 	_stunned.clear()
 	_team_skill_pending = 0
+	last_bon = {}
 	if _base_speed > 0.0:
 		move_speed = _base_speed
 	queue_redraw()

@@ -34,8 +34,9 @@ func _init() -> void:
 	}
 
 	# Falas de exemplo: troque pelas que você quiser (a ordem é a da cutscene)
+	_add_speaker("ego", "Ego", "res://img/rostinhos/ego.png", Color(0.27, 0.27, 0.27, 1.0))
 	_say("karasu", "Shoot dammit.")
-	_say("base", "The path to victory lies in self-sacrifice!!!.")
+	_say("ego", "The path to victory lies in self-sacrifice.")
 	_say("karasu", "Aim for...")
 	_say("karasu", "...My head.")
 	_say("hiori", "I'm trustin' ya, extraordinary...")

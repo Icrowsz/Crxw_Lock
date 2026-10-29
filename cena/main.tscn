@@ -6,6 +6,7 @@
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="3_y3eto"]
 [ext_resource type="PackedScene" uid="uid://bcstqrdud6opd" path="res://cena/bola.tscn" id="4_mk8v6"]
 [ext_resource type="Script" uid="uid://ma4vcvpvpn8j" path="res://scr/ui e visual/game_camera.gd" id="5_4fnda"]
+[ext_resource type="PackedScene" uid="uid://nudb1fidas5y" path="res://cena/perso/charles.tscn" id="12_g6h8e"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_g6c8f"]
 size = Vector2(144, 1344)
@@ -46,9 +47,9 @@ goal_replay = false
 
 [node name="MatchManager" type="Node2D" parent="." unique_id=1461380594]
 script = ExtResource("1_3tt73")
+use_formation_setup = false
 
 [node name="Bola" parent="." unique_id=235203312 instance=ExtResource("4_mk8v6")]
-position = Vector2(0, 2)
 trail_length = 300
 trail_team_color = false
 
@@ -104,3 +105,8 @@ position = Vector2(-1696, -32)
 [node name="Player10" parent="." unique_id=393406249 instance=ExtResource("3_y3eto")]
 position = Vector2(1664, -168)
 team = 1
+
+[node name="Player17" parent="." unique_id=1172053932 instance=ExtResource("12_g6h8e")]
+visible = false
+position = Vector2(152, 80)
+weirdos_demon_size = 250.0

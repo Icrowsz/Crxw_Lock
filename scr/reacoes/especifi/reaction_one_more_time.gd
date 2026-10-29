@@ -36,7 +36,8 @@ func _init() -> void:
 	}
 
 	# Falas de exemplo: troque pelas que você quiser (a ordem é a da cutscene)
-	_say("base", "Aren't these guys even looking at each other??")
+	_add_speaker("barou", "Barou", "res://img/rostinhos/barou.png", Color(0.85, 0.05, 0.08))
+	_say("barou", "Aren't these guys even looking at each other??")
 	_say("hiori", "I want my soccer...")
 	_say("hiori", "...To produce the world's best striker!")
 	_say("hiori", "Are Ya there, egoist..?")

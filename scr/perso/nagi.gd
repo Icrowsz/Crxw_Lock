@@ -1,92 +1,147 @@
 class_name Nagi
 extends Player
 ## Seishiro Nagi. Herda tudo do Player (ações gerais) e adiciona as habilidades próprias.
-## No menu aparecem 5 botões:
+## No menu aparecem 4 botões; cada um MUDA de variante sozinho conforme a situação (altura do Nagi,
+## altura e distância da bola), igual ao Heavy/Bicycle de antes:
 ##
-## 1. Trap (GRATUITA, 1x por turno): com a bola Suspensa e próxima, Nagi salta até ela, domina
-##      e fica Suspenso (a bola fica pairando do lado dele).
-##    - Heavy (recarga de 2 rodadas, COMPARTILHADA com o Bicycle): chute de trajetória Suspensa
-##      que CAI para o Chão (sem quicar). Dois jeitos de usar:
-##        * Complemento GRATUITO da Trap: logo depois do Trap (Nagi e bola Suspensos) não gasta
-##          ação de habilidade;
-##        * SOZINHO, com o Nagi no CHÃO e a bola ao alcance (no chão ou suspensa): gasta uma
-##          ação de habilidade normal.
-##      (Com Nagi e bola Suspensos/Voando sem o Trap antes, também funciona gastando a ação.)
-##    - Bicycle (variante automática do botão Heavy): Nagi Suspenso + bola Voando -> bicicleta.
-##      Se a situação serve para os dois (Nagi Suspenso + bola Voando), o Bicycle ganha.
-## 2. Zero Reset Turn (recarga de 3 rodadas): os dois no Chão e bola próxima -> Nagi segura a
-##      bola ao lado dele. Ela fica TRAVADA para os adversários (mesmo mecanismo do Arresto
-##      Momentum: spell_owner) até o próximo turno do time dele. Se um adversário tentar
-##      chegar na bola (corre/desliza para perto dela) ou der Carrinho nele, Nagi desvia e
-##      ganha +1 ação de habilidade extra no próximo turno dele.
-##    - Fake Volley (variante automática; recarga de 2 rodadas): Nagi e bola Suspensos e
-##      próximos -> chute falso (a bola sai e volta para ele). Com inimigo próximo,
-##      +7% no PRÓXIMO chute. Uma caveira translúcida aparece.
-##      * Five Stage Volley (Reação Química Miracle, com o Reo; veja reaction_miracle.gd): se o Reo
-##        mandou um Our Dream até aqui, a bola chegou Suspensa e só o Nagi mexeu nela (o Trap), o Fake
-##        Volley com inimigo próximo vira este. Cutscene; depois o Nagi repete a finta (suspenso, andando
-##        e girando em volta da bola, com a caveira cada vez maior) e, na última etapa, volta ao ponto
-##        original e chuta forte (five_chance de chance de gol).
-## 3. Lift (recarga de 1 rodada): com a bola próxima, levanta a bola E ele um nível
-##      (Chão -> Suspenso -> Voando).
-##    - Control (complemento, GRATUITO; recarga de 1 rodada): com a bola já Voando e Nagi
-##      Suspenso/Voando, ganha +1 ação de habilidade extra neste turno.
+## PASSIVA, Death: chutes do Nagi (ações gerais ou habilidades) feitos "suspenso" ou "voando" têm
+##   +0.1x de força e +3% de chance de gol.
 ##
-## Combos que o conjunto permite (com 1 ação de habilidade por turno):
-##   Trap (grátis) -> Heavy (grátis)             | Lift -> Control (grátis, +1) -> Bicycle
+## 1. DIRECT HEEL LIFT (recarga 2; compartilhada com Distortion e Zero Reset Turn)
+##    - Direct Heel Lift: Nagi no chão e SEM bola próxima -> avanço de 220. Se encontrar a bola no chão,
+##      QTE fácil; ganhando, salta com a bola na diagonal até "voando" e recebe o Distortion (de graça).
+##    - Distortion: Nagi e bola "voando" -> chuta a bola no chão na diagonal; ela volta "suspensa" e o
+##      Nagi a busca, ficando os dois suspensos.
+##    - Zero Reset Turn: bola próxima no chão ou suspensa -> domina e dá dois avanços (150 para longe do
+##      inimigo mais próximo; 200 direcionável). No 2º, se achar um inimigo: QTE fácil e, ganhando, dá um
+##      chapéu, salta, busca a bola suspensa e ganha uma ação de habilidade. A CAVEIRA cresce a cada desvio.
+## 2. FAKE VOLLEY (recarga 2; compartilhada com Juggling Shot)
+##    - Fake Volley: bola próxima no chão ou suspensa -> finta o chute, ATORDOA o inimigo mais próximo e
+##      avança 150 trazendo a bola. Começa um DOMÍNIO que dura o turno inimigo: quem tentar chegar na bola
+##      com ação geral é atordoado; quem tentar com habilidade (chute) faz um TYPING GAME e, se perder, o
+##      Nagi desvia sozinho.
+##    - Juggling Shot: se o inimigo errar 2 typing games durante o domínio, o Nagi desvia de novo e chuta
+##      sozinho para o gol inimigo (1.3x de força do Chutar, 50% de chance).
+##    - Five Stage Volley (Reação Química Miracle, com o Reo): continua como antes; veja reaction_miracle.gd.
+## 3. TRAP (recarga 2; compartilhada com Ground Control)
+##    - Trap: SEM bola próxima -> avanço de 170. Se no fim a bola estiver a 170, vai até ela no nível em
+##      que ela está (saltando se precisar) e faz um QTE fácil para ganhar uma ação de habilidade.
+##    - Ground Control: bola próxima no chão -> passe suspenso para um aliado (alcance 350), Nagi ganha um
+##      correr de 1 segundo, salta no fim, o aliado devolve a bola e um QTE fácil dá uma ação de habilidade.
+## 4. HEAVY (recarga 2; compartilhada com Jumping Turn, Bicycle e Curiosity)
+##    - Heavy: bola próxima, Nagi no chão ou suspenso -> chute 1.2x, 45% de chance, a bola SOBE na trajetória.
+##    - Jumping Turn: se a última habilidade foi o Trap -> toque curto para o lado, sobe a bola, gira e chuta (1.3x, 50%).
+##    - Bicycle: bola voando e Nagi suspenso -> bicicleta giratória (1.2x, 50%).
+##    - Curiosity: como o Bicycle, mas com o Nagi na área do goleiro e na lateral dela (55%).
+##
+## Os efeitos (caveiras brancas com variações de azul/roxo claros) estão no nagi_fx.gd.
 ##
 ## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
 ## -> renomeie o nó raiz para "Nagi".
 ##
 ## Animações opcionais (nomes na SpriteFrames; as que faltarem são puladas):
-##   trap, heavy, bicycle, zero_reset_turn, fake_volley, five_stage_volley, lift, control
-## Frame de impacto em hit_frames, ex: {"heavy": 4, "bicycle": 5, "trap": 3}
+##   direct_heel_lift, distortion, zero_reset_turn, fake_volley, juggling_shot, trap, ground_control,
+##   heavy, jumping_turn, bicycle, curiosity, five_stage_volley
+## Frame de impacto em hit_frames, ex: {"heavy": 4, "bicycle": 5}
 
-const SKILL_TRAP: StringName = &"trap"
-const SKILL_HEAVY: StringName = &"heavy"            # Heavy + Bicycle
-const SKILL_ZERO: StringName = &"zero_reset_turn"   # Zero Reset Turn + Fake Volley
-const SKILL_LIFT: StringName = &"lift"
-const SKILL_CONTROL: StringName = &"control"
+const SKILL_HEEL: StringName = &"direct_heel_lift"   # Direct Heel Lift / Distortion / Zero Reset Turn
+const SKILL_FAKE: StringName = &"fake_volley"        # Fake Volley (Five Stage Volley)
+const SKILL_TRAP: StringName = &"trap"               # Trap / Ground Control
+const SKILL_HEAVY: StringName = &"heavy"             # Heavy / Jumping Turn / Bicycle / Curiosity
 
-## Grupos de recarga (Heavy e Bicycle compartilham o mesmo)
-const CD_HEAVY: StringName = &"cd_heavy"
-const CD_ZERO: StringName = &"cd_zero"
+## Grupos de recarga (cada botão tem um, e as variantes dele COMPARTILHAM)
+const CD_HEEL: StringName = &"cd_heel"
 const CD_FAKE: StringName = &"cd_fake"
-const CD_LIFT: StringName = &"cd_lift"
-const CD_CONTROL: StringName = &"cd_control"
+const CD_TRAP: StringName = &"cd_trap"
+const CD_HEAVY: StringName = &"cd_heavy"
 
-## Qual variante cabe na situação atual (altura do Nagi x altura da bola)
-enum HeavyVariant { NONE, HEAVY, BICYCLE }
-enum ZeroVariant { NONE, ZERO_RESET, FAKE_VOLLEY }
+## Qual variante cabe na situação atual
+enum HeelVariant { NONE, HEEL, DISTORTION, ZERO_RESET }
+enum FakeVariant { NONE, FAKE_VOLLEY }
+enum TrapVariant { NONE, TRAP, GROUND_CONTROL }
+enum HeavyVariant { NONE, HEAVY, JUMPING_TURN, BICYCLE, CURIOSITY }
 
-@export_group("Trap")
-@export var trap_range: float = 140.0            # alcance até a bola (ele salta até ela)
-@export var trap_stop_distance: float = 32.0     # distância em que ele para da bola
-@export var trap_leap_time: float = 0.3
-@export var max_traps_per_turn: int = 1          # sem limite o Trap grátis dava para repetir sem fim
+@export_group("Passiva: Death")
+@export var death_force_bonus: float = 0.1                       # +0.1x de força nos chutes suspenso/voando
+@export_range(0.0, 1.0) var death_chance_bonus: float = 0.03     # +3% de chance de gol
 
-@export_group("Heavy / Bicycle")
-@export_range(0.0, 1.0) var chance_heavy: float = 0.45
-@export_range(0.0, 1.0) var chance_bicycle: float = 0.55
-@export var heavy_cooldown: int = 2              # recarga compartilhada entre Heavy e Bicycle
-@export var heavy_uses_qte: bool = true          # QTE do tipo do chute (voleio fácil / voando difícil)
-@export var bicycle_uses_qte: bool = true
+@export_group("Geral")
+@export var stun_rounds: int = 1                 # Atordoado = sem ações (gerais e habilidades) por esta quantidade de rodadas
+@export var ball_side_distance: float = 34.0     # onde a bola fica pairando, ao lado dele
+@export var easy_qtes: bool = true               # false = pula todos os QTEs fáceis das habilidades
+@export var kicks_use_qte: bool = false          # QTE nos chutes (Heavy, Jumping Turn, Bicycle, Curiosity). O pedido não cita QTE
+@export var skull_size_start: float = 1.0        # caveira do Zero Reset Turn: tamanho no 1º desvio
+@export var skull_size_step: float = 0.6         # quanto cresce a cada desvio
+@export_range(0.0, 1.0) var skull_alpha_start: float = 0.3   # opacidade no 1º desvio
+@export_range(0.0, 1.0) var skull_alpha_step: float = 0.18   # quanto sobe a cada desvio
+
+@export_group("Direct Heel Lift / Distortion")
+@export var heel_cooldown: int = 2
+@export var heel_dash_range: float = 220.0       # avanço
+@export var heel_dash_time: float = 0.3
+@export var heel_hit_radius: float = 50.0        # a que distância ele "encontra" a bola no avanço
+@export var heel_lift_forward: float = 80.0      # quanto avança, na diagonal, ao subir com a bola
+@export var heel_lift_time: float = 0.45
+@export var distortion_range: float = 150.0      # alcance da diagonal em que a bola é chutada no chão
+@export var distortion_slam_time: float = 0.22
+@export var distortion_rebound_distance: float = 70.0
+@export var distortion_rebound_time: float = 0.35
 
 @export_group("Zero Reset Turn")
-@export var zero_cooldown: int = 3
-@export var zero_ball_distance: float = 34.0     # onde a bola fica, ao lado dele
-@export var zero_trigger_radius: float = 80.0    # adversário agindo a esta distância da bola = "tentou interagir"
-@export var zero_hold_distance: float = 110.0    # se Nagi se afastar mais que isso da bola, ele a solta
-@export var zero_extra_skills: int = 1           # ações de habilidade extras no próximo turno
+@export var zero_first_range: float = 150.0      # 1º avanço: para longe do inimigo mais próximo
+@export var zero_second_range: float = 200.0     # 2º avanço: direcionável
+@export var zero_dash_time: float = 0.28
+@export var zero_hit_radius: float = 60.0        # inimigo encontrado no 2º avanço
+@export var zero_nutmeg_distance: float = 110.0  # quanto passa por trás do inimigo no chapéu
+@export var zero_nutmeg_time: float = 0.5
+@export var zero_extra_skills: int = 1           # ação de habilidade ganha (vale neste turno)
 
-@export_group("Fake Volley")
+@export_group("Fake Volley / Juggling Shot")
 @export var fake_cooldown: int = 2
-@export_range(0.0, 1.0) var fake_bonus: float = 0.07   # +7% no próximo chute
-@export var fake_enemy_radius: float = 140.0     # "inimigo próximo"
-@export var fake_travel: float = 70.0            # quanto a bola sai antes de voltar
-@export var fake_lift: float = 18.0
-@export var fake_out_time: float = 0.18
-@export var fake_back_time: float = 0.22
+@export var fake_dash_range: float = 150.0       # avanço trazendo a bola
+@export var fake_dash_time: float = 0.25
+@export var fake_enemy_radius: float = 160.0     # "inimigo mais próximo" a atordoar
+@export var dominance_trigger_radius: float = 10.0   # adversário agindo (correr/carrinho) a esta distância da bola = tentou interagir
+@export var dominance_hold_distance: float = 110.0   # se Nagi se afastar mais que isso da bola, o domínio acaba
+@export var typing_time: float = 1.0
+@export var typing_words: Array[String] = ["CAVEIRA", "DESVIO", "SILENCIO", "VOLEIO", "NAGI", "RESET", "FINTA"]
+@export var juggling_fails_needed: int = 2       # typing games errados para disparar o Juggling Shot
+@export var juggling_force: float = 1.3          # em múltiplos da força do Chutar
+@export_range(0.0, 1.0) var juggling_chance: float = 0.5
+@export var juggling_step: float = 60.0          # passo do desvio em direção ao gol
+
+@export_group("Trap / Ground Control")
+@export var trap_cooldown: int = 2
+@export var trap_dash_range: float = 170.0
+@export var trap_dash_time: float = 0.26
+@export var trap_ball_range: float = 170.0       # a bola precisa estar a esta distância no fim do avanço
+@export var trap_stop_distance: float = 32.0
+@export var trap_leap_time: float = 0.3
+@export var control_pass_range: float = 350.0    # Ground Control: alcance do passe suspenso
+@export var control_pass_time: float = 0.45
+@export var control_run_time: float = 1.3        # o "correr" de 1 segundo
+@export var control_jump_time: float = 0.25
+@export var control_return_time: float = 0.45
+@export var control_extra_skills: int = 1        # ação de habilidade ganha com o QTE
+
+@export_group("Heavy / Jumping Turn / Bicycle / Curiosity")
+@export var heavy_cooldown: int = 2
+@export var heavy_force: float = 1.2
+@export_range(0.0, 1.0) var heavy_chance: float = 0.45
+@export_range(0.0, 1.0) var heavy_rise_point: float = 0.7   # ponto de baixo da bola: ela SOBE na trajetória (0 = reto)
+@export var jumping_force: float = 1.3
+@export_range(0.0, 1.0) var jumping_chance: float = 0.5
+@export var jumping_tap_distance: float = 40.0   # toque curto para o lado
+@export var jumping_tap_time: float = 0.2
+@export var jumping_spin_time: float = 0.4
+@export var bicycle_force: float = 1.2
+@export_range(0.0, 1.0) var bicycle_chance: float = 0.5
+@export var bicycle_spin_time: float = 0.45
+@export_range(0.0, 1.0) var curiosity_chance: float = 0.55
+## Curiosity: área do goleiro INIMIGO (true) ou do próprio time (false)
+@export var curiosity_enemy_area: bool = true
+## "Na lateral": quão aberto (0 = qualquer ponto da área; 1 = só colado na linha de fundo lateral da área)
+@export_range(0.0, 1.0) var curiosity_side_fraction: float = 0.5
 
 @export_group("Miracle (Five Stage Volley)")
 @export_range(0.0, 1.0) var five_chance: float = 0.80   # chance de gol do chute final
@@ -98,63 +153,48 @@ enum ZeroVariant { NONE, ZERO_RESET, FAKE_VOLLEY }
 @export var five_spin_turns: float = 2.0                # voltas completas que ele gira em cada etapa do meio
 @export var five_return_time: float = 0.22              # tempo da volta ao ponto original, na última etapa
 @export var five_travel_growth: float = 0.6             # a finta da bola vai ficando maior (0.6 = +60% na última)
-@export var five_skull_start: float = 1.5               # tamanho da caveira na 1ª etapa (1.0 = o do Fake Volley normal)
+@export var five_skull_start: float = 1.5               # tamanho da caveira na 1ª etapa
 @export var five_skull_end: float = 6.5                 # tamanho da caveira na última
 @export var five_shake: float = 8.0                     # tremor da câmera (px) na última finta; o chute final treme o dobro
-@export var five_fx: KickFX                             # vazio = estilo padrão (branco com brilho violeta, veja _make_five_fx)
-
-@export_group("Lift / Control")
-@export var lift_cooldown: int = 1
-@export var lift_time: float = 0.3
-@export var control_cooldown: int = 1
-@export var control_extra_skills: int = 1
-## Control grátis = +1 ação de verdade. Se custasse ação, daria +1 e gastaria 1 (resultado zero).
-@export var control_is_free: bool = true
+@export var fake_travel: float = 70.0                   # quanto a bola sai na finta do Five Stage Volley
+@export var fake_lift: float = 18.0
+@export var fake_out_time: float = 0.18
+@export var fake_back_time: float = 0.22
+@export var five_fx: KickFX                             # vazio = estilo padrão (branco com brilho lilás, veja _make_five_fx)
 
 @export_group("Visual dos chutes")
-## Efeitos brancos/cinzas. Vazio = usa o estilo padrão do Nagi (veja _make_*_fx)
-@export var soft_fx: KickFX      # Trap, Lift, Zero Reset Turn, Fake Volley
-@export var heavy_fx: KickFX     # Heavy (cinza pesado, partículas caem)
-@export var bicycle_fx: KickFX   # Bicycle (branco, giratório)
+## Efeitos brancos com azul/roxo claros. Vazio = usa o estilo padrão do Nagi (veja _make_*_fx)
+@export var soft_fx: KickFX      # avanços, domínio, Trap, Ground Control
+@export var heavy_fx: KickFX     # Heavy, Jumping Turn, Juggling Shot (azul-gelo)
+@export var bicycle_fx: KickFX   # Bicycle, Curiosity (branco giratório com lilás)
 
 @export_group("Descrição (hover)")
-## Imagem de cada habilidade no balão do menu. Chaves: trap, heavy, zero_reset_turn, lift, control.
+## Imagem de cada habilidade no balão do menu. Chaves: o id do botão (direct_heel_lift, fake_volley, trap, heavy)
+## ou o nome da variante (distortion, zero_reset_turn, ground_control, jumping_turn, bicycle, curiosity, five_stage_volley).
 @export var skill_icons: Dictionary = {}
 
-var _traps_this_turn: int = 0
-## O Trap deste turno foi usado e o Heavy logo depois sai de graça (complemento do Trap)
-var _trap_followup: bool = false
+## O Distortion que o Direct Heel Lift acabou de liberar (de graça, logo depois)
+var _heel_followup: bool = false
+## Última habilidade usada (para o Jumping Turn: "se a última foi o Trap")
+var _last_skill: StringName = &""
 
-## Zero Reset Turn
-var _zero_active: bool = false
-var _zero_triggered: bool = false          # a recompensa já foi dada nesta janela
-var _zero_enemy_turn_pending: bool = false # o turno do time do Nagi já acabou; falta o do adversário
-var _zero_anchor: Vector2 = Vector2.ZERO   # onde a bola foi deixada
-
-## Ações extras temporárias (Control / Zero Reset Turn): sobra no fim do turno do time dele = some
+## Ações extras temporárias (Zero Reset Turn / Trap / Ground Control): sobra no fim do turno do time dele = some
 var _temp_extras: int = 0
 
-## Miracle (Five Stage Volley)
-var _five_aura: CPUParticles2D        # partículas brancas em volta do Nagi durante a sequência
+## Domínio da bola (Fake Volley)
+var _dom_active: bool = false
+var _dom_busy: bool = false                # resolvendo uma tentativa de interação agora
+var _dom_enemy_turn_pending: bool = false  # o turno do time do Nagi já acabou; falta o do adversário
+var _dom_anchor: Vector2 = Vector2.ZERO    # onde a bola foi deixada
+var _dom_fails: int = 0                    # typing games perdidos pelos inimigos
+var _dom_stunned: Array[Player] = []       # já atordoados nesta janela (não repete)
+var _dodges: int = 0                       # desvios (Zero Reset Turn / domínio): a caveira cresce a cada um
+
+## Aura de caveirinhas (domínio e Five Stage Volley)
+var _aura: CPUParticles2D
 var _shake_tween: Tween
 var _shake_cam: Camera2D
 var _shake_rest: Vector2 = Vector2.ZERO
-
-# Efeitos visuais desenhados no _draw
-var _fx_kind: StringName = &""
-var _fx_color: Color = Color.WHITE
-var _fx_tween: Tween
-var _fx_t: float = 1.0:
-	set(v):
-		_fx_t = v
-		queue_redraw()
-
-var _skull_tween: Tween
-var _skull_mult: float = 1.0   # tamanho da caveira (1.0 = a do Fake Volley normal)
-var _skull_t: float = 1.0:   # 1.0 = caveira escondida
-	set(v):
-		_skull_t = v
-		queue_redraw()
 
 var _text: String = ""
 var _text_tween: Tween
@@ -180,14 +220,14 @@ func _ready() -> void:
 	_hook_manager.call_deferred()   # o MatchManager entra na árvore no mesmo frame
 
 
-# ---------- VISUAL: ESTILOS DO CHUTE (brancos e cinzas) ----------
+# ---------- VISUAL: ESTILOS DO CHUTE (branco, azul e lilás bem claros) ----------
 
-## Fumaça clara que sobe (Trap, Lift, Zero Reset Turn, Fake Volley)
+## Fumaça clara que sobe
 func _make_soft_fx() -> KickFX:
 	var fx := KickFX.new()
-	fx.color = Color(0.95, 0.95, 1.0)
+	fx.color = Color(0.96, 0.96, 1.0)
 	fx.trail_width = 12.0
-	fx.particle_color = Color(0.8, 0.8, 0.85)
+	fx.particle_color = Color(0.82, 0.9, 1.0)
 	fx.amount = 18
 	fx.lifetime = 0.6
 	fx.speed_min = 10.0
@@ -201,12 +241,12 @@ func _make_soft_fx() -> KickFX:
 	return fx
 
 
-## Cinza pesado: o rastro é grosso e as partículas CAEM, como a bola do Heavy
+## Azul-gelo pesado: o rastro é grosso e as partículas CAEM
 func _make_heavy_fx() -> KickFX:
 	var fx := KickFX.new()
-	fx.color = Color(0.72, 0.72, 0.78)
+	fx.color = Color(0.86, 0.93, 1.0)
 	fx.trail_width = 22.0
-	fx.particle_color = Color(0.55, 0.55, 0.6)
+	fx.particle_color = Color(0.7, 0.82, 1.0)
 	fx.amount = 26
 	fx.lifetime = 0.7
 	fx.speed_min = 20.0
@@ -220,12 +260,12 @@ func _make_heavy_fx() -> KickFX:
 	return fx
 
 
-## Branco brilhante e giratório (Bicycle)
+## Branco brilhante e giratório com lilás (Bicycle, Curiosity)
 func _make_bicycle_fx() -> KickFX:
 	var fx := KickFX.new()
 	fx.color = Color(1.0, 1.0, 1.0)
 	fx.trail_width = 16.0
-	fx.particle_color = Color(0.92, 0.92, 0.97)
+	fx.particle_color = Color(0.86, 0.8, 1.0)
 	fx.amount = 30
 	fx.lifetime = 0.5
 	fx.speed_min = 30.0
@@ -252,25 +292,45 @@ func _hook_manager() -> void:
 func _on_turn_started(turn_team: int) -> void:
 	if turn_team != team:
 		return
-	_traps_this_turn = 0
-	_trap_followup = false
-	# O turno do time dele voltou: o adversário já jogou, a janela do Zero Reset Turn acabou
-	if _zero_active and _zero_enemy_turn_pending:
-		_end_zero_reset()
+	_heel_followup = false
+	_last_skill = &""
+	# O turno do time dele voltou: o adversário já jogou, o domínio acabou
+	if _dom_active and _dom_enemy_turn_pending:
+		_end_dominance()
 
 
 func _on_turn_ended(turn_team: int) -> void:
 	if turn_team != team:
 		return
+	_heel_followup = false
 	_expire_temp_extras()
-	if _zero_active:
-		_zero_enemy_turn_pending = true   # a janela segue valendo durante o turno do adversário
+	if _dom_active:
+		_dom_enemy_turn_pending = true   # o domínio segue valendo durante o turno do adversário
+
+
+# ---------- PASSIVA: DEATH ----------
+
+## Chutes "suspenso" ou "voando" (ação geral Chutar ou qualquer habilidade): +0.1x de força, +3% de chance
+func kick_ball(ball: Ball, direction: Vector2, kind: KickType, qte_success: bool = true,
+		chance_override: float = -1.0, ignore_self_collision: bool = false,
+		fx: KickFX = null, anim: StringName = &"", on_kick: Callable = Callable()) -> void:
+	var airborne: bool = height_level != Heights.Level.GROUND
+	var prior_bonus: float = next_shot_bonus
+	if airborne:
+		next_kick_force_mult += death_force_bonus
+		if chance_override >= 0.0:
+			chance_override = minf(chance_override + death_chance_bonus, 1.0)
+		else:
+			next_shot_bonus += death_chance_bonus   # o kick_ball gasta isto na chance do Chutar
+		NagiFX.puff(self, 4)
+	await super(ball, direction, kind, qte_success, chance_override, ignore_self_collision, fx, anim, on_kick)
+	if airborne and chance_override < 0.0 and next_shot_bonus > 0.0:
+		next_shot_bonus = prior_bonus   # o chute foi cancelado antes de gastar: devolve ao que era
 
 
 # ---------- AÇÕES EXTRAS TEMPORÁRIAS ----------
 
-## Dá ações de habilidade só ao Nagi. O que sobrar no fim do turno do time dele some
-## (Control: "nesta rodada"; Zero Reset Turn: "na próxima rodada").
+## Dá ações de habilidade só ao Nagi. O que sobrar no fim do turno do time dele some.
 func _grant_temp_extra(amount: int) -> void:
 	extra_skill_left += amount
 	_temp_extras += amount
@@ -284,12 +344,6 @@ func _expire_temp_extras() -> void:
 
 
 # ---------- AUXILIARES ----------
-
-func _next_level(level: Heights.Level) -> Heights.Level:
-	if level == Heights.Level.GROUND:
-		return Heights.Level.SUSPENDED
-	return Heights.Level.FLYING
-
 
 ## Usa a animação própria se a SpriteFrames tiver; senão cai no fallback
 func _anim_or(anim: StringName, fallback: StringName) -> StringName:
@@ -307,6 +361,66 @@ func _enemies_within(radius: float) -> Array[Player]:
 	return list
 
 
+func _nearest_enemy(max_distance: float = INF) -> Player:
+	var best: Player = null
+	var best_d: float = max_distance
+	for other: Player in get_tree().get_nodes_in_group("players"):
+		if other.team == team or other.is_down:
+			continue
+		var d: float = global_position.distance_to(other.global_position)
+		if d <= best_d:
+			best_d = d
+			best = other
+	return best
+
+
+## Direção até o inimigo mais próximo (ou para onde o Nagi olha, se não houver)
+func _nearest_enemy_dir(enemies: Array[Player]) -> Vector2:
+	if enemies.is_empty():
+		return Vector2(facing, 0.0)
+	var nearest: Player = enemies[0]
+	for e: Player in enemies:
+		if e.global_position.distance_to(global_position) < nearest.global_position.distance_to(global_position):
+			nearest = e
+	var to_enemy: Vector2 = nearest.global_position - global_position
+	return to_enemy.normalized() if to_enemy.length() > 1.0 else Vector2(facing, 0.0)
+
+
+## Para onde fugir no 1º avanço do Zero Reset Turn: o lado oposto ao inimigo mais próximo
+func _away_dir() -> Vector2:
+	var enemy: Player = _nearest_enemy()
+	if enemy == null:
+		return Vector2(-_default_facing(), 0.0)
+	var away: Vector2 = global_position - enemy.global_position
+	return away.normalized() if away.length() > 1.0 else Vector2(-_default_facing(), 0.0)
+
+
+## Ponto do gol inimigo (centro), em coordenadas globais
+func _enemy_goal_point() -> Vector2:
+	var f: Field = get_tree().get_first_node_in_group("field") as Field
+	if f == null:
+		return global_position + Vector2(_default_facing() * 800.0, 0.0)
+	var half: Vector2 = f.pitch_size * 0.5
+	return f.to_global(Vector2(-float(f.defend_dir(team)) * half.x, 0.0))
+
+
+func _near_ball() -> bool:
+	var ball: Ball = _get_ball()
+	return ball != null and get_kick_type(ball) != KickType.NONE
+
+
+func _ball_level() -> Heights.Level:
+	var ball: Ball = _get_ball()
+	return ball.get_level() if ball != null else Heights.Level.GROUND
+
+
+## QTE fácil (devolve true se acertou ou se o QTE está desligado)
+func _easy_qte(m: MatchManager) -> bool:
+	if not easy_qtes or skips_qte():
+		return true
+	return await m.run_qte(KickType.VOLLEY)
+
+
 ## Aura da habilidade na bola por alguns segundos (mesmo pairando). Chame DEPOIS do register_touch.
 func _ball_aura(ball: Ball, fx: KickFX, seconds: float) -> void:
 	if fx == null or ball == null:
@@ -314,322 +428,488 @@ func _ball_aura(ball: Ball, fx: KickFX, seconds: float) -> void:
 	var previous: bool = ball.fx_during_hover
 	ball.fx_during_hover = true
 	ball.play_fx(fx)
+	NagiFX.trail(ball, seconds)
 	await get_tree().create_timer(seconds).timeout
 	if is_instance_valid(ball):
 		ball.stop_fx()
 		ball.fx_during_hover = previous
 
 
-# ---------- 1. TRAP (gratuita) ----------
+## Atordoa um adversário: ele perde as ações (gerais e habilidades) por stun_rounds
+func _stun(p: Player) -> void:
+	if p == null or not is_instance_valid(p) or p.is_down:
+		return
+	p.apply_lock(self, stun_rounds)
+	NagiFX.stun(p)
 
-func _can_trap() -> bool:
+
+## Avanço rápido até "dest". Devolve {"ball": bool, "enemy": Player ou null}.
+## carry: bola que vem junto (fica ao lado dele, na altura carry_height).
+## stop_for_ball: para ao encontrar a bola NO CHÃO; stop_for_enemy: para ao encontrar um inimigo.
+func _dash(dest: Vector2, time: float, carry: Ball = null, carry_dir: Vector2 = Vector2.ZERO,
+		carry_height: float = 0.0, stop_for_ball: bool = false, stop_for_enemy: bool = false) -> Dictionary:
+	var result: Dictionary = {"ball": false, "enemy": null}
+	NagiFX.line(self, global_position, dest, 10)
+	var tw: Tween = create_tween()
+	tw.tween_property(self, "global_position", dest, time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	var ball_tw: Tween = null
+	if carry != null:
+		var side: Vector2 = carry_dir.normalized() if carry_dir.length() > 0.01 else Vector2(facing, 0.0)
+		ball_tw = carry.hover_to(dest + side * ball_side_distance, carry_height, time)
+	while tw.is_valid() and tw.is_running():
+		await get_tree().physics_frame
+		if stop_for_ball:
+			var b: Ball = _get_ball()
+			if b != null and not b.is_held() and b.get_level() == Heights.Level.GROUND \
+					and global_position.distance_to(b.global_position) <= heel_hit_radius:
+				result["ball"] = true
+				break
+		if stop_for_enemy:
+			for other: Player in get_tree().get_nodes_in_group("players"):
+				if other.team != team and not other.is_down \
+						and global_position.distance_to(other.global_position) <= zero_hit_radius:
+					result["enemy"] = other
+					break
+			if result["enemy"] != null:
+				break
+	if tw.is_valid() and tw.is_running():
+		tw.kill()
+		if ball_tw != null and ball_tw.is_valid():
+			ball_tw.kill()
+	return result
+
+
+## Sobe/desce o Nagi até um nível, com o salto visual
+func _go_to_level(level: Heights.Level, time: float) -> void:
+	height_level = level
+	var tw: Tween = create_tween()
+	tw.tween_property(self, "height", Heights.to_height(level), time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	await tw.finished
+
+
+## Giro do corpo (bicicleta, Jumping Turn): mexe na rotação do nó que sobe com o Nagi
+func _spin(turns: float, time: float) -> void:
+	if _lift_node == null:
+		return
+	var tw: Tween = create_tween()
+	tw.tween_property(_lift_node, "rotation", TAU * turns * facing, time) \
+		.set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+
+
+## Voltar ao normal = deixar o próprio Player refazer o visual dele (também respeita o "deitado" de quem caiu).
+func _reset_spin() -> void:
+	if _lift_node != null:
+		_update_visual()
+
+
+## Um desvio: a caveira sai de cima dele, MAIOR e MAIS OPACA a cada desvio
+func _dodge_skull() -> void:
+	var size_mult: float = NagiFX.stage_size(_dodges, skull_size_start, skull_size_step)
+	var alpha: float = NagiFX.stage_alpha(_dodges, skull_alpha_start, skull_alpha_step)
+	_dodges += 1
+	NagiFX.skull(self, size_mult, alpha, 1.2)
+
+
+# ---------- 1. DIRECT HEEL LIFT / DISTORTION / ZERO RESET TURN ----------
+
+func get_heel_variant() -> HeelVariant:
 	var ball: Ball = _get_ball()
-	if ball == null or is_down or ball.is_held() or ball.is_locked_for(team):
-		return false
-	if _traps_this_turn >= max_traps_per_turn:
-		return false
+	if ball == null or is_down:
+		return HeelVariant.NONE
+	if get_kick_type(ball) == KickType.NONE:
+		# Sem bola próxima: o avanço, só com o Nagi no chão
+		return HeelVariant.HEEL if height_level == Heights.Level.GROUND else HeelVariant.NONE
+	var level: Heights.Level = ball.get_level()
 	if height_level == Heights.Level.FLYING:
-		return false
-	if ball.get_level() != Heights.Level.SUSPENDED:
-		return false
-	return global_position.distance_to(ball.global_position) <= trap_range
+		return HeelVariant.DISTORTION if level == Heights.Level.FLYING else HeelVariant.NONE
+	if level == Heights.Level.GROUND or level == Heights.Level.SUSPENDED:
+		return HeelVariant.ZERO_RESET
+	return HeelVariant.NONE
 
 
-func _use_trap() -> bool:
-	var m: MatchManager = _get_manager()
-	var ball: Ball = _get_ball()
-	if m == null or ball == null or not _can_trap():
-		return false
-
-	face_towards(ball.global_position - global_position)
-	if not await play_action(&"trap", ANIM_JUMP):
-		return false
-	# A bola pode ter se mexido durante a animação: confere de novo
-	ball = _get_ball()
-	if ball == null or not _can_trap():
-		return false
-
-	m.clear_pending_pass()   # se a bola era um passe alto em andamento, o passe deixa de valer
-	_traps_this_turn += 1
-
-	var to_ball: Vector2 = ball.global_position - global_position
-	var dir: Vector2 = to_ball.normalized() if to_ball.length() > 1.0 else Vector2(facing, 0.0)
-	var stop_at: Vector2 = global_position
-	if to_ball.length() > trap_stop_distance:
-		stop_at = ball.global_position - dir * trap_stop_distance
-
-	# Salta até a bola e fica Suspenso
-	height_level = Heights.Level.SUSPENDED
-	var leap: Tween = create_tween().set_parallel(true)
-	leap.tween_property(self, "global_position", stop_at, trap_leap_time) \
-		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	leap.tween_property(self, "height", Heights.SUSPENDED_HEIGHT, trap_leap_time) \
-		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	await leap.finished
-
-	# Domina: a bola para e fica pairando Suspensa do lado dele
-	var hold: Tween = ball.hover_to(ball.global_position, Heights.SUSPENDED_HEIGHT, 0.15)
-	await hold.finished
-	ball.register_touch(self)
-	_pulse(&"ring", Color(0.92, 0.92, 1.0))
-	_say("TRAP!")
-	_ball_aura(ball, soft_fx, 0.5)
-	_trap_followup = true   # o Heavy logo depois é gratuito (complemento do Trap)
-	return true
+## O Distortion está de graça agora? Só como complemento do Direct Heel Lift
+func _distortion_is_followup() -> bool:
+	return _heel_followup and get_heel_variant() == HeelVariant.DISTORTION
 
 
-# ---------- 1a/1b. HEAVY e BICYCLE ----------
-
-func get_heavy_variant() -> HeavyVariant:
-	var ball: Ball = _get_ball()
-	# get_kick_type já confere: derrubado, bola na mão do goleiro, longe demais, altura inalcançável
-	if ball == null or get_kick_type(ball) == KickType.NONE:
-		return HeavyVariant.NONE
-	var ball_level: Heights.Level = ball.get_level()
-	# Sozinho no CHÃO: o Heavy vale com a bola ao alcance (no chão ou suspensa)
-	if height_level == Heights.Level.GROUND:
-		return HeavyVariant.HEAVY
-	if ball_level == Heights.Level.GROUND:
-		return HeavyVariant.NONE
-	if height_level == Heights.Level.SUSPENDED and ball_level == Heights.Level.FLYING:
-		return HeavyVariant.BICYCLE
-	return HeavyVariant.HEAVY
-
-
-## O Heavy está de graça agora? Só como complemento do Trap (Heavy, não Bicycle) e fora de recarga
-func _heavy_is_trap_followup() -> bool:
-	return _trap_followup and not is_on_cooldown(CD_HEAVY) \
-		and get_heavy_variant() == HeavyVariant.HEAVY
-
-
-func _use_heavy_skill() -> bool:
-	var m: MatchManager = _get_manager()
-	if m == null or get_heavy_variant() == HeavyVariant.NONE:
-		return false
-
-	var aim: Vector2 = await m.aim_for_skill(self, kick_aim_range)
-	if aim == Vector2.ZERO:
-		return false   # cancelou: não gasta a ação
-
-	# A bola pode ter mudado de altura enquanto ele mirava: confere de novo
-	var ball: Ball = _get_ball()
-	var variant: HeavyVariant = get_heavy_variant()
-	if ball == null or variant == HeavyVariant.NONE:
-		return false
-
-	var is_bicycle: bool = variant == HeavyVariant.BICYCLE
-	var kind: KickType = KickType.FLYING if ball.get_level() == Heights.Level.FLYING else KickType.VOLLEY
-	var chance: float = chance_bicycle if is_bicycle else chance_heavy
-	var needs_qte: bool = bicycle_uses_qte if is_bicycle else heavy_uses_qte
-
-	var qte_ok: bool = true
-	if needs_qte and not skips_qte():
-		qte_ok = await m.run_qte(kind)
-
-	var anim: StringName
-	if is_bicycle:
-		anim = _anim_or(&"bicycle", ANIM_FLYING_KICK)
-	else:
-		anim = _anim_or(&"heavy", ANIM_FLYING_KICK if kind == KickType.FLYING else ANIM_VOLLEY)
-	var fx: KickFX = null
-	if qte_ok:
-		fx = bicycle_fx if is_bicycle else heavy_fx
-
-	var touches_before: int = ball.interaction_count
-	# Errou o QTE = chute fraquinho, sem aura. A bola já está no ar, então o kick_ball não a
-	# levanta mais (só cai): é isso que dá a trajetória "suspensa que cai para o chão".
-	await kick_ball(ball, aim, kind, qte_ok, chance, false, fx, anim)
-	if ball.interaction_count == touches_before:
-		return false   # a ação foi cancelada antes do chute (ex: a partida reiniciou)
-
-	# Heavy: ao tocar o chão a bola NÃO quica, fica rolando
-	if not is_bicycle and qte_ok:
-		ball.bounces_left = 0
-
-	_trap_followup = false   # o complemento grátis do Trap foi gasto
-	start_cooldown(CD_HEAVY, heavy_cooldown)
-	return true
-
-
-# ---------- 2. ZERO RESET TURN / FAKE VOLLEY ----------
-
-func get_zero_variant() -> ZeroVariant:
-	var ball: Ball = _get_ball()
-	if ball == null or get_kick_type(ball) == KickType.NONE:
-		return ZeroVariant.NONE
-	var ball_level: Heights.Level = ball.get_level()
-	if height_level == Heights.Level.GROUND and ball_level == Heights.Level.GROUND:
-		return ZeroVariant.ZERO_RESET
-	if height_level == Heights.Level.SUSPENDED and ball_level == Heights.Level.SUSPENDED:
-		return ZeroVariant.FAKE_VOLLEY
-	return ZeroVariant.NONE
-
-
-func _zero_cd_group() -> StringName:
-	return CD_FAKE if get_zero_variant() == ZeroVariant.FAKE_VOLLEY else CD_ZERO
-
-
-func _use_zero_skill() -> bool:
-	match get_zero_variant():
-		ZeroVariant.ZERO_RESET:
+func _use_heel_skill() -> bool:
+	match get_heel_variant():
+		HeelVariant.HEEL:
+			return await _use_direct_heel_lift()
+		HeelVariant.DISTORTION:
+			return await _use_distortion()
+		HeelVariant.ZERO_RESET:
 			return await _use_zero_reset()
-		ZeroVariant.FAKE_VOLLEY:
-			# Reação Química Miracle: com as condições cumpridas, o Fake Volley vira o Five Stage Volley
-			if _miracle_available() != null:
-				return await _use_five_stage_volley()
-			return await _use_fake_volley()
 	return false
 
 
-## Nagi segura a bola ao lado dele. Ela fica travada para os adversários até o próximo turno
-## do time do Nagi; ver _check_zero_reset e try_counter_slide para o "desvio".
+func _use_direct_heel_lift() -> bool:
+	var m: MatchManager = _get_manager()
+	if m == null or get_heel_variant() != HeelVariant.HEEL:
+		return false
+	var dir: Vector2 = await m.aim_for_skill(self, heel_dash_range)
+	if dir == Vector2.ZERO:
+		return false   # cancelou: não gasta a ação
+	dir = dir.normalized()
+	face_towards(dir)
+	if not await play_action(&"direct_heel_lift"):
+		return false
+
+	m.clear_pending_pass()
+	NagiFX.puff(self, 6)
+	var res: Dictionary = await _dash(global_position + dir * heel_dash_range, heel_dash_time, null, Vector2.ZERO, 0.0, true)
+	var ball: Ball = _get_ball()
+	if res["ball"] and ball != null and not ball.is_held() and ball.get_level() == Heights.Level.GROUND:
+		# Encontrou a bola no chão: QTE fácil
+		if await _easy_qte(m):
+			ball = _get_ball()
+			if ball != null:
+				await _heel_lift_up(ball, dir)
+				_heel_followup = true   # recebe o Distortion
+	start_cooldown(CD_HEEL, heel_cooldown)
+	_last_skill = &"heel"
+	return true
+
+
+## Salta com a bola, na diagonal, até "voando" (os dois pairam lá)
+func _heel_lift_up(ball: Ball, dir: Vector2) -> void:
+	ball.register_touch(self)
+	height_level = Heights.Level.FLYING
+	var dest: Vector2 = global_position + dir * heel_lift_forward
+	var tw: Tween = create_tween().set_parallel(true)
+	tw.tween_property(self, "global_position", dest, heel_lift_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	tw.tween_property(self, "height", Heights.FLYING_HEIGHT, heel_lift_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	ball.hover_to(dest + dir * ball_side_distance, Heights.FLYING_HEIGHT, heel_lift_time)
+	NagiFX.ring(self, global_position, 40.0, 12)
+	await tw.finished
+	ball.register_touch(self)
+	_ball_aura(ball, soft_fx, 0.5)
+	_say("HEEL LIFT")
+
+
+## Distortion: chuta a bola no chão na diagonal; ela volta suspensa e o Nagi a busca
+func _use_distortion() -> bool:
+	var m: MatchManager = _get_manager()
+	if m == null or get_heel_variant() != HeelVariant.DISTORTION:
+		return false
+	var was_followup: bool = _distortion_is_followup()
+	var dir: Vector2 = await m.aim_for_skill(self, distortion_range)
+	if dir == Vector2.ZERO:
+		return false
+	dir = dir.normalized()
+	face_towards(dir)
+	if not await play_action(&"distortion", ANIM_FLYING_KICK):
+		return false
+	var ball: Ball = _get_ball()
+	if ball == null or get_heel_variant() != HeelVariant.DISTORTION:
+		return false
+
+	m.clear_pending_pass()
+	ball.register_touch(self)
+	NagiFX.puff(self, 6)
+	_ball_aura(ball, heavy_fx, distortion_slam_time + distortion_rebound_time + 0.2)
+	# A bola vai ao chão na diagonal...
+	var slam_to: Vector2 = ball.global_position + dir * distortion_range
+	var slam: Tween = ball.hover_to(slam_to, Heights.GROUND_HEIGHT, distortion_slam_time)
+	await slam.finished
+	NagiFX.burst(self, slam_to, 8, false)
+	# ...e volta SUSPENSA. O Nagi a busca e fica Suspenso também
+	var rebound_to: Vector2 = slam_to + dir * distortion_rebound_distance
+	ball.hover_to(rebound_to, Heights.SUSPENDED_HEIGHT, distortion_rebound_time)
+	height_level = Heights.Level.SUSPENDED
+	var fetch: Tween = create_tween().set_parallel(true)
+	fetch.tween_property(self, "global_position", rebound_to - dir * ball_side_distance, distortion_rebound_time + 0.1) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	fetch.tween_property(self, "height", Heights.SUSPENDED_HEIGHT, distortion_rebound_time + 0.1) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	await fetch.finished
+	ball = _get_ball()
+	if ball != null:
+		ball.register_touch(self)
+	_say("DISTORTION")
+	if not was_followup:
+		start_cooldown(CD_HEEL, heel_cooldown)   # como complemento, a recarga já começou no Direct Heel Lift
+	_heel_followup = false
+	_last_skill = &"distortion"
+	return true
+
+
+## Zero Reset Turn: domina a bola e dá dois avanços; no 2º, se achar um inimigo, QTE fácil e chapéu
 func _use_zero_reset() -> bool:
 	var m: MatchManager = _get_manager()
 	var ball: Ball = _get_ball()
-	if m == null or ball == null or get_zero_variant() != ZeroVariant.ZERO_RESET:
+	if m == null or ball == null or get_heel_variant() != HeelVariant.ZERO_RESET:
 		return false
-
-	var to_ball: Vector2 = ball.global_position - global_position
-	var dir: Vector2 = to_ball.normalized() if to_ball.length() > 1.0 else Vector2(facing, 0.0)
-	face_towards(dir)
+	# Primeiro escolhe a direção do 2º avanço; só gasta a ação se confirmar
+	var second_dir: Vector2 = await m.aim_for_skill(self, zero_second_range)
+	if second_dir == Vector2.ZERO:
+		return false
+	second_dir = second_dir.normalized()
+	ball = _get_ball()
+	if ball == null or get_heel_variant() != HeelVariant.ZERO_RESET:
+		return false
 	if not await play_action(&"zero_reset_turn"):
 		return false
 	ball = _get_ball()
-	if ball == null or get_zero_variant() != ZeroVariant.ZERO_RESET:
+	if ball == null:
 		return false
 
 	m.clear_pending_pass()
-	_zero_anchor = global_position + dir * zero_ball_distance
-	var hold: Tween = ball.hover_to(_zero_anchor, Heights.GROUND_HEIGHT, 0.2)
-	await hold.finished
 	ball.register_touch(self)
-	ball.spell_owner = self   # só o time do Nagi consegue tocar na bola (veja Ball.is_locked_for)
+	var ball_h: float = Heights.to_height(ball.get_level())
+	_dodges = 0
+	_ball_aura(ball, soft_fx, 1.2)
+	NagiFX.puff(self, 6)
 
-	_zero_active = true
-	_zero_triggered = false
-	_zero_enemy_turn_pending = false
-	start_cooldown(CD_ZERO, zero_cooldown)
-	_pulse(&"ring", Color(1.0, 1.0, 1.0), 0.6)
+	# Avanço 1: para LONGE do inimigo mais próximo (desvio)
+	var away: Vector2 = _away_dir()
+	face_towards(away)
+	_dodge_skull()
 	_say("RESET")
-	_ball_aura(ball, soft_fx, 0.6)
-	queue_redraw()
+	await _dash(global_position + away * zero_first_range, zero_dash_time, ball, away, ball_h)
+
+	# Avanço 2: direcionável (desvio). Se achar um inimigo, para e tenta o chapéu
+	face_towards(second_dir)
+	_dodge_skull()
+	var res: Dictionary = await _dash(global_position + second_dir * zero_second_range, zero_dash_time,
+		ball, second_dir, ball_h, false, true)
+	var enemy: Player = res["enemy"] as Player
+	if enemy != null and is_instance_valid(enemy):
+		if await _easy_qte(m):
+			await _nutmeg(enemy, second_dir)
+			_grant_temp_extra(zero_extra_skills)
+			_say("CHAPÉU!")
+		else:
+			var b: Ball = _get_ball()
+			if b != null and b.hovering:
+				b.release_hover()   # perdeu a bola no encontro
+			_say("...")
+	start_cooldown(CD_HEEL, heel_cooldown)
+	_last_skill = &"zero"
 	return true
 
 
-## Chamado todo frame. Cuida da janela do Zero Reset Turn: termina se a bola foi mexida/solta
-## ou se Nagi se afastou, e dá a recompensa quando um adversário tenta chegar na bola.
-func _check_zero_reset() -> void:
-	if not _zero_active:
+## Chapéu: a bola passa por cima do inimigo, o Nagi salta atrás dela e a busca suspensa no fim
+func _nutmeg(enemy: Player, dir: Vector2) -> void:
+	var ball: Ball = _get_ball()
+	if ball == null:
+		return
+	_dodge_skull()
+	var beyond: Vector2 = enemy.global_position + dir * zero_nutmeg_distance
+	height_level = Heights.Level.SUSPENDED
+	var tw: Tween = create_tween().set_parallel(true)
+	tw.tween_property(self, "global_position", beyond, zero_nutmeg_time).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
+	tw.tween_property(self, "height", Heights.SUSPENDED_HEIGHT, zero_nutmeg_time * 0.6) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	ball.hover_to(beyond + dir * ball_side_distance, Heights.SUSPENDED_HEIGHT, zero_nutmeg_time)
+	await tw.finished
+	ball = _get_ball()
+	if ball != null:
+		ball.register_touch(self)
+		_ball_aura(ball, soft_fx, 0.6)
+
+
+# ---------- 2. FAKE VOLLEY / DOMÍNIO / JUGGLING SHOT ----------
+
+func get_fake_variant() -> FakeVariant:
+	var ball: Ball = _get_ball()
+	if ball == null or is_down or get_kick_type(ball) == KickType.NONE:
+		return FakeVariant.NONE
+	if height_level == Heights.Level.FLYING:
+		return FakeVariant.NONE
+	var level: Heights.Level = ball.get_level()
+	if level == Heights.Level.GROUND or level == Heights.Level.SUSPENDED:
+		return FakeVariant.FAKE_VOLLEY
+	return FakeVariant.NONE
+
+
+func _use_fake_skill() -> bool:
+	if get_fake_variant() == FakeVariant.NONE:
+		return false
+	# Reação Química Miracle: com as condições cumpridas, o Fake Volley vira o Five Stage Volley
+	if _miracle_available() != null:
+		return await _use_five_stage_volley()
+	return await _use_fake_volley()
+
+
+## Finta o chute, atordoa o inimigo mais próximo, avança trazendo a bola e começa o domínio
+func _use_fake_volley() -> bool:
+	var m: MatchManager = _get_manager()
+	if m == null or get_fake_variant() != FakeVariant.FAKE_VOLLEY:
+		return false
+	var dir: Vector2 = await m.aim_for_skill(self, fake_dash_range)
+	if dir == Vector2.ZERO:
+		return false
+	dir = dir.normalized()
+	face_towards(dir)
+	if not await play_action(&"fake_volley", ANIM_VOLLEY):
+		return false
+	var ball: Ball = _get_ball()
+	if ball == null or get_fake_variant() != FakeVariant.FAKE_VOLLEY:
+		return false
+
+	m.clear_pending_pass()
+	ball.register_touch(self)
+	NagiFX.puff(self, 8)
+	# Atordoa o inimigo mais próximo
+	var target: Player = _nearest_enemy(fake_enemy_radius)
+	if target != null:
+		_stun(target)
+		_say("FINTA!")
+	# Avanço curto trazendo a bola (na altura em que ela estava)
+	var ball_h: float = Heights.to_height(ball.get_level())
+	_ball_aura(ball, soft_fx, fake_dash_time + 0.3)
+	await _dash(global_position + dir * fake_dash_range, fake_dash_time, ball, dir, ball_h)
+	ball = _get_ball()
+	if ball != null:
+		_start_dominance(ball)
+	start_cooldown(CD_FAKE, fake_cooldown)
+	_last_skill = &"fake"
+	return true
+
+
+func _start_dominance(ball: Ball) -> void:
+	_dom_active = true
+	_dom_busy = false
+	_dom_enemy_turn_pending = false
+	_dom_fails = 0
+	_dom_stunned.clear()
+	_dodges = 0
+	_dom_anchor = ball.global_position
+	ball.contest_owner = self   # o chute de um adversário passa pelo resolve_ball_contest abaixo
+	_start_aura()
+	queue_redraw()
+
+
+func _end_dominance() -> void:
+	if not _dom_active:
+		return
+	_dom_active = false
+	_dom_busy = false
+	_dom_enemy_turn_pending = false
+	_dom_stunned.clear()
+	var ball: Ball = _get_ball()
+	if ball != null and is_instance_valid(ball) and ball.contest_owner == self:
+		ball.contest_owner = null
+		# Só solta a bola se ela ainda está onde ele a deixou (se alguém a moveu, ela já tem dono novo)
+		if ball.hovering and not ball.is_held() and ball.global_position.distance_to(_dom_anchor) <= 8.0:
+			ball.release_hover()
+	_stop_aura()
+	queue_redraw()
+
+
+## Chamado todo frame: encerra o domínio se a bola foi mexida/solta ou se o Nagi se afastou, e
+## ATORDOA o adversário que tenta chegar na bola com uma ação geral (correr / carrinho) no turno dele.
+func _check_dominance() -> void:
+	if not _dom_active:
 		return
 	var m: MatchManager = _get_manager()
 	var ball: Ball = _get_ball()
-	if m == null or ball == null or ball.spell_owner != self or is_down \
-			or ball.global_position.distance_to(_zero_anchor) > 8.0 or ball.height > 2.0 \
-			or global_position.distance_to(ball.global_position) > zero_hold_distance:
-		_end_zero_reset()
+	if m == null or ball == null or ball.contest_owner != self or is_down \
+			or ball.global_position.distance_to(_dom_anchor) > 8.0 \
+			or global_position.distance_to(ball.global_position) > dominance_hold_distance:
+		_end_dominance()
 		return
-	# "Tentou interagir" só conta no turno do adversário: um adversário que está AGINDO
-	# (correndo ou deslizando) e chega perto da bola
-	if _zero_triggered or m.current_team == team:
+	if _dom_busy or m.current_team == team:
 		return
 	for other: Player in get_tree().get_nodes_in_group("players"):
-		if other.team == team or other.is_down or other.state == State.IDLE:
+		if other.team == team or other.is_down or other.state == State.IDLE or other in _dom_stunned:
 			continue
-		if other.global_position.distance_to(ball.global_position) <= zero_trigger_radius:
-			_trigger_zero_reset()
+		if other.global_position.distance_to(ball.global_position) <= dominance_trigger_radius:
+			_dom_stunned.append(other)
+			_stun(other)
+			_say("DESVIOU!")
+			if not is_down:
+				hop_over()
 			return
 
 
-func _trigger_zero_reset() -> void:
-	if _zero_triggered:
-		return
-	_zero_triggered = true
-	_grant_temp_extra(zero_extra_skills)
-	hop_over()   # o pulinho de quem desvia
-	_pulse(&"ring", Color(1.0, 1.0, 1.0), 0.55)
-	_say("DESVIOU!")
-
-
-func _end_zero_reset() -> void:
-	if not _zero_active:
-		return
-	_zero_active = false
-	_zero_triggered = false
-	_zero_enemy_turn_pending = false
-	var ball: Ball = _get_ball()
-	if ball != null and is_instance_valid(ball) and ball.spell_owner == self:
-		ball.spell_owner = null
-		# Só solta a bola se ela ainda está onde ele a deixou (se alguém a moveu, ela já tem dono novo)
-		if ball.hovering and not ball.is_held() \
-				and ball.global_position.distance_to(_zero_anchor) <= 8.0 and ball.height <= 2.0:
-			ball.release_hover()
-	queue_redraw()
-
-
-## O Carrinho de um adversário não derruba o Nagi enquanto ele segura a bola: ele desvia
-func try_counter_slide(attacker: Player) -> bool:
-	if not _zero_active or attacker.team == team or is_down:
-		return false
-	_trigger_zero_reset()   # (só paga a recompensa uma vez por janela)
-	hop_over()
-	return true
-
-
-## Chute falso: a bola sai e volta para ele. Com inimigo próximo: +fake_bonus no próximo chute.
-func _use_fake_volley() -> bool:
+## Um adversário tenta CHUTAR a bola dominada (veja Player.kick_ball). true = o chute dele segue;
+## false = foi barrado.
+##  - ação geral (Chutar): ele é atordoado;
+##  - habilidade: typing game. Perdeu = o Nagi desvia sozinho (e, no 2º erro, o Juggling Shot).
+func resolve_ball_contest(attacker: Player, by_skill: bool) -> bool:
+	if not _dom_active or attacker.team == team or is_down:
+		return true
 	var m: MatchManager = _get_manager()
+	if m == null:
+		return true
+	_dom_busy = true
+	if not by_skill:
+		_stun(attacker)
+		hop_over()
+		_dodge_skull()
+		_say("DESVIOU!")
+		_dom_busy = false
+		return false
+	var title: String = "Nagi desvia!"
+	var won: bool = await m.run_typing_game(title, typing_words, typing_time)
+	if won:
+		_end_dominance()   # a bola é do adversário
+		return true
+	_dom_fails += 1
+	hop_over()
+	_dodge_skull()
+	_say("DESVIOU!")
+	if _dom_fails >= juggling_fails_needed:
+		await _juggling_shot()
+	_dom_busy = false
+	return false
+
+
+## Juggling Shot: desvia de novo e chuta sozinho para o gol inimigo
+func _juggling_shot() -> void:
 	var ball: Ball = _get_ball()
-	if m == null or ball == null or get_zero_variant() != ZeroVariant.FAKE_VOLLEY:
-		return false
-
-	face_towards(ball.global_position - global_position)
-	if not await play_action(&"fake_volley", ANIM_VOLLEY):
-		return false
+	if ball == null or is_down:
+		_end_dominance()
+		return
+	var goal: Vector2 = _enemy_goal_point()
+	var dir: Vector2 = (goal - ball.global_position)
+	dir = dir.normalized() if dir.length() > 1.0 else Vector2(_default_facing(), 0.0)
+	# Libera o domínio para o próprio chute não ser barrado
+	_dom_active = false
+	ball.contest_owner = null
+	_stop_aura()
+	face_towards(dir)
+	# O desvio: um passo em direção ao gol, com a bola junto
+	var level_h: float = ball.height
+	var step_to: Vector2 = global_position + dir * juggling_step
+	var step: Tween = create_tween()
+	step.tween_property(self, "global_position", step_to, 0.2).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	ball.hover_to(step_to + dir * ball_side_distance, level_h, 0.2)
+	await step.finished
 	ball = _get_ball()
-	if ball == null or get_zero_variant() != ZeroVariant.FAKE_VOLLEY:
+	if ball == null:
+		return
+	var kind: KickType = get_kick_type(ball)
+	if kind == KickType.NONE:
+		kind = KickType.VOLLEY if ball.get_level() != Heights.Level.GROUND else KickType.GROUND
+	_say("JUGGLING!")
+	NagiFX.burst(self, global_position + Vector2(0.0, -height - 20.0), 12, true)
+	next_kick_force_mult = juggling_force   # 1.3x da força do Chutar
+	await kick_ball(ball, dir, kind, true, juggling_chance, false, heavy_fx,
+		_anim_or(&"juggling_shot", ANIM_VOLLEY))
+	_end_dominance()
+
+
+## O Carrinho de um adversário não derruba o Nagi enquanto ele domina a bola: ele desvia e o atacante é atordoado
+func try_counter_slide(attacker: Player) -> bool:
+	if not _dom_active or attacker.team == team or is_down:
 		return false
-
-	m.clear_pending_pass()
-	_show_skull()
-
-	# A bola "sai" na direção do inimigo mais próximo (ou para onde ele olha) e volta direto
-	var enemies: Array[Player] = _enemies_within(fake_enemy_radius)
-	var out_dir: Vector2 = Vector2(facing, 0.0)
-	if not enemies.is_empty():
-		enemies.sort_custom(func(a: Player, b: Player) -> bool:
-			return a.global_position.distance_to(global_position) \
-				< b.global_position.distance_to(global_position))
-		var to_enemy: Vector2 = enemies[0].global_position - global_position
-		if to_enemy.length() > 1.0:
-			out_dir = to_enemy.normalized()
-
-	var to_ball: Vector2 = ball.global_position - global_position
-	var rest_dir: Vector2 = to_ball.normalized() if to_ball.length() > 1.0 else Vector2(facing, 0.0)
-	var home: Vector2 = global_position + rest_dir * zero_ball_distance
-	var level_height: float = Heights.SUSPENDED_HEIGHT
-
-	ball.register_touch(self)
-	_ball_aura(ball, soft_fx, fake_out_time + fake_back_time + 0.3)
-	var out_tween: Tween = ball.hover_to(home + out_dir * fake_travel, level_height + fake_lift, fake_out_time)
-	await out_tween.finished
-	var back_tween: Tween = ball.hover_to(home, level_height, fake_back_time)
-	await back_tween.finished
-
-	if not enemies.is_empty():
-		next_shot_bonus += fake_bonus   # acumula a cada uso; é gasto no próximo chute
-		_say("+%d%%" % int(round(fake_bonus * 100.0)))
-	_pulse(&"ring", Color(0.85, 0.85, 0.9), 0.5)
-	start_cooldown(CD_FAKE, fake_cooldown)
+	_stun(attacker)
+	hop_over()
+	_dodge_skull()
+	_say("DESVIOU!")
 	return true
 
 
 # ---------- 2a. FIVE STAGE VOLLEY (Reação Química Miracle, com o Reo) ----------
 
 ## A reação Miracle está disponível agora? Devolve a reação ou null. Confere o que é do Nagi
-## (Fake Volley liberado + inimigo por perto); o resto (Our Dream do Reo, bola intocada, recarga
+## (os dois suspensos e próximos + inimigo por perto); o resto (Our Dream do Reo, bola intocada, recarga
 ## do time) é do reaction_miracle.gd e do ReactionManager.
 func _miracle_available() -> ChemicalReaction:
-	if get_zero_variant() != ZeroVariant.FAKE_VOLLEY:
+	if height_level != Heights.Level.SUSPENDED or not _near_ball() or _ball_level() != Heights.Level.SUSPENDED:
 		return null
 	if _enemies_within(fake_enemy_radius).is_empty():
 		return null
@@ -680,7 +960,7 @@ func _use_five_stage_volley() -> bool:
 	var origin: Vector2 = global_position
 	var to_ball: Vector2 = ball.global_position - global_position
 	var rest_dir: Vector2 = to_ball.normalized() if to_ball.length() > 1.0 else Vector2(facing, 0.0)
-	var home: Vector2 = origin + rest_dir * zero_ball_distance   # onde a bola fica pairando, do lado dele
+	var home: Vector2 = origin + rest_dir * ball_side_distance   # onde a bola fica pairando, do lado dele
 	var level_height: float = Heights.SUSPENDED_HEIGHT
 	var out_dir: Vector2 = _nearest_enemy_dir(_enemies_within(fake_enemy_radius))
 	var base_angle: float = (origin - home).angle()               # de que lado da bola ele começou
@@ -688,14 +968,15 @@ func _use_five_stage_volley() -> bool:
 
 	var previous_hover_fx: bool = ball.fx_during_hover
 	ball.fx_during_hover = true   # a aura da bola continua mesmo com ela pairando
-	_start_five_aura()
+	_start_aura()
 
 	# 4) Etapas de finta: a 1ª é o Fake Volley parado; as do meio andam em órbita e giram, suspenso
 	for k in range(stage_count - 1):
 		var progress: float = float(k) / float(stage_count - 1)
-		_show_skull(lerpf(five_skull_start, five_skull_end, progress), five_stage_time + 0.4)
+		_show_skull(lerpf(five_skull_start, five_skull_end, progress), five_stage_time + 0.4,
+			lerpf(0.35, 0.95, progress))
 		_say("STAGE %d" % (k + 1))
-		_pulse(&"ring", Color(0.92, 0.88, 1.0), five_stage_time)
+		_pulse(five_stage_time)
 		_shake_camera(lerpf(1.5, five_shake, progress), 0.25)
 
 		var move_tw: Tween = null
@@ -735,9 +1016,9 @@ func _use_five_stage_volley() -> bool:
 		_reset_spin()
 
 	# 5) Última etapa: volta ao ponto original e dispara
-	_show_skull(five_skull_end, 1.0)
+	_show_skull(five_skull_end, 1.0, 1.0)
 	_say("MIRACLE!")
-	_pulse(&"beam", Color(1.0, 1.0, 1.0), 0.6)
+	_pulse(0.6)
 	_shake_camera(five_shake, 0.35)
 	face_towards(aim)
 	var dash: Tween = create_tween()
@@ -764,49 +1045,34 @@ func _use_five_stage_volley() -> bool:
 	if not kicked:
 		return false   # a ação foi cancelada antes do chute (ex: a partida reiniciou)
 	start_cooldown(CD_FAKE, fake_cooldown)   # a recarga do Fake Volley vale também para a versão da reação
+	_last_skill = &"fake"
 	return true
 
 
-## Direção até o inimigo mais próximo (ou para onde o Nagi olha, se não houver)
-func _nearest_enemy_dir(enemies: Array[Player]) -> Vector2:
-	if enemies.is_empty():
-		return Vector2(facing, 0.0)
-	var nearest: Player = enemies[0]
-	for e: Player in enemies:
-		if e.global_position.distance_to(global_position) < nearest.global_position.distance_to(global_position):
-			nearest = e
-	var to_enemy: Vector2 = nearest.global_position - global_position
-	return to_enemy.normalized() if to_enemy.length() > 1.0 else Vector2(facing, 0.0)
 
 
 ## Chamado pelo kick_ball no instante em que a bola sai: tremor forte + clarão branco
 func _on_five_kick(_ball: Ball, _dir: Vector2, _speed: float) -> void:
 	_shake_camera(five_shake * 2.0, 0.5)
 	_screen_flash(Color(1.0, 1.0, 1.0, 0.85), 0.5)
-	_pulse(&"ring", Color.WHITE, 0.7)
+	_pulse(0.7)
+	NagiFX.burst(self, global_position + Vector2(0.0, -height - 20.0), 18, true)
 
 
-## Limpa o que a sequência deixou (giro, aura de partículas, aura da bola)
+## Limpa o que a sequência deixou (giro, aura de caveirinhas, aura da bola)
 func _five_cleanup(ball: Ball, previous_hover_fx: bool) -> void:
 	_reset_spin()
-	_stop_five_aura()
+	_stop_aura()
 	if ball != null and is_instance_valid(ball):
 		ball.fx_during_hover = previous_hover_fx
 
 
-## O giro mexe na rotação do nó que sobe com o Nagi (visual_root / sprite). Voltar ao normal =
-## deixar o próprio Player refazer o visual dele (também respeita o "deitado" de quem caiu).
-func _reset_spin() -> void:
-	if _lift_node != null:
-		_update_visual()
-
-
-## Branco com brilho violeta (a cor do Reo): rastro grosso e giratório, explosão grande
+## Branco com brilho lilás (a cor do Reo): rastro grosso e giratório, explosão grande
 func _make_five_fx() -> KickFX:
 	var fx := KickFX.new()
 	fx.color = Color(1.0, 1.0, 1.0)
 	fx.trail_width = 26.0
-	fx.particle_color = Color(0.82, 0.68, 1.0)
+	fx.particle_color = Color(0.84, 0.76, 1.0)
 	fx.amount = 40
 	fx.lifetime = 0.65
 	fx.speed_min = 40.0
@@ -821,35 +1087,18 @@ func _make_five_fx() -> KickFX:
 	return fx
 
 
-## Partículas brancas/violeta que sobem do Nagi enquanto dura a sequência
-func _start_five_aura() -> void:
-	if _five_aura == null:
-		_five_aura = CPUParticles2D.new()
-		_five_aura.emitting = false
-		_five_aura.amount = 60
-		_five_aura.lifetime = 0.8
-		_five_aura.local_coords = false
-		_five_aura.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
-		_five_aura.emission_sphere_radius = placeholder_radius * 1.4
-		_five_aura.direction = Vector2(0.0, -1.0)
-		_five_aura.spread = 60.0
-		_five_aura.gravity = Vector2(0.0, -60.0)
-		_five_aura.initial_velocity_min = 30.0
-		_five_aura.initial_velocity_max = 90.0
-		_five_aura.scale_amount_min = 3.0
-		_five_aura.scale_amount_max = 7.0
-		var ramp := Gradient.new()
-		ramp.set_color(0, Color(0.97, 0.93, 1.0, 0.9))
-		ramp.set_color(1, Color(0.65, 0.4, 1.0, 0.0))
-		_five_aura.color_ramp = ramp
-		_five_aura.z_index = 1
-		add_child(_five_aura)
-	_five_aura.emitting = true
+## Caveirinhas que sobem do Nagi enquanto dura o domínio / a sequência
+func _start_aura() -> void:
+	if _aura == null:
+		_aura = NagiFX.make_aura(placeholder_radius * 1.4)
+		_aura.z_index = 1
+		add_child(_aura)
+	_aura.emitting = true
 
 
-func _stop_five_aura() -> void:
-	if _five_aura != null:
-		_five_aura.emitting = false
+func _stop_aura() -> void:
+	if _aura != null:
+		_aura.emitting = false
 
 
 ## Tremor da câmera (mexe no offset da Camera2D ativa e devolve ao normal no fim)
@@ -887,97 +1136,314 @@ func _screen_flash(color: Color, time: float) -> void:
 	tw.tween_callback(layer.queue_free)
 
 
-# ---------- 3. LIFT ----------
+# ---------- 3. TRAP / GROUND CONTROL ----------
 
-func _can_lift(ball: Ball) -> bool:
-	if ball == null or is_down:
-		return false
-	# get_kick_type confere distância, goleiro, feitiço e se os níveis se alcançam
-	if get_kick_type(ball) == KickType.NONE:
-		return false
-	# Bola já Voando não sobe mais: aí é o Control
-	return ball.get_level() != Heights.Level.FLYING
-
-
-func _use_lift() -> bool:
-	var m: MatchManager = _get_manager()
+func get_trap_variant() -> TrapVariant:
 	var ball: Ball = _get_ball()
-	if m == null or not _can_lift(ball):
-		return false
+	if ball == null or is_down:
+		return TrapVariant.NONE
+	if get_kick_type(ball) == KickType.NONE:
+		return TrapVariant.TRAP if not ball.is_held() else TrapVariant.NONE
+	if ball.get_level() == Heights.Level.GROUND:
+		return TrapVariant.GROUND_CONTROL
+	return TrapVariant.NONE
 
-	face_towards(ball.global_position - global_position)
-	if not await play_action(&"lift", ANIM_JUMP):
+
+func _use_trap_skill() -> bool:
+	match get_trap_variant():
+		TrapVariant.TRAP:
+			return await _use_trap()
+		TrapVariant.GROUND_CONTROL:
+			return await _use_ground_control()
+	return false
+
+
+## Trap: avanço de 170; se a bola estiver a 170 no fim, vai até ela (no nível dela) e faz um QTE fácil
+func _use_trap() -> bool:
+	var m: MatchManager = _get_manager()
+	if m == null or get_trap_variant() != TrapVariant.TRAP:
 		return false
-	ball = _get_ball()
-	if not _can_lift(ball):
+	var dir: Vector2 = await m.aim_for_skill(self, trap_dash_range)
+	if dir == Vector2.ZERO:
+		return false
+	dir = dir.normalized()
+	face_towards(dir)
+	if not await play_action(&"trap", ANIM_JUMP):
 		return false
 
 	m.clear_pending_pass()
-	var ball_level: Heights.Level = _next_level(ball.get_level())
-	var self_level: Heights.Level = _next_level(height_level)
-	var rise_time: float = lift_time * (1.5 if self_level == Heights.Level.FLYING else 1.0)
+	NagiFX.puff(self, 6)
+	await _dash(global_position + dir * trap_dash_range, trap_dash_time)
 
-	# Nagi e bola sobem juntos um nível; a bola fica pairando lá (como depois de um passe alto)
-	height_level = self_level
-	var rise: Tween = create_tween()
-	rise.tween_property(self, "height", Heights.to_height(self_level), rise_time) \
-		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
-	ball.hover_to(ball.global_position, Heights.to_height(ball_level), rise_time)
-	_pulse(&"beam", Color(1.0, 1.0, 1.0), rise_time + 0.25)
-	await rise.finished
+	var ball: Ball = _get_ball()
+	if ball != null and not ball.is_held() and not ball.is_locked_for(team) \
+			and global_position.distance_to(ball.global_position) <= trap_ball_range:
+		await _trap_fetch(m, ball)
+	start_cooldown(CD_TRAP, trap_cooldown)
+	_last_skill = &"trap"
+	return true
 
+
+## Vai até a bola no nível em que ela está (saltando se precisar) e faz o QTE fácil
+func _trap_fetch(m: MatchManager, ball: Ball) -> void:
+	var level: Heights.Level = ball.get_level()
+	var to_ball: Vector2 = ball.global_position - global_position
+	var dir: Vector2 = to_ball.normalized() if to_ball.length() > 1.0 else Vector2(facing, 0.0)
+	var stop_at: Vector2 = global_position
+	if to_ball.length() > trap_stop_distance:
+		stop_at = ball.global_position - dir * trap_stop_distance
+	face_towards(dir)
+	height_level = level
+	var leap: Tween = create_tween().set_parallel(true)
+	leap.tween_property(self, "global_position", stop_at, trap_leap_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	leap.tween_property(self, "height", Heights.to_height(level), trap_leap_time).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	await leap.finished
+	if not await _easy_qte(m):
+		return
+	ball = _get_ball()
+	if ball == null:
+		return
+	# Domina: a bola para e fica pairando do lado dele, e ele ganha uma ação de habilidade
+	var hold: Tween = ball.hover_to(ball.global_position, Heights.to_height(ball.get_level()), 0.15)
+	await hold.finished
 	ball.register_touch(self)
 	_ball_aura(ball, soft_fx, 0.5)
-	start_cooldown(CD_LIFT, lift_cooldown)
-	return true
-
-
-# ---------- 3a. CONTROL (gratuito) ----------
-
-func _can_control(ball: Ball) -> bool:
-	if ball == null or is_down or height_level == Heights.Level.GROUND:
-		return false
-	if ball.get_level() != Heights.Level.FLYING:
-		return false
-	return get_kick_type(ball) != KickType.NONE   # próxima e ao alcance
-
-
-func _use_control() -> bool:
-	if not _can_control(_get_ball()):
-		return false
-	if not await play_action(&"control"):
-		return false
-	if not _can_control(_get_ball()):
-		return false
+	NagiFX.ring(self, global_position, 36.0, 10)
 	_grant_temp_extra(control_extra_skills)
-	start_cooldown(CD_CONTROL, control_cooldown)
-	_pulse(&"ring", Color(0.9, 0.9, 0.95), 0.5)
-	_say("CONTROL")
+	_say("TRAP!")
+
+
+## Ground Control: passe suspenso, correr de 1 s, salto, o aliado devolve a bola e QTE fácil
+func _use_ground_control() -> bool:
+	var m: MatchManager = _get_manager()
+	if m == null or get_trap_variant() != TrapVariant.GROUND_CONTROL:
+		return false
+	var ally: Player = await m.pick_ally_for_skill(self, control_pass_range)
+	if ally == null:
+		return false   # cancelou: não gasta a ação
+	var ball: Ball = _get_ball()
+	if ball == null or get_trap_variant() != TrapVariant.GROUND_CONTROL:
+		return false
+	face_towards(ally.global_position - global_position)
+	if not await play_action(&"ground_control", ANIM_PASS_HIGH):
+		return false
+	ball = _get_ball()
+	if ball == null:
+		return false
+
+	m.clear_pending_pass()
+	ball.register_touch(self)
+	NagiFX.puff(self, 6)
+	# Passe SUSPENSO para o aliado
+	ball.hover_to(ally.global_position + Vector2(0.0, 0.0), Heights.SUSPENDED_HEIGHT, control_pass_time)
+	_ball_aura(ball, soft_fx, control_pass_time + 0.2)
+	# Nagi ganha um correr de 1 segundo (não conta no limite de Correr do turno)
+	start_run()
+	run_time_left = control_run_time
+	_run_total = maxf(control_run_time, 0.001)
+	runs_this_turn = maxi(runs_this_turn - 1, 0)
+	await run_finished
+	# Salta no fim da corrida
+	await _go_to_level(Heights.Level.SUSPENDED, control_jump_time)
+	if not is_instance_valid(ally):
+		return false
+	# O aliado devolve a bola ao Nagi
+	ball = _get_ball()
+	if ball == null:
+		return false
+	ball.hover_to(ally.global_position, Heights.SUSPENDED_HEIGHT, 0.05)
+	var back: Tween = ball.hover_to(global_position + Vector2(facing * ball_side_distance, 0.0),
+		Heights.SUSPENDED_HEIGHT, control_return_time)
+	await back.finished
+	ball.register_touch(self)
+	if await _easy_qte(m):
+		_grant_temp_extra(control_extra_skills)
+		NagiFX.ring(self, global_position, 36.0, 10)
+		_say("CONTROL!")
+	start_cooldown(CD_TRAP, trap_cooldown)
+	_last_skill = &"ground_control"
 	return true
+
+
+# ---------- 4. HEAVY / JUMPING TURN / BICYCLE / CURIOSITY ----------
+
+## Nagi na área do goleiro E na lateral dela (Curiosity)
+func _in_curiosity_spot() -> bool:
+	var f: Field = get_tree().get_first_node_in_group("field") as Field
+	if f == null:
+		return false
+	var local: Vector2 = f.to_local(global_position)
+	var teams: Array[int] = []
+	if curiosity_enemy_area:
+		var count: int = 2
+		var m: MatchManager = _get_manager()
+		if m != null:
+			count = m.team_count
+		for t in count:
+			if t != team:
+				teams.append(t)
+	else:
+		teams.append(team)
+	for t in teams:
+		var rect: Rect2 = f.get_penalty_area_rect(t)
+		if rect.has_point(local):
+			var side: float = absf(local.y - rect.get_center().y)
+			if side >= rect.size.y * 0.5 * curiosity_side_fraction:
+				return true
+	return false
+
+
+func get_heavy_variant() -> HeavyVariant:
+	var ball: Ball = _get_ball()
+	if ball == null or is_down or get_kick_type(ball) == KickType.NONE:
+		return HeavyVariant.NONE
+	var level: Heights.Level = ball.get_level()
+	if height_level == Heights.Level.FLYING:
+		return HeavyVariant.NONE
+	# Bola voando e Nagi suspenso: bicicleta (Curiosity na área do goleiro, na lateral)
+	if height_level == Heights.Level.SUSPENDED and level == Heights.Level.FLYING:
+		return HeavyVariant.CURIOSITY if _in_curiosity_spot() else HeavyVariant.BICYCLE
+	if level == Heights.Level.FLYING:
+		return HeavyVariant.NONE
+	# A última habilidade foi o Trap: Jumping Turn
+	if _last_skill == &"trap":
+		return HeavyVariant.JUMPING_TURN
+	return HeavyVariant.HEAVY
+
+
+func _use_heavy_skill() -> bool:
+	var m: MatchManager = _get_manager()
+	var variant: HeavyVariant = get_heavy_variant()
+	if m == null or variant == HeavyVariant.NONE:
+		return false
+
+	var aim: Vector2 = await m.aim_for_skill(self, kick_aim_range)
+	if aim == Vector2.ZERO:
+		return false   # cancelou: não gasta a ação
+
+	# A situação pode ter mudado enquanto ele mirava: confere de novo
+	var ball: Ball = _get_ball()
+	variant = get_heavy_variant()
+	if ball == null or variant == HeavyVariant.NONE:
+		return false
+	var kind: KickType = get_kick_type(ball)
+	if kind == KickType.NONE:
+		return false
+
+	var force: float = heavy_force
+	var chance: float = heavy_chance
+	var fx: KickFX = heavy_fx
+	var anim: StringName = _anim_or(&"heavy", ANIM_FLYING_KICK if kind == KickType.FLYING else ANIM_VOLLEY)
+	var rise: float = heavy_rise_point
+	var spin_turns: float = 0.0
+	var spin_time: float = 0.0
+	match variant:
+		HeavyVariant.JUMPING_TURN:
+			force = jumping_force
+			chance = jumping_chance
+			rise = 0.0
+			anim = _anim_or(&"jumping_turn", ANIM_VOLLEY)
+			spin_turns = 1.0
+			spin_time = jumping_spin_time
+		HeavyVariant.BICYCLE, HeavyVariant.CURIOSITY:
+			force = bicycle_force
+			chance = curiosity_chance if variant == HeavyVariant.CURIOSITY else bicycle_chance
+			fx = bicycle_fx
+			rise = 0.0
+			anim = _anim_or(&"curiosity" if variant == HeavyVariant.CURIOSITY else &"bicycle", ANIM_FLYING_KICK)
+			spin_turns = 1.0
+			spin_time = bicycle_spin_time
+
+	var qte_ok: bool = true
+	if kicks_use_qte and kind != KickType.GROUND and not skips_qte():
+		qte_ok = await m.run_qte(kind)
+
+	# Jumping Turn: toque curto para o lado, sobe a bola e o Nagi (suspenso), e só então gira e chuta
+	if variant == HeavyVariant.JUMPING_TURN:
+		await _jumping_prelude(ball, aim)
+		ball = _get_ball()
+		if ball == null:
+			return false
+		kind = KickType.VOLLEY
+
+	if spin_turns > 0.0:
+		_spin(spin_turns, spin_time)
+	NagiFX.puff(self, 6)
+	if rise > 0.0 and kick_spin_enabled:
+		pending_spin_point = Vector2(0.0, rise)   # o ponto de baixo da bola: ela SOBE na trajetória
+	var touches_before: int = ball.interaction_count
+	next_kick_force_mult = force
+	await kick_ball(ball, aim, kind, qte_ok, chance, false, fx if qte_ok else null, anim)
+	pending_spin_point = Vector2.ZERO
+	if spin_turns > 0.0:
+		_reset_spin()
+	if is_instance_valid(ball) and ball.interaction_count == touches_before:
+		return false   # a ação foi cancelada antes do chute (ex: a partida reiniciou)
+
+	start_cooldown(CD_HEAVY, heavy_cooldown)
+	match variant:
+		HeavyVariant.JUMPING_TURN:
+			_last_skill = &"jumping"
+		HeavyVariant.BICYCLE:
+			_last_skill = &"bicycle"
+		HeavyVariant.CURIOSITY:
+			_last_skill = &"curiosity"
+		_:
+			_last_skill = &"heavy"
+	return true
+
+
+## Jumping Turn: toque curto para o lado, a bola sobe e o Nagi salta (suspensos) antes do giro e do chute
+func _jumping_prelude(ball: Ball, aim: Vector2) -> void:
+	var side: Vector2 = aim.normalized().rotated(PI * 0.5)
+	if side.x * facing < 0.0:
+		side = -side
+	ball.register_touch(self)
+	var spot: Vector2 = global_position + side * jumping_tap_distance
+	height_level = Heights.Level.SUSPENDED
+	var tw: Tween = create_tween().set_parallel(true)
+	tw.tween_property(self, "height", Heights.SUSPENDED_HEIGHT, jumping_tap_time) \
+		.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
+	ball.hover_to(spot, Heights.SUSPENDED_HEIGHT, jumping_tap_time)
+	await tw.finished
+	_ball_aura(ball, soft_fx, 0.4)
 
 
 # ---------- SISTEMA DE HABILIDADES (menu) ----------
 
 func get_skills() -> Array[Dictionary]:
 	var list: Array[Dictionary] = []
-	list.append({"id": SKILL_TRAP, "name": "Trap"})
 
-	var heavy_name: String = "Bicycle" if get_heavy_variant() == HeavyVariant.BICYCLE else "Heavy"
-	list.append({"id": SKILL_HEAVY, "name": skill_label(heavy_name, CD_HEAVY)})
-
-	var zero_name: String
-	match get_zero_variant():
-		ZeroVariant.FAKE_VOLLEY:
-			# Reação Química Miracle: com as condições cumpridas, o botão vira Five Stage Volley
-			var fake_name: String = "Five Stage Volley" if _miracle_available() != null else "Fake Volley"
-			zero_name = skill_label(fake_name, CD_FAKE)
+	var heel_name: String
+	match get_heel_variant():
+		HeelVariant.DISTORTION:
+			heel_name = "Distortion" if _distortion_is_followup() else skill_label("Distortion", CD_HEEL)
+		HeelVariant.ZERO_RESET:
+			heel_name = skill_label("Zero Reset Turn", CD_HEEL)
 		_:
-			zero_name = "Zero Reset Turn (ativo)" if _zero_active \
-				else skill_label("Zero Reset Turn", CD_ZERO)
-	list.append({"id": SKILL_ZERO, "name": zero_name})
+			heel_name = skill_label("Direct Heel Lift", CD_HEEL)
+	list.append({"id": SKILL_HEEL, "name": heel_name})
 
-	list.append({"id": SKILL_LIFT, "name": skill_label("Lift", CD_LIFT)})
-	list.append({"id": SKILL_CONTROL, "name": skill_label("Control", CD_CONTROL)})
+	# Reação Química Miracle: com as condições cumpridas, o botão vira Five Stage Volley
+	var fake_name: String = "Five Stage Volley" if _miracle_available() != null else "Fake Volley"
+	if _dom_active:
+		fake_name += " (domínio)"
+	list.append({"id": SKILL_FAKE, "name": skill_label(fake_name, CD_FAKE)})
+
+	var trap_name: String = "Ground Control" if get_trap_variant() == TrapVariant.GROUND_CONTROL else "Trap"
+	list.append({"id": SKILL_TRAP, "name": skill_label(trap_name, CD_TRAP)})
+
+	var heavy_name: String
+	match get_heavy_variant():
+		HeavyVariant.JUMPING_TURN:
+			heavy_name = "Jumping Turn"
+		HeavyVariant.BICYCLE:
+			heavy_name = "Bicycle"
+		HeavyVariant.CURIOSITY:
+			heavy_name = "Curiosity"
+		_:
+			heavy_name = "Heavy"
+	list.append({"id": SKILL_HEAVY, "name": skill_label(heavy_name, CD_HEAVY)})
 	return list
 
 
@@ -985,55 +1451,46 @@ func can_use_skill(skill_id: StringName = &"default") -> bool:
 	if not super(skill_id):
 		return false
 	match skill_id:
+		SKILL_HEEL:
+			var variant: HeelVariant = get_heel_variant()
+			if variant == HeelVariant.NONE:
+				return false
+			if variant == HeelVariant.DISTORTION and _heel_followup:
+				return true   # complemento: ignora a recarga que o Direct Heel Lift acabou de começar
+			return not is_on_cooldown(CD_HEEL)
+		SKILL_FAKE:
+			return get_fake_variant() != FakeVariant.NONE and not is_on_cooldown(CD_FAKE)
 		SKILL_TRAP:
-			return _can_trap()
+			return get_trap_variant() != TrapVariant.NONE and not is_on_cooldown(CD_TRAP)
 		SKILL_HEAVY:
-			return not is_on_cooldown(CD_HEAVY) and get_heavy_variant() != HeavyVariant.NONE
-		SKILL_ZERO:
-			return get_zero_variant() != ZeroVariant.NONE and not is_on_cooldown(_zero_cd_group())
-		SKILL_LIFT:
-			return not is_on_cooldown(CD_LIFT) and _can_lift(_get_ball())
-		SKILL_CONTROL:
-			return not is_on_cooldown(CD_CONTROL) and _can_control(_get_ball())
+			return get_heavy_variant() != HeavyVariant.NONE and not is_on_cooldown(CD_HEAVY)
 	return false
 
 
 func use_skill(skill_id: StringName = &"default") -> bool:
-	# Usar qualquer outra habilidade depois do Trap desfaz o "Heavy grátis" (só vale logo depois)
-	if skill_id != SKILL_TRAP and skill_id != SKILL_HEAVY and skill_id != SKILL_CONTROL:
-		_trap_followup = false
+	# Usar outra habilidade depois do Direct Heel Lift desfaz o "Distortion grátis" (só vale logo depois)
+	if skill_id != SKILL_HEEL:
+		_heel_followup = false
 	match skill_id:
+		SKILL_HEEL:
+			return await _use_heel_skill()
+		SKILL_FAKE:
+			return await _use_fake_skill()
 		SKILL_TRAP:
-			return await _use_trap()
+			return await _use_trap_skill()
 		SKILL_HEAVY:
 			return await _use_heavy_skill()
-		SKILL_ZERO:
-			return await _use_zero_skill()
-		SKILL_LIFT:
-			return await _use_lift()
-		SKILL_CONTROL:
-			return await _use_control()
 	return false
 
 
-## Trap e Control não gastam ação de habilidade. O Heavy também não, quando é o complemento do Trap.
+## O Distortion não gasta ação de habilidade quando é o complemento do Direct Heel Lift
 func skill_is_free(skill_id: StringName) -> bool:
-	match skill_id:
-		SKILL_TRAP:
-			return true
-		SKILL_HEAVY:
-			return _heavy_is_trap_followup()
-		SKILL_CONTROL:
-			return control_is_free
-	return false
+	return skill_id == SKILL_HEEL and _distortion_is_followup()
 
 
-## Sobrou Trap/Control para usar? Então o turno não acaba sozinho quando as ações acabam
-## (ex: Lift gasta a última ação, mas o Control vem de graça logo depois; o Trap também
-## deixa o Heavy de graça)
+## Sobrou o Distortion de graça? Então o turno não acaba sozinho quando as ações acabam
 func has_free_followup() -> bool:
-	return can_use_skill(SKILL_TRAP) or _heavy_is_trap_followup() \
-		or (control_is_free and can_use_skill(SKILL_CONTROL))
+	return _distortion_is_followup()
 
 
 # ---------- DESCRIÇÃO (balão do menu, ver action_menu.gd) ----------
@@ -1045,43 +1502,69 @@ func _pct(value: float) -> int:
 func get_skill_info(skill_id: StringName) -> Dictionary:
 	var title: String = ""
 	var text: String = ""
+	var key: String = String(skill_id)
 	match skill_id:
-		SKILL_TRAP:
-			title = "Trap"
-			text = "Salta até a bola no ar, a domina e fica suspenso. Não gasta ação de habilidade e libera o Heavy de graça."
-		SKILL_HEAVY:
-			if get_heavy_variant() == HeavyVariant.BICYCLE:
-				title = "Bicycle"
-				text = "Bicicleta no ar. %d%% de chance de gol." % _pct(chance_bicycle)
-			else:
-				title = "Heavy"
-				text = "Chute em que a bola cai no chão sem quicar. %d%% de chance de gol. De graça logo depois do Trap." % _pct(chance_heavy)
-			text += "\nRecarga: %d rodadas." % heavy_cooldown
-		SKILL_ZERO:
-			var miracle: ChemicalReaction = _miracle_available()
-			if miracle != null:
+		SKILL_HEEL:
+			match get_heel_variant():
+				HeelVariant.DISTORTION:
+					title = "Distortion"
+					key = "distortion"
+					text = "Nagi chuta a bola no chão, na diagonal; ela volta suspensa e ele a busca, os dois suspensos. De graça logo depois do Direct Heel Lift."
+				HeelVariant.ZERO_RESET:
+					title = "Zero Reset Turn"
+					key = "zero_reset_turn"
+					text = ("Domina a bola e dá dois avanços: %d para longe do inimigo mais próximo e %d direcionável. "
+						+ "Se achar um inimigo no 2º, QTE fácil e, ganhando, chapéu, salto e +%d ação de habilidade.") \
+						% [int(zero_first_range), int(zero_second_range), zero_extra_skills]
+				_:
+					title = "Direct Heel Lift"
+					text = ("Sem bola por perto: avanço de %d. Se encontrar a bola no chão, QTE fácil e, ganhando, "
+						+ "salta com ela na diagonal até voando e libera o Distortion.") % int(heel_dash_range)
+			text += "\nRecarga: %d rodadas (compartilhada)." % heel_cooldown
+		SKILL_FAKE:
+			if _miracle_available() != null:
+				var miracle: ChemicalReaction = _miracle_available()
 				title = "Five Stage Volley"
+				key = "five_stage_volley"
 				text = ("Reação Química Miracle com o Reo: cutscene, cinco etapas do Fake Volley (o Nagi anda e gira suspenso, a caveira cresce) e, na última, um chute fortíssimo com %d%% de chance de gol.\n"
 					+ "Recarga do Fake Volley: %d rodadas. Recarga da reação: %d rodadas.") % [_pct(five_chance), fake_cooldown, miracle.cooldown_rounds]
-			elif get_zero_variant() == ZeroVariant.FAKE_VOLLEY:
-				title = "Fake Volley"
-				text = ("Chute falso: a bola sai e volta. Com um inimigo perto, ganha +%d%% de chance de gol no próximo chute.\n"
-					+ "Recarga: %d rodadas.") % [_pct(fake_bonus), fake_cooldown]
 			else:
-				title = "Zero Reset Turn"
-				text = ("Nagi segura a bola até o próximo turno do time dele. Se um inimigo tentar pegá-la, ele desvia e ganha +%d ação de habilidade.\n"
-					+ "Recarga: %d rodadas.") % [zero_extra_skills, zero_cooldown]
-		SKILL_LIFT:
-			title = "Lift"
-			text = "Levanta a bola e o Nagi um nível de altura.\nRecarga: %d rodada(s)." % lift_cooldown
-		SKILL_CONTROL:
-			title = "Control"
-			text = ("+%d ação de habilidade extra neste turno.\n"
-				+ "%sRecarga: %d rodada(s).") % [
-				control_extra_skills, "Não gasta ação de habilidade. " if control_is_free else "", control_cooldown]
+				title = "Fake Volley"
+				text = ("Finta o chute, atordoa o inimigo mais próximo e avança %d trazendo a bola. Depois domina a bola durante o turno inimigo: "
+					+ "ação geral = atordoado; habilidade = typing game (perdeu, o Nagi desvia). Com %d erros, o Juggling Shot chuta sozinho para o gol (%.1fx, %d%%).\n"
+					+ "Recarga: %d rodadas.") % [int(fake_dash_range), juggling_fails_needed, juggling_force, _pct(juggling_chance), fake_cooldown]
+		SKILL_TRAP:
+			if get_trap_variant() == TrapVariant.GROUND_CONTROL:
+				title = "Ground Control"
+				key = "ground_control"
+				text = ("Passe suspenso para um aliado (alcance %d), correr de %.0f s, salto, o aliado devolve a bola e um QTE fácil dá +%d ação de habilidade.") \
+					% [int(control_pass_range), control_run_time, control_extra_skills]
+			else:
+				title = "Trap"
+				text = ("Sem bola por perto: avanço de %d. Se a bola estiver a %d no fim, vai até ela no nível dela (saltando se precisar) e um QTE fácil dá +%d ação de habilidade.") \
+					% [int(trap_dash_range), int(trap_ball_range), control_extra_skills]
+			text += "\nRecarga: %d rodadas (compartilhada)." % trap_cooldown
+		SKILL_HEAVY:
+			match get_heavy_variant():
+				HeavyVariant.JUMPING_TURN:
+					title = "Jumping Turn"
+					key = "jumping_turn"
+					text = "Depois do Trap: toque curto para o lado, sobe a bola, gira e chuta (%.1fx, %d%% de chance)." % [jumping_force, _pct(jumping_chance)]
+				HeavyVariant.BICYCLE:
+					title = "Bicycle"
+					key = "bicycle"
+					text = "Bicicleta giratória com a bola voando (%.1fx, %d%% de chance)." % [bicycle_force, _pct(bicycle_chance)]
+				HeavyVariant.CURIOSITY:
+					title = "Curiosity"
+					key = "curiosity"
+					text = "A bicicleta na área do goleiro, na lateral: %d%% de chance." % _pct(curiosity_chance)
+				_:
+					title = "Heavy"
+					text = "Chute %.1fx em que a bola sobe durante a trajetória. %d%% de chance de gol." % [heavy_force, _pct(heavy_chance)]
+			text += "\nRecarga: %d rodadas (compartilhada)." % heavy_cooldown
 		_:
 			return {}
-	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D
+	var icon: Texture2D = skill_icons.get(key, skill_icons.get(StringName(key), skill_icons.get(String(skill_id)))) as Texture2D
 	return {"title": title, "description": text, "icon": icon}
 
 
@@ -1089,17 +1572,13 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 
 func reset_for_new_match() -> void:
 	super()   # zera também extra_skill_left e as recargas
-	_traps_this_turn = 0
-	_trap_followup = false
+	_heel_followup = false
+	_last_skill = &""
 	_temp_extras = 0
-	_zero_active = false
-	_zero_triggered = false
-	_zero_enemy_turn_pending = false
-	_fx_t = 1.0
-	_skull_t = 1.0
-	_skull_mult = 1.0
+	_end_dominance()
+	_dodges = 0
 	_text_alpha = 0.0
-	_stop_five_aura()
+	_stop_aura()
 	_reset_spin()
 	queue_redraw()
 
@@ -1108,28 +1587,21 @@ func reset_for_new_match() -> void:
 
 func _process(delta: float) -> void:
 	super(delta)
-	_check_zero_reset()
-	if _zero_active:
+	_check_dominance()
+	if _dom_active:
 		queue_redraw()   # os anéis em volta da bola pulsam
-	if _five_aura != null:
-		_five_aura.position = Vector2(0.0, -height - 4.0)
+	if _aura != null:
+		_aura.position = Vector2(0.0, -height - 4.0)
 
 
-# ---------- VISUAL (branco e cinza) ----------
+# ---------- VISUAL ----------
 
-## Onda de choque no chão ("ring") ou colunas de luz subindo ("beam")
-func _pulse(kind: StringName, color: Color = Color.WHITE, duration: float = 0.45) -> void:
-	_fx_kind = kind
-	_fx_color = color
-	if _fx_tween and _fx_tween.is_valid():
-		_fx_tween.kill()
-	_fx_t = 0.0
-	_fx_tween = create_tween()
-	_fx_tween.tween_property(self, "_fx_t", 1.0, duration) \
-		.set_trans(Tween.TRANS_QUART).set_ease(Tween.EASE_OUT)
+## Anel de caveirinhas em volta dele (as ativações)
+func _pulse(_duration: float = 0.45) -> void:
+	NagiFX.ring(self, global_position, 30.0, 10)
 
 
-## Texto que sobe e some em cima do Nagi
+## Texto curto que sobe e some em cima do Nagi
 func _say(text: String) -> void:
 	_text = text
 	if _text_tween and _text_tween.is_valid():
@@ -1140,57 +1612,25 @@ func _say(text: String) -> void:
 	_text_tween.tween_property(self, "_text_alpha", 0.0, 0.5)
 
 
-## Caveira translúcida do Fake Volley: aparece, sobe um pouco e some.
-## size_mult = tamanho (1.0 = o normal; o Five Stage Volley aumenta a cada etapa), duration = quanto dura
-func _show_skull(size_mult: float = 1.0, duration: float = 1.3) -> void:
-	if _skull_tween and _skull_tween.is_valid():
-		_skull_tween.kill()
-	_skull_mult = size_mult
-	_skull_t = 0.0
-	_skull_tween = create_tween()
-	_skull_tween.tween_property(self, "_skull_t", 1.0, duration)
+## Caveira grande que sai dele (tamanho e opacidade dados). Usada pelo Five Stage Volley
+func _show_skull(size_mult: float = 1.0, duration: float = 1.3, alpha: float = 0.6) -> void:
+	NagiFX.skull(self, size_mult, alpha, duration)
 
 
 func _draw() -> void:
 	super()
 
-	# Zero Reset Turn: anéis brancos e cinzas pulsando em volta da bola + fio até o Nagi
-	if _zero_active:
+	# Domínio da bola: anéis claros pulsando em volta dela + fio até o Nagi
+	if _dom_active:
 		var ball: Ball = _get_ball()
 		if ball != null and is_instance_valid(ball):
 			var bp: Vector2 = to_local(ball.global_position)
 			var pulse: float = 0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.006)
-			var strength: float = 1.0 if _zero_triggered else 0.8
-			draw_line(Vector2.ZERO, bp, Color(1, 1, 1, 0.22), 1.5)
+			draw_line(Vector2.ZERO, bp, Color(0.85, 0.92, 1.0, 0.25), 1.5)
 			draw_set_transform(bp, 0.0, Vector2(1.0, 0.5))   # achatado, como a sombra
-			draw_arc(Vector2.ZERO, 24.0 + pulse * 3.0, 0.0, TAU, 40, Color(1, 1, 1, strength), 2.5)
-			draw_arc(Vector2.ZERO, 34.0 + pulse * 5.0, 0.0, TAU, 40, Color(0.7, 0.7, 0.75, 0.6), 2.0)
+			draw_arc(Vector2.ZERO, 24.0 + pulse * 3.0, 0.0, TAU, 40, Color(1, 1, 1, 0.85), 2.5)
+			draw_arc(Vector2.ZERO, 34.0 + pulse * 5.0, 0.0, TAU, 40, Color(0.84, 0.78, 1.0, 0.6), 2.0)
 			draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-
-	# Efeito rápido da habilidade que acabou de ser usada
-	if _fx_t < 1.0:
-		var a: float = 1.0 - _fx_t
-		match _fx_kind:
-			&"ring":
-				draw_set_transform(Vector2.ZERO, 0.0, Vector2(1.0, 0.5))
-				draw_arc(Vector2.ZERO, lerpf(14.0, 95.0, _fx_t), 0.0, TAU, 48,
-					Color(_fx_color, a), lerpf(7.0, 1.0, _fx_t))
-				draw_arc(Vector2.ZERO, lerpf(8.0, 60.0, _fx_t), 0.0, TAU, 48,
-					Color(0.6, 0.6, 0.66, a * 0.8), lerpf(4.0, 1.0, _fx_t))
-				draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
-			&"beam":
-				for i in 7:
-					var x: float = (i - 3) * 6.0
-					var h: float = lerpf(10.0, 95.0, _fx_t) * (0.65 + 0.35 * sin(i * 1.7))
-					draw_line(Vector2(x, 4.0), Vector2(x, -h),
-						Color(_fx_color, a * 0.75), lerpf(5.0, 1.0, _fx_t))
-
-	# Caveira translúcida (Fake Volley)
-	if _skull_t < 1.0:
-		var alpha: float = minf(_skull_t / 0.15, 1.0) * minf((1.0 - _skull_t) / 0.45, 1.0)
-		# (com _skull_mult = 1.0 a posição e o tamanho são exatamente os de antes)
-		var center := Vector2(0.0, -height - 40.0 - 22.0 * _skull_mult - _skull_t * 30.0)
-		_draw_skull(center, lerpf(0.75, 1.15, _skull_t) * _skull_mult, alpha * 0.6)
 
 	# Texto curto em cima dele
 	if _text_alpha > 0.0:
@@ -1199,98 +1639,3 @@ func _draw() -> void:
 			80.0, 16, 4, Color(0, 0, 0, _text_alpha * 0.8))
 		draw_string(ThemeDB.fallback_font, tp, _text, HORIZONTAL_ALIGNMENT_CENTER,
 			80.0, 16, Color(1, 1, 1, _text_alpha))
-
-
-func _draw_skull(center: Vector2, skull_scale: float, alpha: float) -> void:
-	draw_set_transform(center, 0.0, Vector2(skull_scale, skull_scale))
-	var bone := Color(0.98, 0.98, 1.0, alpha)
-	var bone_shadow := Color(0.85, 0.85, 0.9, alpha * 0.7)
-	var shade := Color(0.04, 0.04, 0.08, minf(alpha * 1.3, 1.0))
-	var white_glow := Color(1.0, 1.0, 1.0, alpha * 0.55)
-
-	# ---------- HALO (brilho branco/roxo atrás) ----------
-	for i in 3:
-		draw_circle(Vector2(0.0, -6.0), 22.0 + float(i) * 6.0,
-			Color(0.85, 0.75, 1.0, alpha * (0.20 - float(i) * 0.05)))
-	# raios brancos por trás
-	for i in 8:
-		var ang: float = TAU * float(i) / 8.0 + Time.get_ticks_msec() * 0.001
-		var r0: float = 18.0
-		var r1: float = 28.0 + 6.0 * sin(Time.get_ticks_msec() * 0.005 + float(i))
-		draw_line(Vector2(cos(ang) * r0, sin(ang) * r0 - 6.0),
-			Vector2(cos(ang) * r1, sin(ang) * r1 - 6.0), white_glow, 2.0)
-
-	# ---------- CRÂNIO ----------
-	# Base do crânio com bochechas salientes
-	var cranium := PackedVector2Array([
-		Vector2(-12.0, -12.0), Vector2(-14.0, -18.0), Vector2(-8.0, -22.0),
-		Vector2(8.0, -22.0), Vector2(14.0, -18.0), Vector2(12.0, -12.0),
-		Vector2(14.0, -2.0), Vector2(12.0, 4.0), Vector2(8.0, 8.0),
-		Vector2(-8.0, 8.0), Vector2(-12.0, 4.0), Vector2(-14.0, -2.0)])
-	draw_colored_polygon(cranium, bone)
-	var cranium_line := cranium.duplicate()
-	cranium_line.append(cranium[0])
-	draw_polyline(cranium_line, Color(0.02, 0.02, 0.05, alpha), 1.6)
-
-	# Sombra nas laterais do crânio (para dar volume)
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(-12.0, -12.0), Vector2(-14.0, -18.0), Vector2(-8.0, -22.0),
-		Vector2(-4.0, -20.0), Vector2(-8.0, -14.0), Vector2(-10.0, -4.0),
-		Vector2(-12.0, 4.0)]), bone_shadow)
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(12.0, -12.0), Vector2(14.0, -18.0), Vector2(8.0, -22.0),
-		Vector2(4.0, -20.0), Vector2(8.0, -14.0), Vector2(10.0, -4.0),
-		Vector2(12.0, 4.0)]), bone_shadow)
-
-	# Testa com uma rachadura
-	draw_line(Vector2(-3.0, -20.0), Vector2(-1.0, -14.0), Color(0.4, 0.4, 0.5, alpha), 1.0)
-	draw_line(Vector2(-1.0, -14.0), Vector2(-4.0, -10.0), Color(0.4, 0.4, 0.5, alpha), 1.0)
-
-	# ---------- ÓRBITAS ----------
-	# Órbita esquerda
-	draw_circle(Vector2(-5.5, -6.0), 5.2, shade)
-	draw_arc(Vector2(-5.5, -6.0), 5.2, 0.0, TAU, 16, Color(0.5, 0.5, 0.6, alpha * 0.7), 1.0)
-	# Brilho branco dentro (o "olho" fantasma)
-	draw_circle(Vector2(-5.5, -6.0), 2.0, Color(1.0, 1.0, 1.0, alpha * 0.85))
-	# Órbita direita
-	draw_circle(Vector2(5.5, -6.0), 5.2, shade)
-	draw_arc(Vector2(5.5, -6.0), 5.2, 0.0, TAU, 16, Color(0.5, 0.5, 0.6, alpha * 0.7), 1.0)
-	draw_circle(Vector2(5.5, -6.0), 2.0, Color(1.0, 1.0, 1.0, alpha * 0.85))
-
-	# ---------- NARIZ ----------
-	# Formato de coração invertido
-	draw_colored_polygon(PackedVector2Array([
-		Vector2(0.0, -1.0), Vector2(-3.0, 3.0), Vector2(-1.5, 4.0),
-		Vector2(0.0, 3.0), Vector2(1.5, 4.0), Vector2(3.0, 3.0)]), shade)
-
-	# ---------- MANDÍBULA ----------
-	var jaw := PackedVector2Array([
-		Vector2(-8.0, 6.0), Vector2(8.0, 6.0), Vector2(9.0, 14.0),
-		Vector2(5.0, 16.0), Vector2(-5.0, 16.0), Vector2(-9.0, 14.0)])
-	draw_colored_polygon(jaw, bone)
-	var jaw_line := jaw.duplicate()
-	jaw_line.append(jaw[0])
-	draw_polyline(jaw_line, Color(0.02, 0.02, 0.05, alpha), 1.6)
-	# Sombra entre maxila e mandíbula
-	draw_rect(Rect2(-8.0, 6.0, 16.0, 3.0), Color(0.15, 0.15, 0.2, alpha * 0.6))
-
-	# ---------- DENTES ----------
-	# Linha superior (7 dentes)
-	for i in 7:
-		var x: float = -6.0 + float(i) * 2.0
-		draw_line(Vector2(x, 6.5), Vector2(x, 10.5), shade, 1.0)
-	# Linha inferior (6 dentes)
-	for i in 6:
-		var x: float = -5.0 + float(i) * 2.0
-		draw_line(Vector2(x, 15.5), Vector2(x, 12.0), shade, 1.0)
-	# Um dente lascado (o segundo da esquerda, quebrado)
-	draw_line(Vector2(-4.0, 10.5), Vector2(-4.0, 13.0), shade, 1.0)
-
-	# ---------- BOLHAS BRANCAS (partículas do Miracle) ----------
-	for i in 5:
-		var t: float = fposmod(Time.get_ticks_msec() * 0.0008 + float(i) * 0.2, 1.0)
-		var x: float = -14.0 + float(i) * 7.0
-		var y: float = -22.0 - t * 26.0
-		draw_circle(Vector2(x, y), 1.6 * (1.0 - t), Color(1.0, 1.0, 1.0, alpha * (1.0 - t)))
-
-	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

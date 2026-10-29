@@ -29,6 +29,11 @@ extends Player
 ##      diálogo, chance de gol 83%, câmera tremendo, efeitos rosa-choque e asas por 2 rodadas
 ##      (só visual). Recarga da reação: 12 rodadas (controlada pelo ReactionManager).
 ##
+## 5. REAÇÃO QUÍMICA "Weirdos" (com o Charles; ver reaction_weirdos.gd): se o Charles, com a Tricheur's Metavision ativa, fez um
+##      Rabona Cross para perto do Shidou e ele alcança a bola com o Demonic Rush, o Draconic Header vira o THE RESULT: cutscene +
+##      diálogo, cabeceio (peixinho) com força 2.3x e 80% de chance de gol, e efeitos que misturam o Carnival e o Cruel (com o
+##      demônio do Charles menor). Animação opcional: "the_result" (sem ela, usa a do "draconic_header").
+##
 ## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
 ## -> renomeie o nó raiz para "Shidou". Animações opcionais (se faltar alguma, nada quebra):
 ## "kablamo", "dragon_drive", "big_bang_drive", "demonic_rush", "draconic_header",
@@ -86,6 +91,14 @@ const CARNIVAL_LIGHT := Color(1.0, 0.65, 0.85)
 ## Aura do Carnival (rosa-choque). Vazio = usa o estilo padrão (veja _make_carnival_fx)
 @export var carnival_fx: KickFX
 
+@export_group("The Result (Reação Química Weirdos, com o Charles)")
+@export_range(0.0, 1.0) var chance_result: float = 0.80      # chance de gol FINAL (não soma outros bônus do Shidou)
+@export var result_force_mult: float = 2.3                   # força do cabeceio
+@export var result_shake: float = 12.0                       # tremor da câmera no impacto (px)
+@export var weirdos_demon_size: float = 250.0                # (não é mais usado aqui: o demônio é só do Charles, veja charles.gd)
+## Aura do The Result (rosa + dourado). Vazio = usa o estilo padrão (veja _make_result_fx)
+@export var result_fx: KickFX
+
 @export_group("Visual do chute")
 ## Aura + partículas dos chutes de habilidade. Vazio = usa o estilo padrão do Shidou (veja _make_kick_fx)
 @export var kick_fx: KickFX
@@ -137,6 +150,8 @@ func _ready() -> void:
 		big_bang_fx = _make_big_bang_fx()
 	if carnival_fx == null:
 		carnival_fx = _make_carnival_fx()
+	if result_fx == null:
+		result_fx = _make_result_fx()
 	_hook_manager.call_deferred()
 
 
@@ -193,6 +208,25 @@ func _make_carnival_fx() -> KickFX:
 	fx.scale_max = 0.6
 	fx.burst_amount = 40
 	fx.burst_speed = 460.0
+	return fx
+
+
+## The Result (Weirdos): rosa-choque do Carnival com brilho dourado do Cruel
+func _make_result_fx() -> KickFX:
+	var fx := KickFX.new()
+	fx.color = CARNIVAL_PINK
+	fx.trail_width = 34.0
+	fx.particle_color = Color(1.0, 0.85, 0.2)
+	fx.amount = 60
+	fx.lifetime = 0.6
+	fx.speed_min = 40.0
+	fx.speed_max = 160.0
+	fx.gravity = Vector2(0.0, -80.0)
+	fx.spin = 320.0
+	fx.scale_min = 0.2
+	fx.scale_max = 0.6
+	fx.burst_amount = 44
+	fx.burst_speed = 480.0
 	return fx
 
 
@@ -560,6 +594,23 @@ func _header_available() -> bool:
 	return get_kick_type(_get_ball()) == KickType.HIGH_BALL   # no chão + bola suspensa ao alcance
 
 
+## A reação Weirdos (criada na primeira vez que precisa; não depende de registro no ReactionManager)
+var _weirdos_rx: ReactionWeirdos = null
+
+
+func _weirdos_rx_get() -> ReactionWeirdos:
+	if _weirdos_rx == null:
+		_weirdos_rx = ReactionWeirdos.new()
+	return _weirdos_rx
+
+
+## O Charles (parceiro) se o Draconic Header está liberado E as condições da Weirdos estão cumpridas; senão null
+func _weirdos_partner() -> Player:
+	if not _header_available():
+		return null
+	return _weirdos_rx_get().find_partner(self)
+
+
 ## O Draconic Header já foi "pago" pelo Demonic Rush: não gasta outra ação de habilidade
 func skill_is_free(skill_id: StringName) -> bool:
 	return skill_id == SKILL_RUSH and _header_available()
@@ -597,7 +648,8 @@ func _use_rush() -> bool:
 	return true
 
 
-## Draconic Header: chute reto, a bola sobe até "voando" e desce até o chão
+## Draconic Header: chute reto, a bola sobe até "voando" e desce até o chão.
+## Com a reação Weirdos pronta vira o THE RESULT: cutscene, cabeceio (peixinho) 2.3x mais forte e 80% de chance de gol.
 func _use_header() -> bool:
 	var m: MatchManager = _get_manager()
 	if m == null:
@@ -609,15 +661,52 @@ func _use_header() -> bool:
 		return false
 
 	var ball: Ball = _get_ball()
+	var partner: Player = _weirdos_partner()
+	var is_result: bool = partner != null
+	var origin: Vector2 = ball.global_position
+	var origin_height: float = ball.height
+
 	var chance: float = minf(chance_header + _shot_bonus(), 1.0)
+	var fx: KickFX = kick_fx
+	var anim: StringName = &"draconic_header"
+	if is_result:
+		# A partida congela e roda a cutscene + diálogo. SÓ DEPOIS vem o cabeceio.
+		# (A mira já foi confirmada: cancelar a mira não gasta a reação nem a recarga dela.)
+		var reaction: ReactionWeirdos = _weirdos_rx_get()
+		await ReactionManager.get_for(self).play(reaction, self, partner)
+		reaction.mark_used(team, m.round_number)
+		chance = chance_result
+		next_shot_bonus = 0.0   # o número final é o do The Result: outros bônus do Shidou não somam
+		next_kick_force_mult = result_force_mult
+		fx = result_fx
+		anim = _anim_or(&"the_result", &"draconic_header")
+
+	var touches: int = ball.interaction_count
 	var saved_peak: Heights.Level = volley_peak_level
 	volley_peak_level = Heights.Level.FLYING
-	await kick_ball(ball, aim, KickType.VOLLEY, true, chance, false, kick_fx, &"draconic_header")
+	await kick_ball(ball, aim, KickType.VOLLEY, true, chance, false, fx, anim)
 	volley_peak_level = saved_peak
+
+	if is_result:
+		if ball.interaction_count == touches:
+			return false   # o chute não saiu (ação cancelada)
+		_weirdos_impact(origin, origin_height, ball)
 
 	_rush_round = -1   # o complemento foi usado
 	start_cooldown(CD_RUSH, rush_cooldown)
 	return true
+
+
+## Depois do The Result: ondas de choque rosa e dourada, tremor, imagens fantasma, dragão do Carnival seguindo a bola,
+## e brilhos. SEM números e SEM demônio aqui: o demônio do Charles só aparece no Charles (no Rabona, veja charles.gd).
+func _weirdos_impact(origin: Vector2, origin_height: float, ball: Ball) -> void:
+	_spawn_shockwave(origin, origin_height, 175.0, 0.55, CARNIVAL_PINK)
+	_spawn_shockwave(origin, origin_height, 105.0, 0.4, WeirdosFX.GOLD)
+	_shake_camera(result_shake, 14)
+	_ghost_trail(ball, CARNIVAL_PINK)            # imagens fantasma atrás da bola (sem await: acontece enquanto ela voa)
+	CarnivalFX.attach_dragon(ball, 2.2)          # dragão serpente segue o cabeceio
+	WeirdosFX.result_burst(self, ball.sprite.global_position)
+	_show_popup("THE RESULT!", CARNIVAL_PINK)
 
 
 # ---------- OBSESSIVE LOVER / HATER ----------
@@ -691,8 +780,11 @@ func _use_obsessive(hater: bool) -> bool:
 func get_skills() -> Array[Dictionary]:
 	var list: Array[Dictionary] = []
 	list.append({"id": SKILL_SHOT, "name": skill_label(_shot_skill_name(), CD_SHOT)})
-	var rush_name: String = "Draconic Header" if _header_available() \
-		else skill_label("Demonic Rush", CD_RUSH)
+	var rush_name: String
+	if _header_available():
+		rush_name = "The Result" if _weirdos_partner() != null else "Draconic Header"
+	else:
+		rush_name = skill_label("Demonic Rush", CD_RUSH)
 	list.append({"id": SKILL_RUSH, "name": rush_name})
 	var lover_name: String = "Obsessive Lover (ativo)" if is_lover_active() \
 		else skill_label("Obsessive Lover", CD_OBSESSIVE)
@@ -777,8 +869,13 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 			text += "\nRecarga: %d rodadas." % shot_cooldown
 		SKILL_RUSH:
 			if _header_available():
-				title = "Draconic Header"
-				text = "Complemento grátis: chute reto em que a bola sobe e desce. %d%% de chance de gol." % _pct(chance_header)
+				if _weirdos_partner() != null:
+					title = "The Result"
+					text = ("REAÇÃO QUÍMICA com o Charles (Weirdos)! Complemento grátis: cabeceio (peixinho) com cutscene, força %.1fx e %d%% de chance de gol.\n"
+						+ "Recarga da reação: %d rodadas.") % [result_force_mult, _pct(chance_result), _weirdos_rx_get().cooldown_rounds]
+				else:
+					title = "Draconic Header"
+					text = "Complemento grátis: chute reto em que a bola sobe e desce. %d%% de chance de gol." % _pct(chance_header)
 			else:
 				title = "Demonic Rush"
 				text = "Corrida %.1fx mais veloz que não conta no limite de Correr. Se alcançar uma bola suspensa, libera o Draconic Header." % rush_speed_mult

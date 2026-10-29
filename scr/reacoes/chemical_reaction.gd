@@ -35,12 +35,34 @@ var chroma_smoothness: float = 0.08   # suavidade da borda (sobe = borda mais "e
 var chroma_spill: float = 0.5         # tira o reflexo verde das bordas (0 a 1; só faz sentido para fundo verde)
 var colors: Dictionary = {}      # character_id -> Color
 
+## Falantes DE FORA da reação (narrador, outro personagem...): id -> {"name", "face", "color"}.
+## Registre com _add_speaker() e use na fala com _say(id, "texto"). Quem não for registrado ainda funciona:
+## o rosto é procurado em <faces_dir>/<id>.png (então basta colocar narrador.png na pasta dos rostinhos).
+var speakers: Dictionary = {}
+
 ## Falas da cutscene, na ordem: {"who": character_id, "text": String}
 var lines: Array[Dictionary] = []
 
 
 func _say(who: String, text: String) -> void:
 	lines.append({"who": who, "text": text})
+
+
+## Cadastra alguém de fora da reação que pode falar na cutscene (ex: um narrador).
+##   id:      o mesmo texto que você usa em _say(id, ...)
+##   display: nome (a inicial aparece se não houver imagem). Vazio = o próprio id com inicial maiúscula
+##   face:    caminho da imagem ("res://...png") ou uma Texture2D. Vazio = procura <faces_dir>/<id>.png
+##   color:   cor do contorno da fala e da moldura. Transparente (padrão) = usa a cor da reação (accent)
+## Exemplo: _add_speaker("narrador", "Narrador", "res://img/rostinhos/narrador.png", Color(0.9, 0.9, 0.9))
+func _add_speaker(id: String, display: String = "", face: Variant = null, color: Color = Color(0, 0, 0, 0)) -> void:
+	var entry: Dictionary = {}
+	if display != "":
+		entry["name"] = display
+	if face != null:
+		entry["face"] = face
+	if color.a > 0.0:
+		entry["color"] = color
+	speakers[id] = entry
 
 
 ## O personagem faz parte desta reação?
