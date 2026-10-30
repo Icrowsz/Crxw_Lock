@@ -19,6 +19,11 @@ extends Player
 ##      Blooming Halt: marca um inimigo; se ele tentar chutar no turno inimigo, a marca estoura: força pela metade, -6% de
 ##      chance e marca outro inimigo próximo (somada à penalidade da área).
 ##
+## REAÇÃO QUÍMICA SELFISH (com o Sae, veja reaction_selfish.gd): se o Sae, com a Ultra Vision ativa, fez um Perfect Pass
+## que chegou SUSPENSO no Aiku nesta rodada e ninguém tocou na bola, o Snake Lunge vira o STRIKER: cutscene, chute com 2.0x
+## de força, a bola sobe durante a trajetória (até Voando) e 75% de chance de gol, com uma serpente saindo do chute.
+## O Striker NÃO precisa de inimigo por perto (só da bola ao alcance).
+##
 ## O pedido não deu o que acontece quando o Aiku PERDE o confronto do Snake Lunge: nada acontece (só o bote falha).
 ## Animações opcionais (hit_frames diz o frame de impacto de cada uma): snake_lunge, serpentine_grasp, serpent_slip,
 ## nice_shot, burglar_radar, ultimate_defense, blooming_halt. Sem elas, nada quebra.
@@ -72,6 +77,12 @@ enum SlipVariant { NONE, SLIP, VENOM, NICE }
 @export_range(0.0, 1.0) var halt_penalty: float = 0.06
 @export var halt_chain_radius: float = 200.0       # a marca estoura e pula para outro inimigo a até esta distância
 
+@export_group("Striker (Reação Química Selfish, com o Sae)")
+@export_range(0.0, 1.0) var chance_striker: float = 0.75   # chance de gol FINAL (nada mais soma)
+@export var striker_force_mult: float = 2.0                 # força do chute (x o voleio); nada mais soma
+## Aura do Striker (rosa + verde-veneno). Vazio = usa o estilo padrão (veja _make_striker_fx)
+@export var striker_fx: KickFX
+
 @export_group("Visual / Descrição")
 ## Aura + partículas dos deflects. Vazio = verde-veneno (veja _make_kick_fx)
 @export var kick_fx: KickFX
@@ -106,6 +117,8 @@ func _ready() -> void:
 	super()
 	if kick_fx == null:
 		kick_fx = _make_kick_fx()
+	if striker_fx == null:
+		striker_fx = _make_striker_fx()
 	add_to_group("control_sources")   # penalidade de chute, trava das gerais (Player consulta este grupo)
 	_hook_manager.call_deferred()
 
@@ -128,6 +141,26 @@ func _make_kick_fx() -> KickFX:
 	fx.scale_max = 0.35
 	fx.burst_amount = 12
 	fx.burst_speed = 190.0
+	return fx
+
+
+## Rosa-choque (Sae) com brilhos verde-veneno (Aiku): a aura do Striker
+func _make_striker_fx() -> KickFX:
+	var fx := KickFX.new()
+	fx.color = SelfishFX.PINK
+	fx.additive = false   # o campo é verde: mistura normal mantém a cor visível
+	fx.trail_width = 20.0
+	fx.particle_color = SelfishFX.VENOM
+	fx.amount = 36
+	fx.lifetime = 0.6
+	fx.speed_min = 30.0
+	fx.speed_max = 110.0
+	fx.gravity = Vector2(0.0, -50.0)
+	fx.spin = 300.0
+	fx.scale_min = 0.2
+	fx.scale_max = 0.4
+	fx.burst_amount = 22
+	fx.burst_speed = 300.0
 	return fx
 
 
@@ -262,6 +295,8 @@ func _use_lunge() -> bool:
 	var m: MatchManager = _get_manager()
 	if m == null:
 		return false
+	if _striker_partner() != null:
+		return await _use_striker()   # reação Selfish pronta: o Snake Lunge vira o Striker
 	var target: Player = await m.pick_ally_for_skill(self, lunge_range, true, _is_target)
 	if target == null or not _is_target(target):
 		return false   # cancelou: não gasta a ação
@@ -299,6 +334,74 @@ func _clear_lunge() -> void:
 	AikuFX.release(_lunge_bind)
 	_lunge_bind = null
 	_lunge_target = null
+
+
+# ---------- STRIKER (Reação Química Selfish, com o Sae) ----------
+
+## A reação Selfish (criada na primeira vez que precisa; não depende de registro no ReactionManager)
+var _selfish_rx: ReactionSelfish = null
+
+
+func _selfish_rx_get() -> ReactionSelfish:
+	if _selfish_rx == null:
+		_selfish_rx = ReactionSelfish.new()
+	return _selfish_rx
+
+
+## A Sae (parceira) se as condições da Selfish estão cumpridas e a bola está ao alcance; senão null
+func _striker_partner() -> Player:
+	var ball: Ball = _get_ball()
+	if ball == null or get_kick_type(ball) == KickType.NONE:
+		return null
+	return _selfish_rx_get().find_partner(self)
+
+
+## Usa a animação preferida se o personagem tiver; senão a reserva
+func _anim_or(preferred: StringName, fallback: StringName) -> StringName:
+	if _has_art and animated_sprite.sprite_frames.has_animation(preferred):
+		return preferred
+	return fallback
+
+
+## Striker: cutscene e depois um chute 2.0x que sobe durante a trajetória, com 75% de chance de gol
+func _use_striker() -> bool:
+	var m: MatchManager = _get_manager()
+	if m == null or _striker_partner() == null:
+		return false
+	var aim: Vector2 = await m.aim_for_skill(self, kick_aim_range)
+	if aim == Vector2.ZERO:
+		return false   # cancelou: não gasta a ação
+
+	# A bola pode ter rolado enquanto ele mirava: confere de novo
+	var ball: Ball = _get_ball()
+	var partner: Player = _striker_partner()
+	if ball == null or partner == null:
+		return false
+
+	# A partida congela e roda a cutscene + diálogo. SÓ DEPOIS vem o chute.
+	# (A mira já foi confirmada: cancelar a mira não gasta a reação nem a recarga dela.)
+	var reaction: ReactionSelfish = _selfish_rx_get()
+	await ReactionManager.get_for(self).play(reaction, self, partner)
+	reaction.mark_used(team, m.round_number)
+
+	next_shot_bonus = 0.0                       # o número final é o do Striker: o bônus do passe do Sae não soma
+	next_kick_force_mult = striker_force_mult   # força final: nada mais soma
+	var saved_peak: Heights.Level = volley_peak_level
+	volley_peak_level = Heights.Level.FLYING    # a bola sobe durante a trajetória
+	var touches: int = ball.interaction_count
+	await kick_ball(ball, aim, KickType.VOLLEY, true, chance_striker, false, striker_fx,
+		_anim_or(&"striker", &""), _striker_burst)
+	volley_peak_level = saved_peak
+	if ball.interaction_count == touches:
+		return false   # o chute não saiu (ação cancelada)
+	start_cooldown(CD_LUNGE, lunge_cooldown)
+	return true
+
+
+## Chamado pelo kick_ball() logo depois que a bola do Striker sai: a serpente sai do chute + brilhos
+func _striker_burst(ball: Ball, _dir: Vector2, _speed: float) -> void:
+	SelfishFX.serpent(self, ball, global_position + Vector2(0.0, -24.0))
+	SelfishFX.striker_burst(self, ball.sprite.global_position if ball.sprite != null else ball.global_position)
 
 
 # ---------- SERPENT SLIP / VENOM DEFLECT / NICE SHOT ----------
@@ -627,7 +730,7 @@ func get_skills() -> Array[Dictionary]:
 			slip_name = "Nice Shot"
 	var radar_name: String = "Burglar Radar (ativo)" if is_radar_active() else skill_label("Burglar Radar", CD_RADAR)
 	return [
-		{"id": SKILL_LUNGE, "name": skill_label(_lunge_name(), CD_LUNGE)},
+		{"id": SKILL_LUNGE, "name": skill_label("Striker" if _striker_partner() != null else _lunge_name(), CD_LUNGE)},
 		{"id": SKILL_SLIP, "name": skill_label(slip_name, CD_SLIP)},
 		{"id": SKILL_RADAR, "name": radar_name},
 		{"id": SKILL_DEFENSE, "name": "Ultimate Defense" + (" (usado)" if _defense_used else "")},
@@ -640,7 +743,11 @@ func can_use_skill(skill_id: StringName = &"default") -> bool:
 		return false
 	match skill_id:
 		SKILL_LUNGE:
-			return not is_on_cooldown(CD_LUNGE) and height_level == Heights.Level.GROUND and not _targets_near(lunge_range).is_empty()
+			if is_on_cooldown(CD_LUNGE):
+				return false
+			if _striker_partner() != null:
+				return true   # Striker (reação Selfish): não precisa de inimigo por perto
+			return height_level == Heights.Level.GROUND and not _targets_near(lunge_range).is_empty()
 		SKILL_SLIP:
 			return not is_on_cooldown(CD_SLIP) and get_slip_variant() != SlipVariant.NONE
 		SKILL_RADAR:
@@ -705,6 +812,10 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 				+ "metade, o chute perde %d%% e outro inimigo próximo é marcado (somado à penalidade da área). Uso único.") % int(round(halt_penalty * 100.0))
 		_:
 			return {}
+	if skill_id == SKILL_LUNGE and _striker_partner() != null:
+		title = "Striker (Reação Selfish)"
+		text = "Com o Sae: chute %.1fx mais forte, a bola sobe durante a trajetória e %d%% de chance de gol. Uma serpente sai do chute.\nRecarga: %d rodadas." % [
+			striker_force_mult, int(round(chance_striker * 100.0)), lunge_cooldown]
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D
 	return {"title": title, "description": text, "icon": icon}
 

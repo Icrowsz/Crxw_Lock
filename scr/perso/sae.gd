@@ -30,6 +30,10 @@ extends Player
 ##  - Lead Actor: com a bola nas laterais do gol inimigo, o chute vira esta variante: curva
 ##      maior, a bola sobe a "voando" no meio e cai logo depois. QTE difícil, 50%.
 ##
+## REAÇÃO QUÍMICA SELFISH (com o Aiku, veja reaction_selfish.gd): com a Ultra Vision ativa, um Perfect Pass que CHEGA
+## SUSPENSO no Aiku mostra números rosas e pretos acompanhando a bola durante o passe. Se ninguém tocar na bola nesta
+## rodada, o Snake Lunge do Aiku vira o Striker. O passe anota "level" e "uv" em last_perfect_pass.
+##
 ## ASSUMIÇÕES (o pedido não definia; ajuste nos @export):
 ##  - Os QTEs de receptor rodam AUTOMATICAMENTE quando a bola chega: ler "se quiser interagir"
 ##    como opcional exigiria um gancho no MatchManager. Errar o QTE do Perfect Pass faz a bola
@@ -161,8 +165,9 @@ var _uv_until: int = -1
 var _uv_pass_applied: float = 0.0
 var _uv_turn_key: int = -1
 
-## Último Perfect Pass que CHEGOU ao alvo (não interceptado): {target, round, touches}.
-## A Reação Química Carnival (reaction_carnival.gd) lê isto.
+## Último Perfect Pass que CHEGOU ao alvo (não interceptado): {target, round, touches, level, uv}.
+## "level" = estado em que a bola chegou (Heights.Level); "uv" = a Ultra Vision estava ativa.
+## As Reações Químicas Carnival (reaction_carnival.gd) e Selfish (reaction_selfish.gd) leem isto.
 var last_perfect_pass: Dictionary = {}
 
 # --- Passiva do Beautiful Shot ---
@@ -568,6 +573,9 @@ func _run_perfect_pass(target: Player, ball: Ball, level: int) -> bool:
 		ball.play_fx(kick_fx)
 
 	var duration: float = maxf(travel / pass_speed, 0.18)
+	# Selfish (Aiku + Sae): Ultra Vision ativa e a bola chegando SUSPENSA no Aiku = números rosas e pretos na bola
+	if ReactionSelfish.pass_armed(self, target, level):
+		SelfishFX.pass_numbers(ball, duration + 0.5)
 	var elapsed: float = 0.0
 	var tried: Array[Player] = []
 	var stolen_by: Player = null
@@ -631,7 +639,8 @@ func _run_perfect_pass(target: Player, ball: Ball, level: int) -> bool:
 		m.register_skill_pass(team, target)
 	m.pass_completed.emit(self, target)
 	# Guarda o passe (rodada + toques na bola) para a Reação Química Carnival conferir
-	last_perfect_pass = {"target": target, "round": m.round_number, "touches": ball.interaction_count}
+	last_perfect_pass = {"target": target, "round": m.round_number, "touches": ball.interaction_count,
+		"level": level, "uv": _uv_active()}
 	var controlled: bool = await _receive_qte(target, pass_receive_bonus, false)
 	if not controlled and epoch == _epoch:
 		await _let_ball_run_past(m, ball, dir)   # errou o controle: a bola passa direto e cai mais longe

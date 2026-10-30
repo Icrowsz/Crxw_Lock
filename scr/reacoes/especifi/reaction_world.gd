@@ -37,8 +37,13 @@ func _init() -> void:
 		"bachira": Color(1.0, 0.85, 0.10),   # amarelo (como as labaredas dele)
 		"otoya": Color(0.70, 1.0, 0.20),     # verde limão (como o furtivo dele)
 	}
-	_say("bachira", "borabill")
-	_say("otoya", "receba")
+	_add_speaker("ego", "Ego", "res://img/rostinhos/ego.png", Color(0.27, 0.27, 0.27, 1.0))
+	_say("bachira", "The monster is here!")
+	_say("bachira", "Go-Go!")
+	_say("otoya", "Can you see me, monster??")
+	_say("ego", "That's the fire of those who believe to be the center of the world.")
+	_say("otoya", "We are...")
+	_say("bachira", "GODS!") 
 
 
 ## O Bachira acabou de usar o Bon: tem um Otoya do time dele em modo furtivo e a reação está pronta?
