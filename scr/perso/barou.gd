@@ -17,6 +17,7 @@ extends Player
 ##    Correr pelas próximas 3 rodadas; raios saem dele o tempo todo.
 ##    - Tyrant (variante: aliado a 250 com a bola a 70 dele): igual, e o aliado dá um passe rasteiro para o Barou.
 ## Devour (reação química Feeding com o Lorenzo) = o Nero melhorado (veja reaction_feeding.gd).
+## Twisted Path (reação química Donkey com o Isagi) = o Nutmeg melhorado (veja reaction_donkey.gd e donkey_fx.gd).
 ##
 ## Os chutes dele soltam raios em volta da bola; os dashes deixam rastro vermelho com contorno preto.
 ## Cena: Nova Cena Herdada de player.tscn -> este script no nó raiz -> renomeie o nó para "Barou".
@@ -49,6 +50,10 @@ enum ShotVariant { NONE, NERO, TERROR, VILLAIN }
 @export var devour_force_mult: float = 2.4         # "mais forte e veloz" (a velocidade da bola vem da força)
 @export var devour_lion_time: float = 1.7          # quanto tempo o leão fica na bola (s)
 @export var devour_lion_size: float = 110.0        # tamanho do leão (raio do rosto, em px)
+
+@export_group("Twisted Path (reação Donkey)")
+@export_range(0.0, 1.0) var twisted_chance: float = 0.75   # o Predator Eye soma +10% por cima (como no Devour)
+@export var twisted_force_mult: float = 2.0
 
 @export_group("Chop King / Nutmeg / Stealth Kill Shot")
 @export var chop_cooldown: int = 2
@@ -108,6 +113,21 @@ func _ready() -> void:
 	_aura = BarouFX.make_aura(aura_radius)
 	add_child(_aura)
 	_hook_manager.call_deferred()
+	_register_donkey.call_deferred()
+
+
+## Põe a Donkey na lista do ReactionManager, se ele ainda não a tem (tenta por alguns quadros: o manager pode
+## entrar na árvore depois do Barou)
+func _register_donkey() -> void:
+	for _try in 20:
+		var rm: ReactionManager = ReactionManager.get_for(self)
+		if rm != null:
+			for r: ChemicalReaction in rm.reactions:
+				if r.id == &"donkey":
+					return
+			rm.reactions.append(ReactionDonkey.new())
+			return
+		await get_tree().process_frame
 
 
 func _hook_manager() -> void:
@@ -406,6 +426,7 @@ func _use_chop() -> bool:
 			break              # perdeu o drible: perde os dashes que faltam
 	var ball: Ball = _get_ball()
 	_nutmeg_ready = _ball_free(ball) and ball.get_level() == Heights.Level.GROUND and get_kick_type(ball) != KickType.NONE
+	DonkeyFX.chop_done(self, _nutmeg_ready)   # Donkey: sem Nutmeg o rastro negro some; com ele, espera o chute
 	start_cooldown(CD_CHOP, chop_cooldown)
 	return true
 
@@ -416,12 +437,15 @@ func _chop_dash(m: MatchManager, dir: Vector2, beaten: Array[Player]) -> bool:
 	var start: Vector2 = global_position
 	var end: Vector2 = _clamp_to_field(start + dir * chop_dash_distance, body_radius)
 	var trail: BarouFX.Trail = BarouFX.begin_trail(self)
+	var donkey: bool = DonkeyFX.wants_trail(self)   # reação Donkey pronta: o rastro negro fica até o Twisted Path
 	var elapsed: float = 0.0
 	while elapsed < DASH_TIME and not m.match_over:
 		await get_tree().physics_frame
 		elapsed += get_physics_process_delta_time()
 		global_position = start.lerp(end, minf(elapsed / DASH_TIME, 1.0))
 		trail.add(_body_point())
+		if donkey:
+			DonkeyFX.trail_point(self, _body_point())
 		var foes: Array[Player] = _enemies_touching(beaten)
 		if foes.is_empty():
 			continue
@@ -476,9 +500,28 @@ func _use_nutmeg() -> bool:
 	var aim: Vector2 = await m.aim_for_skill(self, kick_aim_range)
 	if aim == Vector2.ZERO or not _ball_free(ball) or get_kick_type(ball) == KickType.NONE:
 		return false   # cancelou: o complemento continua disponível
+	var chance: float = nutmeg_chance
+	var force: float = nutmeg_force_mult
+	var shot_fx: KickFX = kick_fx
+	var anim: StringName = &"nutmeg"
+	var on_kick: Callable = Callable()
+	var reaction: ChemicalReaction = ReactionDonkey.find_ready(self)   # Donkey (Isagi): o Nutmeg vira o Twisted Path
+	var partner: Player = reaction.find_partner(self) if reaction != null else null
+	if partner != null:
+		await ReactionManager.get_for(self).play(reaction, self, partner)   # congela, cutscene, diálogo
+		# Depois do await: confere de novo se ainda dá para chutar (partida reiniciada, bola mudou)
+		if not is_inside_tree() or m.match_over or not _nutmeg_ready or not _ball_free(ball) or get_kick_type(ball) == KickType.NONE:
+			return false
+		chance = twisted_chance
+		force = twisted_force_mult
+		shot_fx = DonkeyFX.kick_fx()
+		if _has_art and animated_sprite.sprite_frames.has_animation(&"twisted_path"):
+			anim = &"twisted_path"
+		on_kick = func(b: Ball, d: Vector2, _s: float) -> void:
+			DonkeyFX.twisted_impact(self, partner if is_instance_valid(partner) else null, b, d)
 	ball.collisions_paused = true   # a bola atravessa todo mundo (antes do chute)
-	next_kick_force_mult *= nutmeg_force_mult
-	await kick_ball(ball, aim, KickType.GROUND, true, nutmeg_chance, false, kick_fx, &"nutmeg")
+	next_kick_force_mult *= force
+	await kick_ball(ball, aim, KickType.GROUND, true, chance, false, shot_fx, anim, on_kick)
 	_nutmeg_ready = false
 	_nutmeg_flight(ball)
 	return true
@@ -531,7 +574,7 @@ func get_skills() -> Array[Dictionary]:
 		{"id": SKILL_SHOT, "name": skill_label("Devour" if _find_feeding() != null else _info(SKILL_SHOT)[0], CD_SHOT)},
 		{"id": SKILL_CHOP, "name": skill_label(_info(SKILL_CHOP)[0], CD_CHOP)}]
 	if _nutmeg_ready:
-		list.append({"id": SKILL_NUTMEG, "name": "Nutmeg (complemento)"})
+		list.append({"id": SKILL_NUTMEG, "name": "Twisted Path (complemento)" if ReactionDonkey.find_ready(self) != null else "Nutmeg (complemento)"})
 	list.append({"id": SKILL_EYE, "name": "Predator Eye (ativo)" if _eye_active() else skill_label(_info(SKILL_EYE)[0], CD_EYE)})
 	return list
 
@@ -591,6 +634,8 @@ func _info(skill_id: StringName) -> Array:
 				return ["Stealth Kill Shot", "Vai até a bola suspensa puxando-a para cima ou para baixo e chuta %.1fx, subindo no trajeto. %d%% de chance de gol." % [stealth_force_mult, _pct(stealth_chance)]]
 			return ["Chop King", "%d dashes de %d com direção livre. Inimigo no caminho = QTE fácil de drible: acertou, atordoa e segue; errou, perde os dashes restantes. Terminando com a bola, libera o Nutmeg." % [chop_dashes, int(chop_dash_distance)]]
 		SKILL_NUTMEG:
+			if ReactionDonkey.find_ready(self) != null:
+				return ["Twisted Path", "Reação Química (Donkey) com o Isagi: chute rasteiro %.1fx que atravessa todos os jogadores (+%.1fx de impulso por jogador). %d%% de chance de gol." % [twisted_force_mult, nutmeg_boost, _pct(twisted_chance)]]
 			return ["Nutmeg", "Chute rasteiro %.1fx que atravessa todos os jogadores (+%.1fx de impulso por jogador). %d%% de chance de gol." % [nutmeg_force_mult, nutmeg_boost, _pct(nutmeg_chance)]]
 		SKILL_EYE:
 			var tyrant: bool = _find_tyrant_ally() != null

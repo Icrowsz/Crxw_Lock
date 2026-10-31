@@ -8,7 +8,7 @@
 [node name="Player" unique_id=1241627939 instance=ExtResource("1_eajul")]
 script = ExtResource("2_ksyc4")
 moon_range = 400.0
-moon_first_run_mult = 0.5
+moon_first_run_mult = 1.0
 moon_ally_speed_mult = 1.4
 moon_shot_bonus = 0.0
 moon_cooldown = 2
@@ -28,11 +28,11 @@ bite_distance_mult = 1.15
 bite_buff_speed = 0.08
 bite_cooldown = 2
 underwater_pick_range = 350.0
-underwater_stop_range = 100.0
+underwater_stop_range = 200.0
 underwater_speed = 460.0
 underwater_max_time = 1.6
 underwater_rounds = 3
-underwater_link_range = 350.0
+underwater_link_range = 600.0
 underwater_speed_bonus = 0.12
 underwater_shot_bonus = 0.07
 skill_icons = {}

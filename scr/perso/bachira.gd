@@ -119,6 +119,8 @@ enum StepVariant { NONE, STEP, FREEDOM }
 
 ## O último Bon, para a reação World (veja reaction_world.gd): {"world": Otoya, "round": rodada, "touches": toques na bola}
 var last_bon: Dictionary = {}
+## O último Step Overs ORIGINAL, para a reação Copy-Bee (veja reaction_copy_bee.gd e o Reo): {"round": rodada, "touches": toques na bola logo depois}
+var last_step_overs: Dictionary = {}
 
 var _instinct_on: bool = false
 var _instinct_touches: int = 0          # qualquer toque na bola depois disto acaba com o Instinct
@@ -137,16 +139,17 @@ func _init() -> void:
 	character_id = "bachira"   # o menu de formação usa isto para saber quem é quem
 	display_name = "Bachira"
 
+
 func _ready() -> void:
 	super()
-	# APAGUE A LINHA DA VESPA AQUI
 	if kick_fx == null:
 		kick_fx = _make_kick_fx()
-	add_to_group("control_sources")
+	add_to_group("control_sources")   # o Step Overs e o Instinct mexem nas ações dos inimigos
 	if particles_fx:
 		_aura = BachiraFX.make_aura()
 		add_child(_aura)
 	_hook_manager.call_deferred()
+
 
 ## Amarelo vivo; as partículas são "estrelinhas" quadradas que giram e sobem
 func _make_kick_fx() -> KickFX:
@@ -415,8 +418,19 @@ func _use_step_overs() -> bool:
 	if particles_fx:
 		BachiraFX.flame_line(self, started, global_position, 16)
 	ball.release_hover()
+	last_step_overs = {"round": m.round_number, "touches": ball.interaction_count}   # a Copy-Bee lê isto
 	queue_redraw()
 	return true
+
+
+## A vespa amarela que fica flutuando ao lado do Bachira durante a Reação Copy-Bee (ligada e desligada
+## pelo Reo; veja reaction_copy_bee.gd). Fora da reação ela não existe.
+func show_copy_bee_wasp(on: bool) -> void:
+	if on and (_wasp == null or not is_instance_valid(_wasp)):
+		_wasp = CopyBeeFX.attach_wasp(self)
+	elif not on and _wasp != null and is_instance_valid(_wasp):
+		_wasp.queue_free()
+		_wasp = null
 
 
 ## Anda "distance" px na direção "dir" levando a bola. O 1º inimigo (de pé, no chão e ainda não
@@ -848,6 +862,8 @@ func reset_for_new_match() -> void:
 	_stunned.clear()
 	_team_skill_pending = 0
 	last_bon = {}
+	last_step_overs = {}
+	show_copy_bee_wasp(false)
 	if _base_speed > 0.0:
 		move_speed = _base_speed
 	queue_redraw()

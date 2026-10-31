@@ -39,8 +39,8 @@ enum BiteVariant { NONE, BITE, UNDERWATER }
 
 @export_group("Moon / Satellite")
 @export var moon_range: float = 400.0
-@export_range(0.1, 1.0) var moon_first_run_mult: float = 0.5   # duração reduzida do Correr do Kurona
-@export var moon_ally_speed_mult: float = 1.1                  # velocidade aumentada do Correr do aliado
+@export_range(0.1, 1.0) var moon_first_run_mult: float = 0.7   # duração reduzida do Correr do Kurona
+@export var moon_ally_speed_mult: float = 1                # velocidade aumentada do Correr do aliado
 @export_range(0.0, 1.0) var moon_shot_bonus: float = 0.0       # chance base do Moon (o documento não dá o número)
 @export var moon_cooldown: int = 2
 @export var satellite_reach: float = 180.0                     # até onde ele salta para pegar a bola suspensa
@@ -63,11 +63,11 @@ enum BiteVariant { NONE, BITE, UNDERWATER }
 @export_range(0.0, 1.0) var bite_buff_speed: float = 0.08      # buff do próximo Moon
 @export var bite_cooldown: int = 2
 @export var underwater_pick_range: float = 350.0
-@export var underwater_stop_range: float = 100.0               # chegando aqui, a conexão começa
+@export var underwater_stop_range: float = 200.0               # chegando aqui, a conexão começa
 @export var underwater_speed: float = 460.0
 @export var underwater_max_time: float = 1.6
 @export var underwater_rounds: int = 3
-@export var underwater_link_range: float = 350.0               # passou disso, a conexão acaba
+@export var underwater_link_range: float = 600.0               # passou disso, a conexão acaba
 @export_range(0.0, 1.0) var underwater_speed_bonus: float = 0.12   # extra no Moon (o documento não dá o número)
 @export_range(0.0, 1.0) var underwater_shot_bonus: float = 0.07
 
@@ -294,6 +294,7 @@ func _moon_sequence(m: MatchManager, ally: Player) -> bool:
 		return true
 	if shot_bonus > 0.0:
 		ally.next_shot_bonus = maxf(ally.next_shot_bonus, shot_bonus)
+	_mark_orbital_pass(m, ally)   # a bola chegou ao aliado no fim do Moon
 	return true
 
 
@@ -310,7 +311,15 @@ func _satellite_pass(m: MatchManager, ally: Player) -> bool:
 	if chosen == null:
 		chosen = ally
 	_set_satellite(chosen)
+	_mark_orbital_pass(m, ally)   # o passe do Satellite chegou ao aliado
 	return true
+
+
+## Reação Orbital Resonance (Kurona + Isagi): se o Underwater está sobre o aliado que recebeu a bola e ele é o
+## Isagi, grava o passe nele (reaction_orbital.gd lê isto)
+func _mark_orbital_pass(m: MatchManager, ally: Player) -> void:
+	if ally != null and is_instance_valid(ally) and ally.character_id == "isagi" and _uw_active and ally == _uw_partner:
+		ally.set_meta("orbital_pass", {"kurona": self, "round": m.round_number})
 
 
 func _leap_to_ball(ball: Ball) -> void:

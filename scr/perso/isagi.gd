@@ -22,6 +22,15 @@ extends Player
 ## Reação Química ONE MORE TIME (com o Hiori, reaction_one_more_time.gd): com a Metavision dele e a Coldest Metavision
 ## do Hiori ativas, e o Ultrasadist como dono da bola, o Direct Shot vira o Go Beyond (muito mais forte, 85%).
 ##
+## Reação Química ORBITAL RESONANCE (com o Kurona, reaction_orbital.gd + orbital_fx.gd): com o Underwater do Kurona sobre
+## ele e o passe do Moon/Satellite do Kurona, o Backheel Shot vira o DOMINATION: sai para onde ele mira (não é calcanhar),
+## SOBE durante a trajetória, 1.8x a força do Chutar e 80% de chance. É acompanhado pela silhueta de um tubarão e por
+## quebra-cabeças azuis; se entrar no gol, explode em água rosa e quebra-cabeças.
+## A reação é registrada sozinha no ReactionManager (_register_orbital) se ainda não estiver na lista dele.
+##
+## Reação Química DONKEY (com o Barou, reaction_donkey.gd + donkey_fx.gd): o Isagi só PREPARA (usa o Territory); quem chuta
+## é o Barou. Aqui o Territory só grava que aquela Metavision começou como Territory (meta "donkey_territory").
+##
 ## Cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz -> renomeie o nó raiz para "Isagi".
 ## A peça de quebra-cabeça é a classe interna Piece (no fim do arquivo): o piece_zone.gd não é mais necessário.
 ##
@@ -52,6 +61,12 @@ enum PieceSkill { NONE, MAIN, OWN_GOAL, FOOTWORK, SEE_IT }
 @export_range(0.0, 1.0) var chance_go_beyond: float = 0.85   # valor final de chance
 @export var go_beyond_force_mult: float = 2.2
 @export var go_beyond_fx: KickFX                             # vazio = estilo padrão (_make_fx)
+
+@export_group("Domination (reação Orbital Resonance)")
+@export_range(0.0, 1.0) var chance_domination: float = 0.80   # valor final de chance
+@export var domination_force_mult: float = 1.8                # múltiplos da força do Chutar
+@export var domination_peak_level: Heights.Level = Heights.Level.SUSPENDED   # até onde a bola sobe durante a trajetória
+@export var domination_fx: KickFX                             # vazio = estilo do OrbitalFX (azul com respingos rosa)
 
 @export_group("Pieces")
 @export var piece_size: Vector2 = Vector2(500.0, 650.0)
@@ -130,6 +145,9 @@ func _ready() -> void:
 		kick_fx = _make_fx()
 	if go_beyond_fx == null:
 		go_beyond_fx = _make_fx(true)
+	if domination_fx == null:
+		domination_fx = OrbitalFX.kick_fx()
+	_register_orbital.call_deferred()
 	_base_run = run_duration
 	_base_slide = slide_distance
 	_build_pieces.call_deferred()   # o Field e o MatchManager entram na árvore no mesmo frame
@@ -303,18 +321,27 @@ func _shot_skill_name() -> String:
 			return "Go Beyond" if _find_reaction() != null else "Direct Shot"   # Reação Química disponível
 		ShotVariant.TWO_GUN:
 			return "Two Gun Volley"
+		ShotVariant.BACKHEEL:
+			return "Domination" if _find_reaction(ShotVariant.BACKHEEL) != null else "Backheel Shot"   # Reação Química disponível
 	return "Backheel Shot"
 
 
-## Reação Química que o Isagi pode usar agora (One More Time). null = nenhuma.
-func _find_reaction() -> ChemicalReaction:
+## Reação Química que o Isagi pode usar agora no chute da variante pedida: One More Time (Direct Shot) ou
+## Orbital Resonance (Backheel Shot). null = nenhuma.
+func _find_reaction(variant: ShotVariant = ShotVariant.DIRECT) -> ChemicalReaction:
 	var rm: ReactionManager = ReactionManager.get_for(self)
-	return rm.find_available(self) if rm != null else null
+	if rm == null:
+		return null
+	var reaction: ChemicalReaction = rm.find_available(self)
+	if reaction == null:
+		return null
+	var is_orbital: bool = reaction.id == &"orbital"
+	return reaction if is_orbital == (variant == ShotVariant.BACKHEEL) else null
 
 
 ## A partida congela, roda a cutscene e SÓ DEPOIS DO DIÁLOGO o chute acontece. null = sem reação.
-func _play_reaction() -> ChemicalReaction:
-	var reaction: ChemicalReaction = _find_reaction()
+func _play_reaction(variant: ShotVariant = ShotVariant.DIRECT) -> ChemicalReaction:
+	var reaction: ChemicalReaction = _find_reaction(variant)
 	var rm: ReactionManager = ReactionManager.get_for(self)
 	var partner: Player = reaction.find_partner(self) if reaction != null else null
 	if reaction == null or partner == null or rm == null:
@@ -323,13 +350,28 @@ func _play_reaction() -> ChemicalReaction:
 	return reaction
 
 
+## Põe a Orbital Resonance na lista do ReactionManager, se ele ainda não a tem (tenta por alguns quadros: o
+## manager pode entrar na árvore depois do Isagi)
+func _register_orbital() -> void:
+	for _try in 20:
+		var rm: ReactionManager = ReactionManager.get_for(self)
+		if rm != null:
+			for r: ChemicalReaction in rm.reactions:
+				if r.id == &"orbital":
+					return
+			rm.reactions.append(ReactionOrbital.new())
+			return
+		await get_tree().process_frame
+
+
 func _use_shot_skill() -> bool:
 	var m: MatchManager = _get_manager()
 	if m == null or get_shot_variant() == ShotVariant.NONE:
 		return false
 
 	# Mira. No Backheel a seta laranja é para onde ele "olha"; a bola vai para o lado oposto.
-	_aiming_backheel = get_shot_variant() == ShotVariant.BACKHEEL
+	# (O Domination, da reação Orbital Resonance, sai para onde ele mira: não é calcanhar.)
+	_aiming_backheel = get_shot_variant() == ShotVariant.BACKHEEL and _find_reaction(ShotVariant.BACKHEEL) == null
 	queue_redraw()
 	var aim: Vector2 = await m.aim_for_skill(self, kick_aim_range)
 	_aiming_backheel = false
@@ -340,8 +382,8 @@ func _use_shot_skill() -> bool:
 		return false   # cancelou: não gasta a ação
 
 	var reaction: ChemicalReaction = null
-	if variant == ShotVariant.DIRECT:
-		reaction = await _play_reaction()
+	if variant == ShotVariant.DIRECT or variant == ShotVariant.BACKHEEL:
+		reaction = await _play_reaction(variant)
 		if m.match_over:
 			return false
 
@@ -355,6 +397,13 @@ func _use_shot_skill() -> bool:
 	match variant:
 		ShotVariant.BACKHEEL:
 			dir = -aim
+			if reaction != null:   # Domination: sai para onde ele mira, sobe na trajetória, 1.8x e 80%
+				dir = aim
+				chance = chance_domination
+				force = domination_force_mult
+				fx = domination_fx
+				anim = &"domination" if _has_art and animated_sprite.sprite_frames.has_animation(&"domination") else &"direct_shot"
+				on_kick = _launch_domination
 		ShotVariant.DIRECT:
 			kind = get_kick_type(ball)   # a força é a do Chutar dessa situação
 			chance = chance_direct
@@ -381,10 +430,20 @@ func _use_shot_skill() -> bool:
 	if reaction == null:
 		chance = minf(chance + _shot_bonus(), 1.0)   # os 85% do Go Beyond são o valor final
 	# Backheel: a bola ignora a colisão do próprio Isagi. Errou o QTE = chute fraquinho, sem aura.
-	await kick_ball(ball, dir, kind, qte_ok, chance, variant == ShotVariant.BACKHEEL,
+	await kick_ball(ball, dir, kind, qte_ok, chance, variant == ShotVariant.BACKHEEL and reaction == null,
 		fx if qte_ok else null, anim, on_kick)
 	start_cooldown(CD_SHOT, shot_cooldown)
 	return true
+
+
+## Domination: chamado pelo kick_ball() logo depois que a bola sai. A bola SOBE durante a trajetória; o tubarão azul
+## e os quebra-cabeças a acompanham (e explodem em água rosa se entrar no gol), com as peças do próprio Isagi.
+func _launch_domination(ball: Ball, dir: Vector2, _speed: float) -> void:
+	var rise: float = maxf(0.0, Heights.to_height(domination_peak_level) - ball.height)
+	ball.vel_z = Heights.lift_for_peak(rise, ball.gravity)
+	OrbitalFX.kick_burst(self, ball.sprite.global_position, dir)
+	OrbitalFX.dominate(self, ball)
+	_launch_shot_fx(ball, Vector2.ZERO, 0.0, true)
 
 
 ## Go Beyond: chamado pelo kick_ball() logo depois que a bola sai. Peças de gelo, clarão, tremida e vidro quebrando.
@@ -664,6 +723,11 @@ func _use_metavision() -> bool:
 	_metavision_until_round = m.round_number + metavision_rounds
 	_meta_bonus = territory_bonus if territory else metavision_bonus
 	_meta_shots_left = metavision_shots
+	if territory:   # Donkey: guarda que ESTA Metavision começou como Territory (vale até o fim dela)
+		set_meta(ReactionDonkey.META_TERRITORY, {"until": _metavision_until_round})
+		DonkeyFX.on_territory(self)   # peças brilhantes (só aparecem com o Predator Eye do Barou ativo)
+	elif has_meta(ReactionDonkey.META_TERRITORY):
+		remove_meta(ReactionDonkey.META_TERRITORY)
 	start_cooldown(CD_METAVISION, metavision_cooldown, _metavision_until_round + 1)
 	if role == Role.PROTAGONIST:
 		m.secondary_skill_left += metavision_extra_ally_skills
@@ -724,7 +788,8 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 			var chances: Array[float] = [chance_backheel, chance_direct, chance_two_gun]
 			match get_shot_variant():
 				ShotVariant.BACKHEEL:
-					text = "Calcanhar: a bola vai para o lado contrário da mira. %d%% de chance de gol." % _pct(chance_backheel)
+					text = "Reação Química Orbital Resonance: o Domination sai para onde você mira e sobe na trajetória, %.1fx a força do Chutar. %d%% de chance de gol." % [domination_force_mult, _pct(chance_domination)] \
+						if _find_reaction(ShotVariant.BACKHEEL) != null else "Calcanhar: a bola vai para o lado contrário da mira. %d%% de chance de gol." % _pct(chance_backheel)
 				ShotVariant.DIRECT:
 					var reaction: ChemicalReaction = _find_reaction()
 					text = "Reação Química One More Time: voleio muito mais forte com vidro quebrando. %d%% de chance de gol." % _pct(chance_go_beyond) \
@@ -814,6 +879,8 @@ func _keep_ball(ball: Ball) -> void:
 func reset_for_new_match() -> void:
 	super()
 	_metavision_until_round = -1
+	if has_meta(ReactionDonkey.META_TERRITORY):
+		remove_meta(ReactionDonkey.META_TERRITORY)
 	_meta_shots_left = 0
 	_aiming_backheel = false
 	_pieces_until_round = -1
