@@ -46,13 +46,18 @@ func _ready() -> void:
 
 func _register_reactions() -> void:
 	register(ReactionCarnival.new())
-	register(ReactionMiracle.new())
-	register(ReactionHerbivicus.new())
-	register(ReactionOneMoreTime.new())
-	register(ReactionFeeding.new())
+	register(ReactionCopyBee.new()) 
 	register(ReactionCruel.new())
-	register(ReactionSuperstar.new())
+	register(ReactionFeeding.new())
+	register(ReactionHerbivicus.new())
+	register(ReactionMiracle.new())
+	register(ReactionOneMoreTime.new())
 	register(ReactionSacrifice.new())
+	register(ReactionSelfish.new())
+	register(ReactionSuperstar.new())
+	register(ReactionWeirdos.new())
+	register(ReactionWorld.new())
+
 
 
 func register(reaction: ChemicalReaction) -> void:

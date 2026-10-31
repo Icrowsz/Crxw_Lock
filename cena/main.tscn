@@ -6,12 +6,6 @@
 [ext_resource type="PackedScene" uid="uid://cibqlwhi4brii" path="res://cena/player.tscn" id="3_y3eto"]
 [ext_resource type="PackedScene" uid="uid://bcstqrdud6opd" path="res://cena/bola.tscn" id="4_mk8v6"]
 [ext_resource type="Script" uid="uid://ma4vcvpvpn8j" path="res://scr/ui e visual/game_camera.gd" id="5_4fnda"]
-[ext_resource type="PackedScene" uid="uid://x7lsnfodu4m3" path="res://cena/perso/otoya.tscn" id="8_c0jyn"]
-[ext_resource type="PackedScene" uid="uid://be12oigucca6e" path="res://cena/perso/bachira.tscn" id="9_v6806"]
-[ext_resource type="PackedScene" uid="uid://hr4ot6futjpl" path="res://cena/perso/agi.tscn" id="10_v6806"]
-[ext_resource type="PackedScene" uid="uid://81cbxrf3nqq0" path="res://cena/perso/aiku.tscn" id="11_g6h8e"]
-[ext_resource type="PackedScene" uid="uid://bnmkpy57drk7n" path="res://cena/perso/sae.tscn" id="12_cdybr"]
-[ext_resource type="PackedScene" uid="uid://nudb1fidas5y" path="res://cena/perso/charles.tscn" id="12_g6h8e"]
 
 [sub_resource type="RectangleShape2D" id="RectangleShape2D_g6c8f"]
 size = Vector2(144, 1344)
@@ -52,10 +46,9 @@ goal_replay = false
 
 [node name="MatchManager" type="Node2D" parent="." unique_id=1461380594]
 script = ExtResource("1_3tt73")
-use_formation_setup = false
 
 [node name="Bola" parent="." unique_id=235203312 instance=ExtResource("4_mk8v6")]
-position = Vector2(488, -192)
+position = Vector2(0, -3)
 trail_length = 300
 trail_team_color = false
 
@@ -111,32 +104,3 @@ position = Vector2(-1696, -32)
 [node name="Player10" parent="." unique_id=393406249 instance=ExtResource("3_y3eto")]
 position = Vector2(1664, -168)
 team = 1
-
-[node name="Player17" parent="." unique_id=1172053932 instance=ExtResource("12_g6h8e")]
-visible = false
-position = Vector2(152, 80)
-weirdos_demon_size = 250.0
-
-[node name="Player" parent="." unique_id=45568706 instance=ExtResource("8_c0jyn")]
-position = Vector2(216, 240)
-chance_gotcha = 0.75
-gotcha_force_mult = 2.1
-gotcha_fx = null
-
-[node name="Player13" parent="." unique_id=1205208749 instance=ExtResource("9_v6806")]
-position = Vector2(136, -64)
-world_monster_scale = 1.9
-world_monster_seconds = 1.9
-
-[node name="Player14" parent="." unique_id=423787860 instance=ExtResource("10_v6806")]
-position = Vector2(288, -64)
-team = 1
-
-[node name="Player15" parent="." unique_id=1002025963 instance=ExtResource("11_g6h8e")]
-position = Vector2(672, 128)
-chance_striker = 0.75
-striker_force_mult = 2.0
-striker_fx = null
-
-[node name="Player16" parent="." unique_id=1341691036 instance=ExtResource("12_cdybr")]
-position = Vector2(464, -232)

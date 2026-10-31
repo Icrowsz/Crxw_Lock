@@ -81,7 +81,7 @@ enum StepVariant { NONE, STEP, FREEDOM }
 @export var freedom_range: float = 110.0          # distância máxima até a bola Suspensa
 @export var freedom_jump_time: float = 0.22
 @export var freedom_run_time: float = 1.1         # duração do Correr do Freedom
-@export var freedom_speed_mult: float = 1.35      # fica mais veloz nesse Correr
+@export var freedom_speed_mult: float = 1.1      # fica mais veloz nesse Correr
 @export var freedom_toss_distance: float = 260.0  # até onde o toque manda a bola (na direção escolhida)
 @export var freedom_toss_time: float = 0.7        # tempo da bola no ar (sobe e desce)
 
@@ -131,23 +131,22 @@ var _stunned: Dictionary = {}           # inimigo -> turnos do time dele que ain
 var _ball_lift: float = 0.0             # altura da bola durante o Step Overs (o chapéu)
 var _aura: CPUParticles2D
 var _monster: BachiraFX.Monster
-
+var _wasp: Node2D
 
 func _init() -> void:
 	character_id = "bachira"   # o menu de formação usa isto para saber quem é quem
 	display_name = "Bachira"
 
-
 func _ready() -> void:
 	super()
+	# APAGUE A LINHA DA VESPA AQUI
 	if kick_fx == null:
 		kick_fx = _make_kick_fx()
-	add_to_group("control_sources")   # o Step Overs e o Instinct mexem nas ações dos inimigos
+	add_to_group("control_sources")
 	if particles_fx:
 		_aura = BachiraFX.make_aura()
 		add_child(_aura)
 	_hook_manager.call_deferred()
-
 
 ## Amarelo vivo; as partículas são "estrelinhas" quadradas que giram e sobem
 func _make_kick_fx() -> KickFX:
