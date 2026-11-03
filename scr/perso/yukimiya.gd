@@ -33,7 +33,7 @@ enum Preview { NONE, SHOT }
 @export var dribble_cooldown: int = 2
 @export var drag_distance: float = 150.0
 @export var razor_distance: float = 300.0
-@export var lane_distance: float = 200.0
+@export var lane_distance: float = 250.0
 
 @export_group("Predator")
 @export var predator_rounds: int = 3

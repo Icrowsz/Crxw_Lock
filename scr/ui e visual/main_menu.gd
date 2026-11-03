@@ -18,9 +18,9 @@ extends Control
 @export var game_title_left: String = "CRXW"
 @export var game_title_right: String = "LOCK"
 @export var subtitle: String = "Futebol de habilidades, turno a turno"
-@export var floating_faces: int = 14
+@export var floating_faces: int = 35
 @export var signature: String = "Icrowsz"
-@export var signature_size: int = 28
+@export var signature_size: int = 46
 @export var fade_time: float = 0.35
 
 var _buttons: Array[Button] = []
