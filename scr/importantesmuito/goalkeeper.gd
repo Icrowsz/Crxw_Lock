@@ -34,6 +34,9 @@ extends Node2D
 ##      - CHUTE NO MEIO, na mão do goleiro: -5%
 ##      - ÂNGULO FECHADO (ele saiu da linha): -3%
 ##    O aviso do chute lista os que valeram (ex: "ponta contrária +6%, no ângulo +4%").
+## 6) ESPALMADA: quando o goleiro vence a disputa e ela foi PARELHA (a chance de marcar e a de defender diferem menos que
+##    punch_margin, 10 pontos), há 90% de chance (punch_chance) de ele ESPALMAR a bola para um lado (esquerda ou direita,
+##    sorteado) em vez de agarrar. A bola fica livre em campo; a defesa conta nas estatísticas.
 ##
 ## GOLEIROS ESPECIAIS (passivas)
 ## Cada time pode ter um estilo de goleiro. Os especiais estendem este script (veja bl_man.gd e
@@ -103,6 +106,14 @@ var display_name: String = ""
 @export var point_blank_distance: float = 150.0 # distância da bola até a linha de fundo
 @export var narrowed_angle_penalty: float = 0.03 # ele saiu da linha e fechou o ângulo: tira da chance
 
+@export_group("Espalmada (disputa parelha)")
+@export var punch_enabled: bool = true
+@export_range(0.0, 1.0) var punch_margin: float = 0.10   # diferença máxima entre a chance de marcar e a de defender
+@export_range(0.0, 1.0) var punch_chance: float = 0.90   # chance de espalmar (em vez de agarrar) numa disputa parelha
+@export var punch_speed: float = 520.0                  # velocidade da bola espalmada (px/s)
+@export var punch_lift: float = 140.0                   # o quanto a bola sobe ao ser espalmada
+@export_range(0.0, 1.5) var punch_outward: float = 0.55 # quanto ela sai para a frente (longe do gol), além do lado
+
 @export_group("Área de atuação")
 ## Quanto a área em que ele salta na bola cresce em direção ao meio do campo (px)
 @export var area_extra_depth: float = 0.0
@@ -159,6 +170,7 @@ var _waiting_for_player: bool = false
 var _turns_left: int = 0
 var _interaction_mark: int = 0
 var _catch_forced: bool = false
+var _punch_pending: bool = false    # esta defesa vai ser uma espalmada (a bola é desviada, não segurada)
 var _dive_time: float = 0.0
 var _token: int = 0                 # muda ao cancelar: corrotinas antigas se encerram
 var _move_tween: Tween
@@ -427,15 +439,18 @@ func _try_shot_contest() -> bool:
 		situational += float(mod["value"])
 	var chance: float = clampf(modify_shot_chance(clampf(situational, 0.0, 1.0), ball), 0.0, 1.0)
 	var beaten: bool = randf() < chance
+	# Disputa parelha (chance de marcar e de defender com menos de punch_margin de diferença): espalma em vez de agarrar
+	var punch: bool = punch_enabled and not beaten and absf(chance - (1.0 - chance)) < punch_margin and randf() < punch_chance
 	on_shot_resolved(beaten)
 	if manager:
 		manager.record_shot_on_target(ball.shot_team)   # estatística da tela final
-	_announce_contest(base_chance, chance, beaten)
+	_announce_contest(base_chance, chance, beaten, punch)
 
 	if beaten:
 		_dive_and_miss()
 	else:
 		_start_catch(true)
+		_punch_pending = punch   # ele salta na bola do mesmo jeito; ao alcançá-la, espalma
 	return true
 
 
@@ -525,11 +540,16 @@ func _start_catch(forced: bool) -> void:
 	state = State.DIVING
 	Sfx.play(&"keeper_dive")
 	_catch_forced = forced
+	_punch_pending = false
 	_dive_time = 0.0
 
 
 func _catch_ball() -> void:
 	global_position = ball.global_position
+	if _punch_pending:
+		_punch_pending = false
+		_punch_ball()
+		return
 	ball.clear_touches()  # a posse recomeça do zero: próximo toque é de quem receber
 	ball.hold(self)
 	state = State.HOLDING
@@ -539,6 +559,21 @@ func _catch_ball() -> void:
 	_play_jump()
 	if not _catch_forced:
 		_say("%s saltou na bola!" % _keeper_label())
+
+
+## Espalmada: em vez de segurar, o goleiro desvia a bola para a esquerda ou para a direita dele (sorteado), um pouco
+## para a frente (longe do gol). A bola fica livre em campo e o goleiro volta para a posição.
+func _punch_ball() -> void:
+	var side: float = 1.0 if randf() < 0.5 else -1.0   # lado do campo (esquerda/direita do goleiro)
+	var out_local := Vector2(-float(_dir()) * punch_outward, side).normalized()
+	var out_dir: Vector2 = (field.to_global(out_local) - field.to_global(Vector2.ZERO)).normalized()
+	ball.kick(out_dir, punch_speed, punch_lift, null, Ball.NO_SHOT)   # sem dono: não é chute nem passe de ninguém
+	state = State.IDLE
+	if manager:   # conta como defesa nas estatísticas (sem contar como bola agarrada)
+		var stat: Dictionary = manager.team_stat(team)
+		stat["saves"] += 1
+		stat["keeper"] = _keeper_label()
+	_play_jump()
 
 
 func _ball_passed_line() -> bool:
@@ -778,12 +813,14 @@ func _keeper_label() -> String:
 
 ## Aviso do chute contra o goleiro: só a chance de marcar contra a defesa dele (já com tudo somado e
 ## subtraído), sem mostrar os ajustes um a um
-func _announce_contest(_base_chance: float, chance: float, beaten: bool) -> void:
+func _announce_contest(_base_chance: float, chance: float, beaten: bool, punched: bool = false) -> void:
 	var scoring: int = int(round(chance * 100.0))
 	var versus: String = "Chance de marcar %d%% x Defesa do goleiro %d%%" % [scoring, 100 - scoring]
 	if beaten:
 		var shooter: int = ball.shot_team if ball.shot_team >= 0 else team
 		_say("O chute passou pelo goleiro! %s" % versus, shooter)
+	elif punched:
+		_say("DEFENDEU! %s espalmou o chute para o lado. %s" % [_keeper_label(), versus])
 	else:
 		_say("DEFENDEU! %s pegou o chute. %s" % [_keeper_label(), versus])
 

@@ -22,6 +22,9 @@ extends Player
 ##
 ## Reação Química CRUEL (com o Charles, veja reaction_cruel.gd): Destroyer Mode ativo + Rabona Cross do Charles com a bola =
 ## o Crash Shot vira o Self Destruction (muito mais força, 93%, sombra gigante e espinhos).
+##
+## Reação Química MARIONETTE (com o Aryu, veja reaction_marionette.gd): o Puppets em cima do Aryu faz a bola chegar VOANDO e ela
+## fica no ar esperando o Elegant Header dele, que vira o Marionette Header (sem passe de volta e sem Curve Shot grátis).
 
 const SKILL_CURVE: StringName = &"curve_shot"
 const SKILL_GRAVITY: StringName = &"center_of_gravity"
@@ -56,6 +59,9 @@ const CURVE_ANIMS: Dictionary = {CurveVariant.CURVE: &"curve_shot", CurveVariant
 @export_range(0.0, 1.0) var chance_self_destruction: float = 0.93   # valor final de chance
 @export var self_destruction_force_mult: float = 3.0                # multiplica a força do Crash Shot
 @export var self_destruction_fx: KickFX                             # vazio = estilo padrão (_make_fx)
+
+@export_group("Marionette (reação com o Aryu)")
+@export var marionette_hand_scale: float = 2.0             # tamanho da mão de marionetista da reação (maior que a do Puppets normal)
 
 @export_group("Center of Gravity")
 @export var gravity_range: float = 90.0                    # alcance do confronto
@@ -152,7 +158,8 @@ func _hook_manager() -> void:
 		_refresh_aura())
 	m.turn_ended.connect(func(ended_team: int) -> void:
 		if ended_team == team:
-			_free_curve = false)   # o Curve Shot grátis só vale no turno em que foi ganho
+			_free_curve = false   # o Curve Shot grátis só vale no turno em que foi ganho
+			ReactionMarionette.expire(self))   # Marionette: a bola que ficou voando com o Aryu cai no fim do turno
 
 
 # ---------- DESTROYER MODE ----------
@@ -547,15 +554,23 @@ func _do_puppets() -> bool:
 	if target == null or not _ball_near(ball, puppets_ball_radius, Heights.Level.SUSPENDED):
 		return false   # cancelou: não gasta a ação
 	face_towards(target.global_position - global_position)
+	var marionette: bool = target is Aryu and ReactionMarionette.can_setup(self, target as Aryu)   # reação Marionette?
 	await play_action(&"puppets")
-	RinFX.puppeteer_hand(target, puppets_flight_time + 1.0)
+	if marionette:
+		MarionetteFX.begin_hand(target, marionette_hand_scale)   # mão grande, no lugar da mão normal
+	else:
+		RinFX.puppeteer_hand(target, puppets_flight_time + 1.0)
 	if not await m.run_qte(KickType.VOLLEY):
+		if marionette:
+			MarionetteFX.end_hand(target)
 		return true   # errou o QTE: o passe não saiu, mas gastou a ação
-	await _curved_pass(ball, target)
+	await _curved_pass(ball, target, Heights.to_height(Heights.Level.FLYING) if marionette else Heights.SUSPENDED_HEIGHT)
 	var dir: Vector2 = await m.aim_for_skill(self, dash_distance)   # o avanço do Rin (cancelar = não avança)
 	m._skill_pick_cancelled = false   # a ação já foi gasta: cancelar a mira não pode devolvê-la
 	if dir != Vector2.ZERO:
 		await _dash(dir, dash_distance)
+	if marionette and not m.match_over and ReactionMarionette.arm(self, target as Aryu, ball):
+		return true   # Marionette: a bola fica VOANDO com o Aryu esperando o cabeceio (sem passe de volta nem Curve Shot grátis)
 	if not m.match_over:
 		m.clear_pending_pass()
 		await m.run_ground_pass(target, self, ball)   # o aliado devolve para o Rin
@@ -563,8 +578,9 @@ func _do_puppets() -> bool:
 	return true
 
 
-## Passe em arco até o aliado; a curva desvia do inimigo mais perto da linha reta
-func _curved_pass(ball: Ball, target: Player) -> void:
+## Passe em arco até o aliado; a curva desvia do inimigo mais perto da linha reta.
+## end_height = altura em que a bola chega (Suspenso; a reação Marionette chega VOANDO)
+func _curved_pass(ball: Ball, target: Player, end_height: float = Heights.SUSPENDED_HEIGHT) -> void:
 	var a: Vector2 = ball.global_position
 	var b: Vector2 = target.global_position
 	var normal: Vector2 = (b - a).orthogonal().normalized()
@@ -580,7 +596,7 @@ func _curved_pass(ball: Ball, target: Player) -> void:
 	var step := func(t: float) -> void:
 		var u: float = 1.0 - t
 		ball.global_position = u * u * a + 2.0 * u * t * control + t * t * b
-		ball.height = lerpf(h, Heights.SUSPENDED_HEIGHT, t) + sin(t * PI) * PUPPETS_ARC
+		ball.height = lerpf(h, end_height, t) + sin(t * PI) * PUPPETS_ARC
 	var tw: Tween = create_tween()
 	tw.tween_method(step, 0.0, 1.0, puppets_flight_time).set_trans(Tween.TRANS_SINE).set_ease(Tween.EASE_IN_OUT)
 	await tw.finished
@@ -728,6 +744,8 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 					text = "Caneta no inimigo (QTE fácil): atordoa e avança %d com a bola; no 2º inimigo, faz o Center of Gravity." % int(dash_distance)
 				GravityVariant.PUPPETS:
 					text = "Passe curvo suspenso (QTE fácil). Se chegar, Rin avança, o aliado devolve e ele ganha um Curve Shot grátis."
+					if ReactionMarionette.ready_for_team(self, team):
+						text += "\nReação Marionette: se o aliado for o Aryu, a bola chega voando e ele usa o Marionette Header."
 				GravityVariant.MANGLE:
 					text = "Confronto físico (%d%% de vencer): derruba, atordoa e dá +1 ação geral. Perdendo, os dois se empurram." % int(round(chance_mangle * 100.0))
 				_:

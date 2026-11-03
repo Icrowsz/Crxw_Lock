@@ -36,6 +36,9 @@ extends Player
 ##        campo (a mais antiga quebra). Inimigo a menos de 100 de uma mina: ela explode, atordoa (sem habilidades e
 ##        sem ações gerais por UM turno: o do time dele) e aplica um efeito: Glissant (46%, derruba e puxa os inimigos por perto),
 ##        Surprise (46%, medo/confusão por 2 rodadas) ou C'est Mon Tour (8%, ele perde o turno para o time do Charles).
+##        Cada explosão afeta no máximo trap_max_victims inimigos (2: o que pisou + o mais próximo puxado pelo Glissant), e
+##        não dá para armar uma mina a menos de trap_place_clearance de um inimigo. O inimigo afetado ganha, além do diabinho,
+##        uma etiqueta com o TIPO da armadilha em que caiu (Glissant, Surprise ou C'est Mon Tour) até o fim do turno dele.
 ##      - Bola no chão/suspensa e próxima -> Wrong Answer: escolhe dois aliados (alcance 400); a bola vai para um dos
 ##        dois ao acaso e chega Suspensa. Se um inimigo estiver no caminho, 40% de chance da bola fazer uma curva estranha.
 ##
@@ -110,6 +113,8 @@ enum TrapEffect { GLISSANT, SURPRISE, MON_TOUR }
 @export var trap_count: int = 3
 @export var trap_max: int = 6
 @export var trap_trigger_radius: float = 100.0
+@export var trap_max_victims: int = 2                   # máximo de inimigos afetados por explosão
+@export var trap_place_clearance: float = 130.0         # não dá para armar uma mina a menos disso de um inimigo
 @export_range(0.0, 1.0) var glissant_weight: float = 0.46
 @export_range(0.0, 1.0) var surprise_weight: float = 0.46   # o resto (8%) é o C'est Mon Tour
 @export var glissant_slide: float = 150.0
@@ -806,6 +811,9 @@ func _use_playful_trap() -> bool:
 	var previews: Array[CharlesFX.Mine] = []
 	for i in count:
 		var spot: Vector2 = await m.pick_point_for_skill(self, trap_range)
+		while spot != Vector2.INF and _enemy_near(_clamp_to_pitch(spot), trap_place_clearance):
+			CharlesFX.speech(self, "Perto demais!")   # mina perto de inimigo não vale: escolhe de novo
+			spot = await m.pick_point_for_skill(self, trap_range)
 		if spot == Vector2.INF:
 			break   # cancelou: desiste de tudo
 		spot = _clamp_to_pitch(spot)
@@ -826,6 +834,14 @@ func _use_playful_trap() -> bool:
 		CharlesFX.flame(self, spot, 6)
 	start_cooldown(CD_TRAP, trap_cooldown)
 	return true
+
+
+## Tem inimigo de pé a menos de `radius` deste ponto?
+func _enemy_near(pos: Vector2, radius: float) -> bool:
+	for p: Player in get_tree().get_nodes_in_group("players"):
+		if p.team != team and not p.is_down and p.global_position.distance_to(pos) <= radius:
+			return true
+	return false
 
 
 func _add_trap(pos: Vector2, active: bool) -> void:
@@ -879,6 +895,7 @@ func _explode_trap(trap: Dictionary, enemy: Player) -> void:
 		effect = TrapEffect.GLISSANT
 	elif roll < glissant_weight + surprise_weight:
 		effect = TrapEffect.SURPRISE
+	CharlesFX.trap_tag(enemy, int(effect))   # etiqueta do TIPO da armadilha em que ele caiu
 	match effect:
 		TrapEffect.GLISSANT:
 			_glissant(enemy, pos)
@@ -910,11 +927,18 @@ func _glissant(enemy: Player, from: Vector2) -> void:
 	if away.length() < 1.0:
 		away = Vector2.from_angle(randf() * TAU)
 	var dest: Vector2 = _clamp_to_pitch(enemy.global_position + away.normalized() * glissant_slide)
-	var victims: Array[Player] = [enemy]
+	var others: Array[Player] = []
 	for p: Player in get_tree().get_nodes_in_group("players"):
 		if p != enemy and p.team != team and not p.is_down \
 				and p.global_position.distance_to(enemy.global_position) <= glissant_pull_radius:
-			victims.append(p)
+			others.append(p)
+	others.sort_custom(func(a: Player, b: Player) -> bool:
+		return a.global_position.distance_to(enemy.global_position) < b.global_position.distance_to(enemy.global_position))
+	var victims: Array[Player] = [enemy]   # o que pisou + os mais próximos, até trap_max_victims no total
+	for p in others:
+		if victims.size() >= maxi(trap_max_victims, 1):
+			break
+		victims.append(p)
 	var i: int = 0
 	for v in victims:
 		var spot: Vector2 = _clamp_to_pitch(dest + Vector2.from_angle(float(i) * 2.4) * (30.0 if i > 0 else 0.0))
@@ -922,6 +946,7 @@ func _glissant(enemy: Player, from: Vector2) -> void:
 		tw.tween_property(v, "global_position", spot, 0.5).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 		v.knock_down()
 		_mark_victim(v)   # quem foi puxado também fica marcado
+		CharlesFX.trap_tag(v, int(TrapEffect.GLISSANT))
 		i += 1
 
 
@@ -1105,6 +1130,7 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 				text = "Você escolhe onde ficam %d minas ocultas num raio de %d (QTE fácil em cada uma, +1 por PM). Só valem com o Charles por perto e só agem em inimigos: explodem, atordoam por um turno e aplicam Glissant (%d%%), Surprise (%d%%) ou C'est Mon Tour (%d%%). Máximo de %d em campo." % [
 					trap_count, int(trap_range), _pct(glissant_weight), _pct(surprise_weight),
 					100 - _pct(glissant_weight) - _pct(surprise_weight), trap_max]
+				text += "\nAfeta no máximo %d inimigos por explosão e não dá para armar a menos de %d de um inimigo." % [trap_max_victims, int(trap_place_clearance)]
 			text += "\nRecarga: %d rodadas." % trap_cooldown
 		SKILL_GENIUS:
 			title = "Mischievous Genius"

@@ -436,8 +436,25 @@ static func mark(target: Node2D, outline: Color = BLUE_DEEP) -> void:
 
 
 static func unmark(target: Node2D) -> void:
-	if target != null and is_instance_valid(target) and target.has_node("CharlesMark"):
+	if target == null or not is_instance_valid(target):
+		return
+	if target.has_node("CharlesMark"):
 		(target.get_node("CharlesMark") as DevilMark).fade_out()
+	if target.has_node("CharlesTrapTag"):   # a etiqueta do tipo da armadilha some junto com a marca
+		(target.get_node("CharlesTrapTag") as TrapTag).fade_out()
+
+
+## Etiqueta com o TIPO da armadilha em que o inimigo caiu, acima do diabinho (0 = Glissant, 1 = Surprise, 2 = C'est Mon Tour).
+## Fica até o unmark() (fim do turno do time dele). Uma etiqueta nova troca a antiga.
+static func trap_tag(target: Node2D, kind: int) -> void:
+	if target == null or not is_instance_valid(target) or not target.is_inside_tree():
+		return
+	if target.has_node("CharlesTrapTag"):
+		(target.get_node("CharlesTrapTag") as TrapTag).fade_out()
+	var t := TrapTag.new()
+	t.name = "CharlesTrapTag"
+	t.kind = kind
+	target.add_child(t)
 
 
 # ---------- NÓS ----------
@@ -476,6 +493,72 @@ class DevilMark extends Node2D:
 	func _draw() -> void:
 		draw_circle(Vector2.ZERO, 15.0, Color(CharlesFX.YELLOW, 0.18))   # brilho
 		CharlesFX.draw_devil(self, Vector2.ZERO, 10.0, true, outline)
+
+
+## Etiqueta do tipo da armadilha: pílula escura com borda colorida, um ícone e o nome (desenhada uma vez; o nó só flutua)
+class TrapTag extends Node2D:
+	const FONT_SIZE: int = 12
+	const LABELS: Array[String] = ["Glissant", "Surprise", "C'est Mon Tour"]
+	const COLORS: Array[Color] = [Color(0.1, 0.9, 1.0), Color(1.0, 0.85, 0.2), Color(1.0, 0.35, 0.45)]
+
+	var kind: int = 0
+	var _t: float = 0.0
+	var _closing: bool = false
+	var _font: Font
+
+	func _ready() -> void:
+		z_index = 3100
+		z_as_relative = false
+		_font = ThemeDB.fallback_font
+		kind = clampi(kind, 0, LABELS.size() - 1)
+		modulate.a = 0.0
+		scale = Vector2(0.5, 0.5)
+		var tw := create_tween()
+		tw.set_parallel(true)
+		tw.tween_property(self, "modulate:a", 1.0, 0.15)
+		tw.tween_property(self, "scale", Vector2.ONE, 0.25).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
+		queue_redraw()
+
+	func _process(delta: float) -> void:
+		_t += delta
+		var owner_height: float = (get_parent() as Player).height if get_parent() is Player else 0.0
+		position = Vector2(0.0, -owner_height - 114.0 + sin(_t * 3.0 + 1.0) * 2.5)   # logo acima do diabinho
+
+	func fade_out() -> void:
+		if _closing:
+			return
+		_closing = true
+		name = "CharlesTrapTagOld"   # libera o nome para uma etiqueta nova
+		var tw := create_tween()
+		tw.tween_property(self, "modulate:a", 0.0, 0.25)
+		tw.tween_callback(queue_free)
+
+	func _draw() -> void:
+		if _font == null:
+			return
+		var col: Color = COLORS[kind]
+		var label: String = LABELS[kind]
+		var w: float = _font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1.0, FONT_SIZE).x
+		var rect := Rect2(Vector2(-(w + 36.0) * 0.5, -11.0), Vector2(w + 36.0, 22.0))
+		var sb := StyleBoxFlat.new()
+		sb.bg_color = Color(0.06, 0.07, 0.12, 0.92)
+		sb.border_color = col
+		sb.set_border_width_all(2)
+		sb.set_corner_radius_all(11)
+		draw_style_box(sb, rect)
+		var ic := Vector2(rect.position.x + 13.0, 0.0)   # centro do ícone
+		match kind:
+			0:   # Glissant: gota de escorregão
+				draw_colored_polygon(PackedVector2Array([ic + Vector2(0.0, -6.5), ic + Vector2(4.0, 0.0), ic + Vector2(4.5, 3.0),
+					ic + Vector2(0.0, 6.5), ic + Vector2(-4.5, 3.0), ic + Vector2(-4.0, 0.0)]), col)
+				draw_line(ic + Vector2(-1.5, 0.0), ic + Vector2(-1.0, 3.5), Color(1, 1, 1, 0.8), 1.5)
+			1:   # Surprise: !?
+				draw_string(_font, ic + Vector2(-7.0, 5.0), "!?", HORIZONTAL_ALIGNMENT_LEFT, -1.0, 15, col)
+			_:   # C'est Mon Tour: relógio
+				draw_arc(ic, 6.0, 0.0, TAU, 16, col, 2.0)
+				draw_line(ic, ic + Vector2(0.0, -4.0), col, 1.8)
+				draw_line(ic, ic + Vector2(3.0, 1.5), col, 1.8)
+		draw_string(_font, Vector2(rect.position.x + 25.0, 4.5), label, HORIZONTAL_ALIGNMENT_LEFT, -1.0, FONT_SIZE, Color(1, 1, 1, 0.95))
 
 
 ## Onda de choque: anel que se abre e some (e, se flash, um clarão no começo)

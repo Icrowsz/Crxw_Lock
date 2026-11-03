@@ -19,6 +19,9 @@ extends Player
 ##      - Aryu perto da grande área que defende E suspenso/voando: ele vai até o gol (no ar) e fecha
 ##        uma parte com o corpo. Chutes do adversário perdem 12% de chance de gol.
 ##
+## Reação Química MARIONETTE (com o Rin, veja reaction_marionette.gd): se o Rin fez o Puppets em cima dele e a bola chegou VOANDO,
+## o Elegant Header vira o Marionette Header (1.7x a força, 80% de chance). O Aryu só confere e executa; quem prepara é o Rin.
+##
 ## Como montar a cena: Nova Cena Herdada de player.tscn -> anexe este script ao nó raiz
 ## -> renomeie o nó raiz para "Aryu".
 
@@ -48,6 +51,10 @@ enum GlamState { NONE, HOLDING, MIRROR }
 @export var block_dash_time: float = 0.25
 @export var block_push_distance: float = 120.0   # quanto o inimigo é empurrado
 @export var header_cooldown: int = 2             # recarga (rodadas), igual para as duas variantes
+
+@export_group("Marionette Header (reação Marionette)")
+@export var marionette_force_mult: float = 2.2   # multiplica a força do cabeceio (header_power)
+@export_range(0.0, 1.0) var marionette_chance: float = 0.80   # no lugar do header_chance (bônus/penalidades de chute valem por cima)
 
 @export_group("Glam!")
 @export var glam_range: float = 90.0             # "bola próxima"
@@ -102,6 +109,7 @@ func _ready() -> void:
 		kick_fx = _make_kick_fx()
 	_build_star_particles()
 	_hook_manager.call_deferred()
+	_register_marionette.call_deferred()
 
 
 ## Marrom, com estrelinhas brancas
@@ -126,6 +134,20 @@ func _make_kick_fx() -> KickFX:
 	fx.burst_amount = 12
 	fx.burst_speed = 200.0
 	return fx
+
+
+## Põe a Marionette na lista do ReactionManager, se ele ainda não a tem (tenta por alguns quadros: o manager pode
+## entrar na árvore depois do Aryu)
+func _register_marionette() -> void:
+	for _try in 20:
+		var rm: ReactionManager = ReactionManager.get_for(self)
+		if rm != null:
+			for r: ChemicalReaction in rm.reactions:
+				if r.id == &"marionette":
+					return
+			rm.reactions.append(ReactionMarionette.new())
+			return
+		await get_tree().process_frame
 
 
 func _hook_manager() -> void:
@@ -227,7 +249,10 @@ func get_header_variant() -> HeaderVariant:
 
 
 func _header_skill_name() -> String:
-	return "Vain Block" if get_header_variant() == HeaderVariant.BLOCK else "Elegant Header"
+	var variant: HeaderVariant = get_header_variant()
+	if variant == HeaderVariant.HEADER and ReactionMarionette.find_ready(self) != null:
+		return "Marionette Header"   # reação disponível: muda de nome
+	return "Vain Block" if variant == HeaderVariant.BLOCK else "Elegant Header"
 
 
 func _use_header_skill() -> bool:
@@ -252,6 +277,17 @@ func _do_elegant_header(m: MatchManager) -> bool:
 	if get_header_variant() != HeaderVariant.HEADER:
 		return false
 
+	# Reação Marionette (Rin): a partida congela, roda a cutscene e SÓ DEPOIS DO DIÁLOGO o cabeceio acontece
+	var reaction: ChemicalReaction = ReactionMarionette.find_ready(self)
+	var partner: Player = reaction.find_partner(self) if reaction != null else null
+	if partner != null:
+		await ReactionManager.get_for(self).play(reaction, self, partner)
+		ReactionMarionette.consume(self)   # o preparo do Rin foi usado (a mão grande fica até o fim do movimento)
+		# Depois do await: confere de novo se ainda dá para cabecear (partida reiniciada, bola mudou)
+		if m.match_over or not is_instance_valid(ball) or get_header_variant() != HeaderVariant.HEADER:
+			MarionetteFX.finish(self)
+			return false
+
 	# Vai até a bola, no nível dela, parando "atrás" dela (do lado oposto ao da mira)
 	var level: Heights.Level = ball.get_level()
 	var gap: float = body_radius + ball.collision_radius + 2.0
@@ -259,18 +295,23 @@ func _do_elegant_header(m: MatchManager) -> bool:
 	await _dash_to(ball.global_position - aim * gap, Heights.to_height(level), level, header_dash_time)
 
 	if not await play_action(&"elegant_header", ANIM_VOLLEY):
+		MarionetteFX.finish(self)
 		return false
 
 	# Tentativa de gol: mesma conta do kick_ball (bônus e penalidades de habilidades de outros jogadores)
-	var chance: float = clampf(header_chance + take_next_shot_bonus() + get_team_shot_bonus(ball) \
+	var chance: float = clampf((marionette_chance if partner != null else header_chance) + take_next_shot_bonus() + get_team_shot_bonus(ball) \
 		- get_shot_debuff() - get_opponent_shot_penalty(), 0.0, 1.0)
 	# A bola sai até o pico do nível escolhido
 	var rise: float = maxf(0.0, Heights.to_height(header_peak_level) - ball.height)
-	ball.kick(aim, header_power, Heights.lift_for_peak(rise, ball.gravity), self, chance)
-	ball.play_fx(kick_fx)
+	var power: float = header_power * (marionette_force_mult if partner != null else 1.0)
+	ball.kick(aim, power, Heights.lift_for_peak(rise, ball.gravity), self, chance)
+	ball.play_fx(MarionetteFX.kick_fx() if partner != null else kick_fx)
+	if partner != null:
+		MarionetteFX.header_kick(self, ball)   # estrelinhas do Aryu misturadas com fios do Rin
 	_star_burst()
 	start_cooldown(CD_HEADER, header_cooldown)
 	await get_tree().create_timer(0.15).timeout
+	MarionetteFX.finish(self)   # a mão grande do Rin some (só existe na reação)
 	return true
 
 
@@ -580,6 +621,10 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 				HeaderVariant.HEADER:
 					title = "Elegant Header"
 					text = header_text
+					if ReactionMarionette.find_ready(self) != null:
+						title = "Marionette Header"
+						text = "Reação Química (Marionette) com o Rin: cabeceio %.1fx mais forte, %d%% de chance de gol." % [
+							marionette_force_mult, int(round(marionette_chance * 100.0))]
 				HeaderVariant.BLOCK:
 					title = "Vain Block"
 					text = block_text
@@ -608,6 +653,7 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 
 func reset_for_new_match() -> void:
 	super()
+	MarionetteFX.finish(self)   # Marionette: apaga o preparo e a mão do Rin
 	_end_glam(true)
 	_glam_state = GlamState.NONE
 	_dodging = false
