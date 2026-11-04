@@ -5,8 +5,9 @@ extends ChemicalReaction
 ## Condições (todas ao mesmo tempo):
 ##  1. A Kiyora está sob o efeito do Empire do Kaiser, como Servo GARÇOM;
 ##  2. A Kiyora usou o Borderline ou o Even the Gods e a bola foi parar no Kaiser (ele era um dos
-##     dois aliados escolhidos E tinha menos gols, ou venceu o sorteio do empate). Ninguém tocou
-##     na bola depois do passe, e ela ainda está no ar (pairando) esperando por ele;
+##     dois aliados escolhidos E tinha menos gols, ou venceu o sorteio do empate). O passe é RASTEIRO:
+##     a bola rola e para perto dele (no Even the Gods, no ponto escolhido, se o Kaiser alcançar).
+##     Ninguém tocou na bola depois do passe;
 ##  3. É o turno do time deles e o Kaiser alcança a bola. O botão do chute dele vira "Be Loved".
 ##
 ## Efeito: cutscene + diálogo e o chute do Kaiser sai como Be Loved: um Magnus mais forte, com 85%
@@ -14,9 +15,9 @@ extends ChemicalReaction
 ## efeitos está no kaiser.gd (_use_shot_skill); a balança dourada está no kiyora.gd (_use_border);
 ## os desenhos estão no superstar_fx.gd. Aqui ficam só os dados e as condições.
 ##
-## OBS: o Borderline/Even the Gods sempre entregam a bola SUSPENSA, e o Magnus normal só existe
-## com a bola no chão. Por isso, com a Superstar de pé, o Be Loved vale com a bola em qualquer
-## altura que o Kaiser alcance (no chão, ele chuta a bola suspensa; suspenso, também).
+## OBS: o Borderline/Even the Gods agora entregam a bola RASTEIRA (no chão, parada), então o Magnus
+## normal já funciona. Mesmo assim o Be Loved continua valendo com a bola em qualquer altura que o
+## Kaiser alcance (o kaiser.gd não precisa de mudança de código).
 
 
 func _init() -> void:
@@ -54,9 +55,10 @@ func find_partner(trigger: Player) -> Player:
 	if m == null or ball == null or m.match_over or m.current_team != kaiser.team:
 		return null
 
-	# A bola precisa estar pairando (o passe alto ainda não caiu), já ter chegado ao Kaiser (não
-	# está mais Voando no meio do caminho) e ele precisa alcançá-la
-	if not ball.hovering or ball.is_held() or ball.get_level() == Heights.Level.FLYING:
+	# O passe da Kiyora agora é RASTEIRO: a bola chega rolando e fica parada no chão perto do Kaiser
+	# (não paira mais). Ela não pode estar na mão do goleiro, nem voando, nem ainda rolando, e o
+	# Kaiser precisa alcançá-la
+	if ball.is_held() or ball.get_level() == Heights.Level.FLYING or ball.velocity.length() > ball.stop_speed * 2.0:
 		return null
 	if kaiser.get_kick_type(ball) == Player.KickType.NONE:
 		return null

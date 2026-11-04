@@ -46,6 +46,7 @@ goal_replay = false
 
 [node name="MatchManager" type="Node2D" parent="." unique_id=1461380594]
 script = ExtResource("1_3tt73")
+use_formation_setup = false
 
 [node name="Bola" parent="." unique_id=235203312 instance=ExtResource("4_mk8v6")]
 trail_length = 300
