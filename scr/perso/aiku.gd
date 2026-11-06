@@ -62,11 +62,11 @@ enum SlipVariant { NONE, SLIP, VENOM, NICE }
 @export var slip_cooldown: int = 2
 
 @export_group("Burglar Radar")
-@export var radar_radius: float = 250.0
+@export var radar_radius: float = 150.0
 @export var radar_rounds: int = 2                  # duração da área (a rodada atual conta)
 @export var radar_cooldown: int = 2                # a partir do fim do efeito
 @export_range(0.0, 1.0) var radar_penalty: float = 0.07        # -7% nos chutes inimigos dentro da área
-@export_range(0.0, 1.0) var radar_catch_chance: float = 0.40   # bola suspensa entrando: chance de o Aiku ir até ela
+@export_range(0.0, 1.0) var radar_catch_chance: float = 0.60   # bola suspensa entrando: chance de o Aiku ir até ela
 @export var radar_deflect_mult: float = 0.4        # força do deflect automático
 @export var defense_split: float = 0.0             # "na defesa": 0 = a metade do campo do próprio gol (-0.33 = só o terço)
 @export var defense_range: float = 200.0           # Ultimate Defense: bola voando ao alcance

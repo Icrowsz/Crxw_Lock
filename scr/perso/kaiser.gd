@@ -2,25 +2,38 @@ class_name Kaiser
 extends Player
 ## Michael Kaiser. Herda tudo do Player (ações gerais) e adiciona as habilidades próprias:
 ##
-## 1. Magnus (ação de habilidade, 3 variantes automáticas pela altura; recarga de 2 rodadas,
-##      compartilhada entre as variantes):
-##      - Bola no chão + Kaiser no chão ou suspenso -> Magnus: chute curvo; a bola sobe
-##        suavemente até o nível Suspenso durante a trajetória
-##      - Kaiser suspenso + bola Voando             -> Beinschuss: bicicleta com QTE difícil
-##      - Kaiser suspenso + bola Suspensa           -> Kaiser Impact: chute reto e rápido, a
-##        bola vai Suspensa durante todo o trajeto
-## 2. Empire (ação de habilidade): marca aliados no alcance como servos, pela partida inteira.
-##      A 1ª escolha vira o Servo Garçom (flor dourada): chutes do Kaiser com passe/assistência
-##      dele ganham +% de chance. A 2ª vira o Servo Palhaço (flor azul-escura): libera o
-##      Auf die Knee. Cancelar a 2ª escolha marca só o Garçom. Cada GOL do Kaiser dá +1 uso.
-##    Auf die Knee (botão próprio, recarga de 3 rodadas): se a bola está perto de um Palhaço
-##      e o Kaiser está ao alcance do passe dele, o Palhaço passa rasteiro para o Kaiser.
-##      Gasta a ação de habilidade do Kaiser E uma ação geral do Palhaço (a pool dele).
-## 3. Blue Rose (2 botões, uma variante por vez; dura 3 rodadas contando a atual; recarga de
-##      2 rodadas a partir do fim do efeito; a mesma variante no máximo 2 vezes seguidas):
-##      - Predator: Chutar mais forte, Carrinho mais longo e +% em qualquer chute do Kaiser
-##      - Meta: +1 ação de habilidade para os Secundários nas próximas 2 rodadas, nenhum QTE
-##        para o Kaiser e mais segundos no Correr
+## 0. Vision (passiva, sem botão): o Kaiser troca sozinho entre Metavisão e Olhar do Predador.
+##      Time dele GANHANDO -> Metavisão: +0.4 s no Correr e +1 ação de habilidade a cada 2 rodadas.
+##      Time dele PERDENDO -> Olhar do Predador: +5% de chance e +0.1x de força nos chutes.
+##      Empate: mantém a que estava.
+##      Visual: Metavisão = radar circular azul em volta dele; Olhar do Predador = cortes de garra dourados
+##      em volta (veja KaiserFX.vision_aura).
+## 1. Magnus (ação de habilidade, variantes automáticas pela altura; recarga de 2 rodadas, compartilhada):
+##      - Bola e Kaiser no chão -> Magnus: chute com curva fixa, a bola sobe até Suspenso (1.2x, 45%)
+##      - Kaiser suspenso + bola no chão/suspensa -> Impact: chute reto (1.3x, 45%) e, se houver inimigos
+##        a 100, dá um pequeno empurrão em até 2 deles
+##      - Kaiser suspenso + bola Voando -> Beinschuss: 1.3x, 45%; com um inimigo no chão a 100 ele serve
+##        de apoio (+5%)
+##      - Kaiser sem a bola por perto -> Umfang: mira antes e deixa o chute armado durante este turno e o
+##        do inimigo; se a bola chegar a 70 dele, ele chuta sozinho (1.4x, 45%)
+## 2. Path (ação de habilidade; recarga de 2 rodadas, compartilhada com o Blitzkrieg/Blindheit):
+##      escolhe um aliado ou inimigo a 230, mira a saída e faz um dash em V contornando ele (300).
+##      Enquanto mira, uma linha tracejada com seta mostra por onde ele vai passar (o mesmo vale para o
+##      Blitzkrieg/Blindheit: ida até a bola + dash curvo). Se alcançar a bola durante o dash, ele a DOMINA:
+##      a bola gruda nele até o fim do dash e, no fim, faz um QTE fácil para ganhar uma ação de habilidade.
+##      Se o escolhido for o Garçom, ele ganha um Correr de 1 s mais rápido e o efeito do Garçom sobe 4%.
+##      - Blitzkrieg: Kaiser no chão e bola Suspensa a 150 -> vai até ela, salta, domina, toca num aliado a 350,
+##        faz um dash curvo de 280 e o aliado devolve a bola Suspensa; Kaiser salta e chuta rápido (1.2x, 45%).
+##      - Blindheit: o mesmo, mas com 2+ inimigos a 200 o chute ganha +0.1x e +5%, ignora a colisão
+##        deles e o Kaiser diz "You're fucking blind." antes de chutar.
+## 3. Empire (ação de habilidade): marca dois jogadores do time, pela partida inteira. A 1ª escolha vira
+##      o Servo Garçom (flor dourada), a 2ª o Servo Palhaço (flor azul-escura); dá para marcar só um.
+##      Cada GOL do Kaiser dá +1 uso.
+##      - Garçom: chutes do Kaiser com assistência dele +4%, o Passe do Kaiser ganha +20 de alcance e
+##        libera o Opfer (botão próprio, recarga de 3 rodadas): passe rasteiro (400) Garçom -> Kaiser, o
+##        Garçom corre 1 s (1.1x), o Kaiser devolve e corre também, e no fim o aliado passa de novo.
+##      - Palhaço: Auf die Knee (botão próprio, recarga de 3 rodadas): com a bola perto de um Palhaço, ele
+##        passa rasteiro para o Kaiser. NÃO gasta a ação de habilidade do Kaiser, só uma ação geral do Palhaço.
 ##
 ## Reação Química HERBIVICUS (com o Ness, veja reaction_herbivicus.gd): se o Ness (Servo Garçom) acabou
 ## de usar o Alohomora no Kaiser e há um inimigo perto, o Kaiser Impact vira o Emperor Impact:
@@ -36,47 +49,72 @@ extends Player
 ## -> renomeie o nó raiz para "Kaiser".
 ##
 ## Animações opcionais (SpriteFrames; hit_frames diz o frame de impacto de cada uma):
-## "magnus", "beinschuss", "kaiser_impact", "empire", "blue_rose". Sem elas, nada quebra.
+## "magnus", "beinschuss", "kaiser_impact", "umfang", "path", "blitzkrieg", "empire", "opfer".
+## Sem elas, nada quebra.
 ##
 ## REQUISITO: o kick_ball() do player.gd precisa do parâmetro on_kick (veja a conversa).
 
 const SKILL_SHOT: StringName = &"magnus"
+const SKILL_PATH: StringName = &"path"
 const SKILL_EMPIRE: StringName = &"empire"
 const SKILL_KNEE: StringName = &"auf_die_knee"
-const SKILL_PREDATOR: StringName = &"predator"
-const SKILL_META: StringName = &"meta"
+const SKILL_OPFER: StringName = &"opfer"
 
 ## id da reação Superstar (reaction_superstar.gd)
 const SUPERSTAR_ID: StringName = &"superstar"
 
-## Grupos de recarga (as 3 variantes do chute compartilham o mesmo)
+## Grupos de recarga (as variantes de cada habilidade compartilham o mesmo)
 const CD_SHOT: StringName = &"cd_shot"
+const CD_PATH: StringName = &"cd_path"
 const CD_KNEE: StringName = &"cd_knee"
-const CD_ROSE: StringName = &"cd_blue_rose"
+const CD_OPFER: StringName = &"cd_opfer"
 
-enum ShotVariant { NONE, MAGNUS, BEINSCHUSS, IMPACT }
+enum ShotVariant { NONE, MAGNUS, BEINSCHUSS, IMPACT, UMFANG }
+enum PathVariant { NONE, PATH, BLITZ }
 enum ServantType { WAITER, CLOWN }
+enum Vision { META, PREDATOR }
+enum PathPreview { NONE, PATH, BLITZ }
 
-@export_group("Magnus / Beinschuss / Kaiser Impact")
+@export_group("Vision (Metavisão / Olhar do Predador)")
+@export var meta_run_bonus: float = 0.2              # segundos a mais no Correr (Metavisão)
+@export var meta_skill_every: int = 2                # +1 ação de habilidade a cada X rodadas (Metavisão)
+@export_range(0.0, 1.0) var predator_shot_bonus: float = 0.03   # +5% em qualquer chute (Olhar do Predador)
+@export var predator_force_add: float = 0.1          # +0.1x de força em qualquer chute (Olhar do Predador)
+
+@export_group("Magnus / Impact / Beinschuss / Umfang")
 @export_range(0.0, 1.0) var chance_magnus: float = 0.40
-@export_range(0.0, 1.0) var chance_beinschuss: float = 0.55
+@export_range(0.0, 1.0) var chance_beinschuss: float = 0.45
 @export_range(0.0, 1.0) var chance_impact: float = 0.45
-@export var shot_cooldown: int = 2                  # recarga (rodadas), igual para as 3 variantes
+@export_range(0.0, 1.0) var chance_umfang: float = 0.45
+@export var shot_cooldown: int = 2                  # recarga (rodadas), igual para as variantes
+@export var magnus_force_mult: float = 0.8
+@export var beinschuss_force_mult: float = 1.2
+@export var umfang_force_mult: float = 1.4
 ## Magnus: a bola sai desviada deste ângulo e vai curvando de volta, cruzando a linha da mira
-@export var magnus_bend_deg: float = 28.0
+@export var magnus_bend_deg: float = 14.0
 ## +1 / -1 escolhe para que lado a bola faz a curva
-@export var magnus_bend_sign: float = -1.0
+@export var magnus_bend_sign: float = 1.0
 ## Tamanho máximo da linha tracejada da mira do Magnus (px)
-@export var magnus_preview_length: float = 600.0
+@export var magnus_preview_length: float = 500.0
 ## Quanto tempo a bola é conduzida (curva + subida até o nível Suspenso); depois cai normal
-@export var magnus_flight_time: float = 0.9
+@export var magnus_flight_time: float = 0.1
 ## Kaiser Impact: multiplicador de força (rápido) e por quanto tempo a bola fica Suspensa
-@export var impact_force_mult: float = 1.1
+@export var impact_force_mult: float = 1.2
 @export var impact_flight_time: float = 0.2
+## Impact: empurrão nos inimigos próximos (raio, quantos no máximo, distância do empurrão)
+@export var impact_push_radius: float = 100.0
+@export var impact_push_max: int = 2
+@export var impact_push_distance: float = 60.0
+## Beinschuss: inimigo no chão a este alcance serve de apoio (+chance). Por padrão sem QTE.
+@export var beinschuss_support_radius: float = 100.0
+@export_range(0.0, 1.0) var beinschuss_support_bonus: float = 0.05
+@export var beinschuss_needs_qte: bool = true
+## Umfang: a bola a este alcance dispara o chute armado
+@export var umfang_radius: float = 70.0
 
 @export_group("Emperor Impact (reação Herbivicus)")
 @export_range(0.0, 1.0) var chance_emperor: float = 0.8   # chance de gol (já é o valor final)
-@export var emperor_force_mult: float = 1.9               # mais forte que o Kaiser Impact (1.1)
+@export var emperor_force_mult: float = 1.9               # mais forte que o Kaiser Impact (1.3)
 @export var emperor_flight_time: float = 0.3               # tempo Suspensa (o Kaiser Impact usa 0.2)
 @export var emperor_rose_radius: float = 260.0             # tamanho da rosa gigante (px)
 ## Aura do chute. Vazio = usa o estilo padrão (veja _make_emperor_fx)
@@ -84,35 +122,54 @@ enum ServantType { WAITER, CLOWN }
 
 @export_group("Be Loved (reação Superstar)")
 @export_range(0.0, 1.0) var chance_be_loved: float = 0.85   # chance de gol (já é o valor final)
-@export var be_loved_force_mult: float = 1.3               # mais forte que o Magnus (1.0)
+@export var be_loved_force_mult: float = 1.3               # mais forte que o Magnus (1.2)
 ## Quanto tempo a bola é conduzida na curva (o Magnus usa magnus_flight_time)
 @export var be_loved_flight_time: float = 1.0
 ## Aura do chute. Vazio = usa o estilo padrão (veja _make_be_loved_fx)
 @export var be_loved_fx: KickFX
 
-@export_group("Empire")
-@export var empire_range: float = 450.0             # alcance para marcar os servos
-@export var empire_starting_uses: int = 1           # usos no começo da partida (+1 a cada gol dele)
-@export_range(0.0, 1.0) var waiter_bonus: float = 0.07   # +7% no chute com passe/assistência do Garçom
-@export var knee_cooldown: int = 3                  # recarga do Auf die Knee
+@export_group("Path / Blitzkrieg / Blindheit")
+@export var path_cooldown: int = 2                  # recarga (rodadas), igual para as 3
+@export var path_pick_range: float = 350.0          # alcance para escolher o aliado/inimigo
+@export var path_length: float = 600.0              # comprimento total do dash em V
+@export var path_vertex_offset: float = 40.0        # o quanto ele passa ao lado de quem foi escolhido
+@export var path_min_exit: float = 80.0             # saída mínima depois do vértice
+@export var dash_speed: float = 700.0              # velocidade dos dashes (px/s)
+@export var dribble_catch_margin: float = 14.0      # folga (px) para encostar na bola durante o dash
+@export var path_qte_keys: int = 3                  # QTE fácil depois de achar a bola
+@export var path_qte_time: float = 0.7
+@export var path_waiter_run_time: float = 1.0       # Correr do Garçom escolhido (s)
+@export var path_waiter_run_speed: float = 1.3      # ... com esta velocidade (x)
+@export_range(0.0, 1.0) var path_waiter_gain: float = 0.04   # quanto o efeito do Garçom sobe
+@export var blitz_ball_range: float = 150.0         # bola Suspensa a este alcance
+@export var blitz_ally_range: float = 400.0         # alcance do aliado que recebe o toque
+@export var blitz_arc_length: float = 380.0         # dash curvo
+@export var blitz_pass_time: float = 0.4           # tempo do toque / devolução (s)
+@export var blitz_catch_time: float = 0.15          # tempo que ele leva para dominar a bola Suspensa ao alcançá-la (0 = sem isso)
+@export_range(0.0, 1.0) var chance_blitz: float = 0.45
+@export var blitz_force_mult: float = 1.2
+@export var blind_enemy_radius: float = 200.0       # Blindheit: inimigos próximos
+@export var blind_enemies_needed: int = 2
+@export var blind_force_add: float = 0.1
+@export_range(0.0, 1.0) var blind_bonus: float = 0.05
 
-@export_group("Blue Rose")
-@export var rose_rounds: int = 3                    # duração total em rodadas (contando a atual)
-@export var rose_cooldown: int = 2                  # recarga, contada a partir do fim do efeito
-@export var rose_max_repeat: int = 2                # a mesma variante no máximo X vezes seguidas
-@export_range(0.0, 1.0) var predator_shot_bonus: float = 0.08   # +8% em qualquer chute
-@export var predator_force_mult: float = 1.3        # força do Chutar comum
-@export_range(0.0, 1.0) var predator_slide_bonus: float = 0.2   # +20% na distância do Carrinho
-@export var meta_ally_rounds: int = 2               # rodadas (depois da atual) com a ação extra
-@export var meta_extra_ally_skills: int = 1         # ações de habilidade extras para os Secundários
-@export var meta_run_bonus: float = 0.7             # segundos a mais no Correr
+@export_group("Empire")
+@export var empire_range: float = 700.0           # "menu com todos os jogadores": sem limite de alcance
+@export var empire_starting_uses: int = 1           # usos no começo da partida (+1 a cada gol dele)
+@export_range(0.0, 1.0) var waiter_bonus: float = 0.04   # +4% no chute com passe/assistência do Garçom
+@export var waiter_pass_range_bonus: float = 20.0   # Passe do Kaiser +20 de alcance com um Garçom
+@export var knee_cooldown: int = 3                  # recarga do Auf die Knee
+@export var opfer_range: float = 400.0              # alcance do Opfer (Garçom <-> Kaiser)
+@export var opfer_run_time: float = 1.0             # Correr curto de cada um (s)
+@export var opfer_run_speed: float = 1.1            # ... com esta velocidade (x)
+@export var opfer_cooldown: int = 3
 
 @export_group("Visual do chute")
 ## Aura + partículas dos chutes de habilidade. Vazio = usa o estilo padrão do Kaiser (veja _make_kick_fx)
 @export var kick_fx: KickFX
 
 @export_group("Descrição (hover)")
-## Imagem de cada habilidade no balão do menu. Chaves: magnus, empire, auf_die_knee, predator, meta.
+## Imagem de cada habilidade no balão do menu. Chaves: magnus, path, empire, auf_die_knee, opfer.
 @export var skill_icons: Dictionary = {}
 
 ## Servos marcados pelo Empire (valem até o fim da partida)
@@ -120,23 +177,38 @@ var _waiters: Array[Player] = []
 var _clowns: Array[Player] = []
 var _marks: Dictionary = {}          # Player -> FlowerMark
 var _empire_uses_left: int = 1
+var _waiter_extra: float = 0.0       # quanto o efeito do Garçom já subiu (Path em um Garçom)
+var _pass_bonus_applied: bool = false
 
-## Blue Rose: variante ativa, até que rodada vale, e histórico para o limite de repetição
-var _rose_variant: StringName = &""
-var _rose_until_round: int = -1
-var _rose_last: StringName = &""
-var _rose_streak: int = 0
-
-## Meta: rodadas em que os Secundários ganham a ação extra (e a última rodada já concedida)
-var _meta_ally_from: int = -1
-var _meta_ally_until: int = -1
-var _meta_granted_round: int = -1
+## Vision: qual está ativa e quantas rodadas de Metavisão já passaram (para a ação extra)
+var _vision: Vision = Vision.META
+var _meta_rounds: int = 0
 
 var _base_run_duration: float = 0.0
-var _base_slide_distance: float = 0.0
 ## Mirando o Magnus: o desenho mostra também a curva que a bola vai fazer
 var _aiming_magnus: bool = false
 
+## Umfang: direção do chute armado e quantos fins de turno faltam para ele expirar (0 = desarmado)
+var _umfang_dir: Vector2 = Vector2.ZERO
+var _umfang_turns_left: int = 0
+var _umfang_firing: bool = false
+
+## Dashes escritos (Path / Blitzkrieg) e bola grudada
+var _dashing: bool = false
+var _dash_token: int = 0
+var _got_ball: bool = false
+var _trail: KaiserFX.DashTrail = null   # esteira azul com rosas durante os dashes
+var _held_paused: bool = false          # a bola dominada teve a colisão com jogadores desligada por ele
+## Prévia tracejada dos dashes (enquanto mira o Path / Blitzkrieg / Blindheit)
+var _preview_kind: PathPreview = PathPreview.NONE
+var _preview_target: Player = null
+var _blitz_bend: float = 1.0            # lado da curva do dash do Blitzkrieg (sorteado antes da mira para a prévia bater)
+## Radar (Metavisão) / garras (Olhar do Predador) em volta dele
+var _vision_fx: KaiserFX.VisionAura = null
+var _held_ball: Ball = null
+var _hold_dir: Vector2 = Vector2.ZERO
+## Correr curto (Path no Garçom / Opfer): multiplicador de velocidade por jogador
+var _run_boosts: Dictionary = {}
 
 func _init() -> void:
 	character_id = "kaiser"          # o menu de formação usa isto para saber quem é quem
@@ -152,28 +224,20 @@ func _ready() -> void:
 	if be_loved_fx == null:
 		be_loved_fx = _make_be_loved_fx()
 	_base_run_duration = run_duration
-	_base_slide_distance = slide_distance
+	add_to_group("control_sources")   # o Garçom do Path/Opfer corre mais rápido (run_speed_mult_on)
 	_empire_uses_left = empire_starting_uses
+	# Se o Kaiser foi duplicado, a cópia pode ter herdado a aura do original: remove e cria a sua
+	for c in get_children():
+		if c is KaiserFX.VisionAura:
+			c.queue_free()
+	_vision_fx = KaiserFX.vision_aura(self, placeholder_radius + 26.0)
+	_sync_vision_fx()
 	_hook_manager.call_deferred()   # o MatchManager entra na árvore no mesmo frame
 
 
-## Azul-escuro com partículas douradas
+## Azul com partículas rosas (veja kaiser_fx.gd)
 func _make_kick_fx() -> KickFX:
-	var fx := KickFX.new()
-	fx.color = Color(0.107, 0.193, 0.845, 1.0)
-	fx.trail_width = 14.0
-	fx.particle_color = Color(0.716, 0.882, 0.853, 1.0)
-	fx.amount = 22
-	fx.lifetime = 0.55
-	fx.speed_min = 15.0
-	fx.speed_max = 70.0
-	fx.gravity = Vector2(0.0, -40.0)
-	fx.spin = 240.0
-	fx.scale_min = 0.15
-	fx.scale_max = 0.35
-	fx.burst_amount = 14
-	fx.burst_speed = 220.0
-	return fx
+	return KaiserFX.kick_style(false)
 
 
 ## Emperor Impact: azul elétrico, bem mais largo e cheio de brilhos
@@ -220,36 +284,74 @@ func _hook_manager() -> void:
 		return
 	m.round_started.connect(_on_round_started)
 	m.goal_scored.connect(_on_goal_scored)
-	m.state_changed.connect(_on_state_changed)
+	m.turn_ended.connect(_on_turn_ended)
+	_update_vision()
 
 
 func _on_round_started(_round_number: int) -> void:
-	_apply_rose_stats()   # o Predator acabou? o Carrinho volta ao normal
-	queue_redraw()        # a aura da Blue Rose some quando as rodadas acabam
+	_update_vision()
+	# Metavisão: +1 ação de habilidade a cada 2 rodadas com ela ativa
+	if is_meta_active():
+		_meta_rounds += 1
+		if _meta_rounds % maxi(meta_skill_every, 1) == 0:
+			extra_skill_left += 1
+	queue_redraw()
 
 
-## Cada gol DO KAISER dá mais um uso do Empire
+## Cada gol DO KAISER dá mais um uso do Empire. Qualquer gol pode mudar a Vision (placar).
 func _on_goal_scored(goal: Dictionary) -> void:
+	_update_vision.call_deferred()   # deixa o MatchManager atualizar o placar antes
 	if goal.get("own_goal", false) or goal.get("team", -1) != team:
 		return
 	if goal.get("scorer", "") == get_display_name():
 		_empire_uses_left += 1
 
 
-## Meta: nas próximas rodadas, a pool dos Secundários ganha a ação extra. O MatchManager zera as
-## pools em select_protagonist(), então a extra é somada logo depois, quando a fase vira
-## CHOOSING_ACTION (uma vez por rodada).
-func _on_state_changed() -> void:
-	if _meta_ally_until < 0:
-		return
+## O Umfang armado dura até o fim do turno do Kaiser e do turno do inimigo seguinte
+func _on_turn_ended(_turn_team: int) -> void:
+	if _umfang_turns_left > 0:
+		_umfang_turns_left -= 1
+		queue_redraw()
+
+
+# ---------- VISION ----------
+
+## Time ganhando -> Metavisão; perdendo -> Olhar do Predador; empate mantém a atual
+func _update_vision() -> void:
 	var m: MatchManager = _get_manager()
-	if m == null or m.phase != MatchManager.Phase.CHOOSING_ACTION or m.current_team != team:
+	if m == null or m.scores.size() < 2:
 		return
-	var r: int = m.round_number
-	if r < _meta_ally_from or r > _meta_ally_until or _meta_granted_round == r:
+	var old: Vision = _vision
+	var mine: int = m.scores[team]
+	var theirs: int = m.scores[1 - team]
+	if mine > theirs:
+		_vision = Vision.META
+	elif mine < theirs:
+		_vision = Vision.PREDATOR
+	if old != _vision:
+		queue_redraw()
+		_sync_vision_fx()
+		if is_inside_tree():
+			KaiserFX.ring(self, global_position, 70.0)
+			KaiserFX.rose_burst(self, global_position + Vector2(0.0, -height - 16.0), 8, true)
+
+
+## Liga o radar (Metavisão) ou as garras (Olhar do Predador) em volta do Kaiser
+func _sync_vision_fx() -> void:
+	if _vision_fx == null or not is_instance_valid(_vision_fx):
 		return
-	_meta_granted_round = r
-	m.secondary_skill_left += meta_extra_ally_skills
+	if is_predator_active():
+		_vision_fx.show_predator()
+	else:
+		_vision_fx.show_meta()
+
+
+func is_predator_active() -> bool:
+	return _vision == Vision.PREDATOR
+
+
+func is_meta_active() -> bool:
+	return _vision == Vision.META
 
 
 # ---------- SERVOS (EMPIRE) ----------
@@ -289,6 +391,9 @@ func _add_servant(p: Player, type: ServantType) -> void:
 	var mark := FlowerMark.new()
 	if type == ServantType.WAITER:
 		_waiters.append(p)
+		if not _pass_bonus_applied:   # com um Garçom, o Passe do Kaiser alcança mais
+			pass_range_bonus += waiter_pass_range_bonus
+			_pass_bonus_applied = true
 		mark.petal_color = Color(0.817, 0.655, 0.0, 1.0)    # flor dourada
 		mark.core_color = Color(0.08, 0.15, 0.6)
 	else:
@@ -306,6 +411,9 @@ func _clear_servants() -> void:
 	_marks.clear()
 	_waiters.clear()
 	_clowns.clear()
+	if _pass_bonus_applied:
+		pass_range_bonus -= waiter_pass_range_bonus
+		_pass_bonus_applied = false
 
 
 ## Habilidade Empire: escolhe o Servo Garçom e depois o Servo Palhaço
@@ -348,7 +456,7 @@ func _waiter_bonus(ball: Ball) -> float:
 	if assister == self:
 		assister = ball.previous_toucher
 	if assister != null and assister in _waiters:
-		return waiter_bonus
+		return waiter_bonus + _waiter_extra
 	return 0.0
 
 
@@ -413,82 +521,35 @@ func _pay_general_action_of(m: MatchManager, p: Player) -> void:
 	m.state_changed.emit()   # os contadores do HUD atualizam
 
 
-# ---------- BLUE ROSE ----------
+# ---------- EFEITOS DA VISION ----------
 
-func is_rose_active() -> bool:
-	var m: MatchManager = _get_manager()
-	return m != null and _rose_until_round >= 0 and m.round_number <= _rose_until_round
-
-
-func is_predator_active() -> bool:
-	return is_rose_active() and _rose_variant == SKILL_PREDATOR
-
-
-func is_meta_active() -> bool:
-	return is_rose_active() and _rose_variant == SKILL_META
-
-
-## Pode ativar esta variante? Nada ativo, fora de recarga e sem repetir a mesma mais que o limite
-func _can_use_rose(variant: StringName) -> bool:
-	if is_rose_active() or is_on_cooldown(CD_ROSE):
-		return false
-	return not (_rose_last == variant and _rose_streak >= rose_max_repeat)
-
-
-func _use_rose(variant: StringName) -> bool:
-	var m: MatchManager = _get_manager()
-	if m == null:
-		return false
-	if not await play_action(&"blue_rose"):
-		return false
-
-	var start_round: int = m.round_number
-	_rose_variant = variant
-	_rose_until_round = start_round + rose_rounds - 1   # a rodada atual conta
-	if _rose_last == variant:
-		_rose_streak += 1
-	else:
-		_rose_last = variant
-		_rose_streak = 1
-	start_cooldown(CD_ROSE, rose_cooldown, _rose_until_round + 1)
-
-	if variant == SKILL_META:
-		_meta_ally_from = start_round + 1
-		_meta_ally_until = start_round + meta_ally_rounds
-		_meta_granted_round = -1
-
-	_apply_rose_stats()
-	queue_redraw()
-	return true
-
-
-## Predator: Carrinho mais longo (o slide_distance é lido na hora da mira e do Carrinho)
-func _apply_rose_stats() -> void:
-	slide_distance = _base_slide_distance * (1.0 + predator_slide_bonus) \
-		if is_predator_active() else _base_slide_distance
-
-
-## Predator: o Chutar comum (sem animação de habilidade) sai mais forte e com aura
+## Olhar do Predador: todo chute do Kaiser sai +0.1x mais forte (soma ao multiplicador da habilidade).
+## O Chutar comum (sem animação de habilidade) ainda ganha a aura azul.
 func kick_ball(ball: Ball, direction: Vector2, kind: KickType, qte_success: bool = true,
 		chance_override: float = -1.0, ignore_self_collision: bool = false,
 		fx: KickFX = null, anim: StringName = &"", on_kick: Callable = Callable()) -> void:
-	if is_predator_active() and anim == &"":
-		next_kick_force_mult *= predator_force_mult
-		if fx == null and qte_success:
+	if is_predator_active():
+		next_kick_force_mult += predator_force_add
+		if fx == null and qte_success and anim == &"":
 			fx = kick_fx
 	await super(ball, direction, kind, qte_success, chance_override, ignore_self_collision,
 		fx, anim, on_kick)
 
 
-## Meta: mais tempo no Correr (checado na hora em que a corrida começa)
+## Metavisão: mais tempo no Correr (checado na hora em que a corrida começa)
 func start_run() -> void:
 	run_duration = _base_run_duration + (meta_run_bonus if is_meta_active() else 0.0)
 	super()
 
 
-## Meta: nenhum QTE nos chutes do Kaiser
-func skips_qte() -> bool:
-	return is_meta_active()
+## Correr curto com velocidade maior (Path no Garçom / Opfer) usa este multiplicador
+func get_run_speed_mult() -> float:
+	return super() * float(_run_boosts.get(self, 1.0))
+
+
+## Outros jogadores perguntam isto (grupo "control_sources"): o Garçom do Path/Opfer corre mais rápido
+func run_speed_mult_on(p: Player) -> float:
+	return float(_run_boosts.get(p, 1.0))
 
 
 # ---------- BÔNUS DE CHUTE (Predator + Garçom) ----------
@@ -512,6 +573,10 @@ func get_shot_variant() -> ShotVariant:
 	var ball: Ball = _get_ball()
 	# get_kick_type já confere: derrubado, bola na mão do goleiro, longe demais, altura inalcançável
 	if get_kick_type(ball) == KickType.NONE:
+		# Sem a bola ao alcance do pé: Umfang (arma o chute de longe), se ainda não estiver armado
+		if ball != null and _umfang_turns_left <= 0 \
+				and global_position.distance_to(ball.global_position) > kick_range:
+			return ShotVariant.UMFANG
 		return ShotVariant.NONE
 
 	# Reação Superstar de pé: o chute vira o Be Loved (um Magnus especial) em qualquer altura que
@@ -525,9 +590,7 @@ func get_shot_variant() -> ShotVariant:
 			return ShotVariant.MAGNUS
 	elif height_level == Heights.Level.SUSPENDED:
 		match ball_level:
-			Heights.Level.GROUND:
-				return ShotVariant.MAGNUS
-			Heights.Level.SUSPENDED:
+			Heights.Level.GROUND, Heights.Level.SUSPENDED:
 				return ShotVariant.IMPACT
 			Heights.Level.FLYING:
 				return ShotVariant.BEINSCHUSS
@@ -538,11 +601,44 @@ func _shot_skill_name() -> String:
 	match get_shot_variant():
 		ShotVariant.BEINSCHUSS:
 			return "Beinschuss"
+		ShotVariant.UMFANG:
+			return "Umfang"
 		ShotVariant.IMPACT:
 			# Reação Química disponível: o botão muda de nome
-			return "Emperor Impact" if _find_reaction() != null else "Kaiser Impact"
+			return "Emperor Impact" if _find_reaction() != null else "Impact"
 	# Reação Química disponível: o botão muda de nome
 	return "Be Loved" if _find_superstar() != null else "Magnus"
+
+
+## Inimigos (de qualquer altura) a este alcance do Kaiser
+func _enemies_near(radius: float) -> Array[Player]:
+	var out: Array[Player] = []
+	for other: Player in get_tree().get_nodes_in_group("players"):
+		if other.team != team and global_position.distance_to(other.global_position) <= radius:
+			out.append(other)
+	return out
+
+
+## Beinschuss: um inimigo "no chão" a 100 serve de apoio
+func _support_enemy() -> Player:
+	for e in _enemies_near(beinschuss_support_radius):
+		if e.height_level == Heights.Level.GROUND:
+			return e
+	return null
+
+
+## Impact: pequeno empurrão (máximo de 2) nos inimigos mais próximos
+func _push_nearby_enemies() -> void:
+	var list: Array[Player] = _enemies_near(impact_push_radius)
+	list.sort_custom(func(a: Player, b: Player) -> bool:
+		return global_position.distance_to(a.global_position) < global_position.distance_to(b.global_position))
+	for i in mini(list.size(), impact_push_max):
+		var e: Player = list[i]
+		var away: Vector2 = e.global_position - global_position
+		away = away.normalized() if away.length() > 1.0 else Vector2(float(facing), 0.0)
+		var tw: Tween = e.create_tween()
+		tw.tween_property(e, "global_position", _clamp_point(e.global_position + away * impact_push_distance), 0.18) \
+			.set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_OUT)
 
 
 ## Reação Química do Kaiser Impact que ele pode usar agora (Herbivicus). null = nenhuma.
@@ -577,6 +673,8 @@ func _use_shot_skill() -> bool:
 	var m: MatchManager = _get_manager()
 	if m == null or get_shot_variant() == ShotVariant.NONE:
 		return false
+	if get_shot_variant() == ShotVariant.UMFANG:
+		return await _use_umfang()   # arma o chute (não chuta agora)
 
 	# Mira. No Magnus o desenho mostra também a curva que a bola vai fazer.
 	_aiming_magnus = get_shot_variant() == ShotVariant.MAGNUS
@@ -642,8 +740,8 @@ func _use_shot_skill() -> bool:
 		ShotVariant.BEINSCHUSS:
 			kind = KickType.FLYING
 			anim = &"beinschuss"
-			base_chance = chance_beinschuss
-			needs_qte = true   # QTE difícil
+			base_chance = chance_beinschuss + (beinschuss_support_bonus if _support_enemy() != null else 0.0)
+			needs_qte = beinschuss_needs_qte   # por padrão sem QTE
 		ShotVariant.IMPACT:
 			kind = KickType.VOLLEY
 			anim = &"kaiser_impact"
@@ -661,8 +759,12 @@ func _use_shot_skill() -> bool:
 	if variant == ShotVariant.IMPACT:
 		# rápido (gasto dentro do kick_ball)
 		next_kick_force_mult *= emperor_force_mult if reaction != null else impact_force_mult
+	elif variant == ShotVariant.BEINSCHUSS:
+		next_kick_force_mult *= beinschuss_force_mult
 	elif superstar != null:
 		next_kick_force_mult *= be_loved_force_mult
+	else:
+		next_kick_force_mult *= magnus_force_mult
 
 	# Emperor Impact: os 75% são o valor final (sem somar Garçom/Predator). Os outros chutes somam.
 	# Be Loved: os 85% também são o valor final (sem somar Garçom/Predator)
@@ -689,10 +791,15 @@ func _magnus_heading(aim_angle: float, u: float) -> Vector2:
 
 ## Chamado pelo kick_ball() logo depois que a bola sai (on_kick)
 func _launch_magnus(ball: Ball, _dir: Vector2, speed: float, aim: Vector2) -> void:
+	KaiserFX.kick_burst(self, ball.global_position, aim, false)
+	KaiserFX.ball_roses(ball, magnus_flight_time + 0.6)
 	_drive_ball(ball, magnus_flight_time, _magnus_step.bind(aim.angle(), speed))
 
 
 func _launch_impact(ball: Ball, _dir: Vector2, _speed: float) -> void:
+	_push_nearby_enemies()   # pequeno empurrão nos inimigos próximos
+	KaiserFX.kick_burst(self, ball.global_position, _dir, true)
+	KaiserFX.ball_roses(ball, impact_flight_time + 0.8, true)
 	_drive_ball(ball, impact_flight_time, _impact_step)
 
 
@@ -776,26 +883,523 @@ func _drive_ball(ball: Ball, duration: float, step: Callable) -> void:
 		ball.vel_z = 0.0   # solta: a gravidade assume e a bola cai
 
 
+# ---------- UMFANG ----------
+
+## Mira agora e deixa o chute armado: se a bola chegar a 70 dele durante este turno e o do inimigo, ele chuta
+func _use_umfang() -> bool:
+	var m: MatchManager = _get_manager()
+	if m == null:
+		return false
+	var aim: Vector2 = await m.aim_for_skill(self, kick_aim_range)
+	if aim == Vector2.ZERO:
+		return false   # cancelou: não gasta a ação
+	await play_action(&"umfang")
+	_umfang_dir = aim.normalized()
+	_umfang_turns_left = 2   # o fim do turno dele + o fim do turno do inimigo
+	start_cooldown(CD_SHOT, shot_cooldown)
+	queue_redraw()
+	return true
+
+
+func _check_umfang() -> void:
+	var m: MatchManager = _get_manager()
+	var ball: Ball = _get_ball()
+	if m == null or ball == null or m.match_over or is_down or state != State.IDLE:
+		return
+	if ball.hovering or ball.held_by != null or ball.collisions_paused:
+		return
+	if global_position.distance_to(ball.global_position) > umfang_radius:
+		return
+	if get_kick_type(ball) == KickType.NONE:
+		return
+	_fire_umfang(ball)
+
+
+func _fire_umfang(ball: Ball) -> void:
+	_umfang_firing = true
+	var dir: Vector2 = _umfang_dir
+	_umfang_turns_left = 0
+	queue_redraw()
+	next_kick_force_mult *= umfang_force_mult
+	var chance: float = minf(chance_umfang + _shot_bonus(), 1.0)
+	await kick_ball(ball, dir, get_kick_type(ball), true, chance, false, kick_fx, &"umfang")
+	_umfang_firing = false
+
+
+# ---------- MOVIMENTO ESCRITO (Path / Blitzkrieg) ----------
+
+func _clamp_point(p: Vector2) -> Vector2:
+	var field: Field = get_tree().get_first_node_in_group("field") as Field
+	if field == null:
+		return p
+	var local: Vector2 = field.to_local(p)
+	var half: Vector2 = field.pitch_size * 0.5 - Vector2(body_radius, body_radius)
+	return field.to_global(Vector2(clampf(local.x, -half.x, half.x), clampf(local.y, -half.y, half.y)))
+
+
+## A partida terminou, a bola foi reposta depois de um gol ou ele caiu: o dash para
+func _dash_should_abort() -> bool:
+	var m: MatchManager = _get_manager()
+	return m == null or m.match_over or m._repositioning or is_down
+
+
+func _dash_begin() -> void:
+	_dashing = true
+	_got_ball = false
+	_trail = KaiserFX.dash_trail(self, is_predator_active())
+	KaiserFX.rose_burst(self, global_position + Vector2(0.0, -8.0), 4, false)
+
+
+func _dash_end() -> void:
+	_dashing = false
+	velocity = Vector2.ZERO
+	if _trail != null:
+		_trail.stop()
+		_trail = null
+	_release_held_ball()
+
+
+## Anda até "target" a "speed" px/s (colide com os outros jogadores). Com catch_ball, domina a bola se
+## encostar nela. Devolve false se foi interrompido ou bloqueado.
+func _dash_to(target: Vector2, speed: float, catch_ball: bool = false) -> bool:
+	var token: int = _dash_token
+	var stuck: int = 0
+	while true:
+		await get_tree().physics_frame
+		if token != _dash_token or _dash_should_abort():
+			velocity = Vector2.ZERO
+			return false
+		var to_target: Vector2 = target - global_position
+		var dist: float = to_target.length()
+		if dist <= 3.0:
+			break
+		if catch_ball and _held_ball == null:
+			var found: Ball = _ball_in_reach()
+			if found != null:
+				_grab_ball(found)
+				_got_ball = true
+		var dir: Vector2 = to_target / dist
+		face_towards(dir)
+		_hold_dir = dir
+		var dt: float = get_physics_process_delta_time()
+		var step: float = minf(speed * dt, dist)
+		var before: Vector2 = global_position
+		velocity = dir * (step / dt)
+		move_and_slide()
+		global_position = _clamp_point(global_position)
+		if before.distance_to(global_position) < step * 0.2:
+			stuck += 1
+			if stuck >= 4:
+				velocity = Vector2.ZERO
+				return false   # bloqueado
+		else:
+			stuck = 0
+	velocity = Vector2.ZERO
+	return true
+
+
+## Mira extra no meio de uma habilidade (cancelar aqui NÃO devolve a ação, porque já aconteceu algo)
+func _aim_more(range_px: float) -> Vector2:
+	begin_aim(range_px)
+	var dir: Vector2 = await aim_finished
+	return dir
+
+
+func _run_qte(title: String, keys: int, time_per_key: float) -> bool:
+	var m: MatchManager = _get_manager()
+	if m == null or skips_qte():
+		return true
+	var qte := QTE.new()
+	m.add_child(qte)
+	qte.start(QTE.EASY_KEYS, keys, time_per_key, title)
+	var ok: bool = await qte.finished
+	return ok
+
+
+## Correr curto de "p" (1 s por padrão) com velocidade maior; não gasta o limite de Correr do turno
+func _short_run(p: Player, seconds: float, speed_mult: float) -> void:
+	if not is_instance_valid(p):
+		return
+	_run_boosts[p] = speed_mult
+	p.start_run()
+	p.runs_this_turn = maxi(0, p.runs_this_turn - 1)
+	p.run_time_left = seconds
+	await p.run_finished
+	_run_boosts.erase(p)
+
+
+## Bola ao alcance do corpo durante o dash (no chão, solta e que ele pode pegar)
+func _ball_in_reach() -> Ball:
+	var ball: Ball = _get_ball()
+	if ball == null or ball.is_held() or ball.hovering or ball.is_locked_for(team):
+		return null
+	if ball.get_level() != Heights.Level.GROUND:
+		return null
+	var reach: float = body_radius + ball.collision_radius + dribble_catch_margin
+	if global_position.distance_to(ball.global_position) > reach:
+		return null
+	return ball
+
+
+## Gruda a bola nele (usa só Ball.held_by, a mesma flag do goleiro: ninguém mais mexe na bola)
+func _grab_ball(ball: Ball) -> void:
+	ball.register_touch(self)
+	ball.pending_shot_chance = Ball.NO_SHOT
+	ball.velocity = Vector2.ZERO
+	ball.vel_z = 0.0
+	ball.height = 0.0
+	ball.held_by = self
+	_held_ball = ball
+	# Dominada: nenhum jogador (nem ele) esbarra nela enquanto estiver grudada
+	_held_paused = not ball.collisions_paused
+	ball.collisions_paused = true
+	_snap_held_ball()
+	KaiserFX.petals(self, ball.global_position, 6)   # feedback: dominou
+
+
+func _hold_offset() -> Vector2:
+	var dir: Vector2 = velocity if velocity.length() > 1.0 \
+		else (_hold_dir if _hold_dir != Vector2.ZERO else Vector2(float(facing), 0.0))
+	return dir.normalized() * (body_radius + _held_ball.collision_radius + 4.0)
+
+
+func _snap_held_ball() -> void:
+	_held_ball.global_position = global_position + _hold_offset()
+	_held_ball.velocity = Vector2.ZERO
+	_held_ball.height = 0.0
+
+
+## Solta a bola grudada: ela fica parada ao lado dele
+func _release_held_ball() -> void:
+	_restore_held_collisions()
+	if _held_ball != null and is_instance_valid(_held_ball) and _held_ball.held_by == self:
+		_held_ball.held_by = null
+	_held_ball = null
+	_hold_dir = Vector2.ZERO
+
+
+## Religa a colisão da bola que ele desligou ao dominar
+func _restore_held_collisions() -> void:
+	if _held_paused and _held_ball != null and is_instance_valid(_held_ball):
+		_held_ball.collisions_paused = false
+	_held_paused = false
+
+
+## A bola grudada deixou de ser dele? (chutou, o goleiro pegou, a bola reiniciou, passe alto...)
+func _held_ball_lost() -> bool:
+	return not is_instance_valid(_held_ball) or _held_ball.held_by != self or _held_ball.hovering
+
+
+## Durante os dashes usa a animação de correr
+func _desired_anim() -> StringName:
+	if _dashing and not is_down and height <= 1.0:
+		return Player.ANIM_RUN
+	return super()
+
+
+func _physics_process(delta: float) -> void:
+	super(delta)
+	# Bola grudada acompanha o Kaiser (a menos que ele já tenha se desfeito dela)
+	if _held_ball != null:
+		if _held_ball_lost():
+			_restore_held_collisions()
+			if is_instance_valid(_held_ball) and _held_ball.held_by == self:
+				_held_ball.held_by = null
+			_held_ball = null
+		else:
+			_snap_held_ball()
+	# Umfang armado: a bola chegou perto?
+	if _umfang_turns_left > 0 and not _umfang_firing:
+		_check_umfang()
+
+
+# ---------- PATH ----------
+
+func _is_path_target(p: Player) -> bool:
+	return is_instance_valid(p) and p != self
+
+
+func _has_path_target() -> bool:
+	for p: Player in get_tree().get_nodes_in_group("players"):
+		if p != self and global_position.distance_to(p.global_position) <= path_pick_range:
+			return true
+	return false
+
+
+func _ally_ok(p: Player) -> bool:
+	return is_instance_valid(p) and p != self and not p.is_down
+
+
+## Companheiros que podem receber o toque do Blitzkrieg
+func _blitz_allies() -> Array[Player]:
+	var out: Array[Player] = []
+	var m: MatchManager = _get_manager()
+	if m == null:
+		return out
+	for p: Player in m.get_team_players(team):
+		if _ally_ok(p) and global_position.distance_to(p.global_position) <= blitz_ally_range:
+			out.append(p)
+	return out
+
+
+func get_path_variant() -> PathVariant:
+	if height_level != Heights.Level.GROUND:
+		return PathVariant.NONE
+	var ball: Ball = _get_ball()
+	if ball != null and not ball.is_held() and ball.get_level() == Heights.Level.SUSPENDED \
+			and global_position.distance_to(ball.global_position) <= blitz_ball_range \
+			and not _blitz_allies().is_empty():
+		return PathVariant.BLITZ
+	return PathVariant.PATH if _has_path_target() else PathVariant.NONE
+
+
+func _blind_now() -> bool:
+	return _enemies_near(blind_enemy_radius).size() >= blind_enemies_needed
+
+
+func _path_skill_name() -> String:
+	if get_path_variant() == PathVariant.BLITZ:
+		return "Blindheit" if _blind_now() else "Blitzkrieg"
+	return "Path"
+
+
+func _use_path_skill() -> bool:
+	if get_path_variant() == PathVariant.BLITZ:
+		return await _use_blitz()
+	return await _use_path()
+
+
+## Path: escolhe alguém, mira a saída e faz o dash em V contornando a pessoa
+## Vértice e ponto de saída do dash em V (o V contorna quem foi escolhido). Usado pelo dash e pela prévia.
+func _path_points(target: Player, exit_dir: Vector2) -> Array[Vector2]:
+	var to_t: Vector2 = target.global_position - global_position
+	var l1: float = to_t.length()
+	var dir1: Vector2 = to_t / maxf(l1, 0.001)
+	var out_dir: Vector2 = exit_dir.normalized()
+	var side: float = -1.0 if dir1.cross(out_dir) >= 0.0 else 1.0   # o vértice fica do lado oposto ao da saída
+	var vertex: Vector2 = _clamp_point(target.global_position + dir1.orthogonal() * side * path_vertex_offset)
+	var exit_point: Vector2 = _clamp_point(vertex + out_dir * maxf(path_length - l1, path_min_exit))
+	var out: Array[Vector2] = [vertex, exit_point]
+	return out
+
+
+func _use_path() -> bool:
+	var m: MatchManager = _get_manager()
+	if m == null:
+		return false
+	m.announce_keeper("Path: escolha um aliado (cancele para escolher um inimigo)", team)
+	var target: Player = await m.pick_ally_for_skill(self, path_pick_range, false, _is_path_target)
+	if target == null and not m.match_over:
+		m.announce_keeper("Path: escolha um inimigo (cancele para sair)", team)
+		target = await m.pick_ally_for_skill(self, path_pick_range, true, _is_path_target)
+	if target == null or m.match_over:
+		return false   # cancelou: não gasta a ação
+	# Quanto o V é aberto = para onde ele sai depois de contornar a pessoa
+	# Enquanto mira, a prévia tracejada mostra o V que ele vai fazer
+	_preview_target = target
+	_preview_kind = PathPreview.PATH
+	queue_redraw()
+	var aim: Vector2 = await m.aim_for_skill(self, path_length)
+	_preview_kind = PathPreview.NONE
+	_preview_target = null
+	queue_redraw()
+	if aim == Vector2.ZERO or m.match_over:
+		return false
+	if not await play_action(&"path"):
+		return false
+	if m.match_over or not is_instance_valid(target):
+		return false
+
+	var pts: Array[Vector2] = _path_points(target, aim)
+	var vertex: Vector2 = pts[0]
+	var exit_point: Vector2 = pts[1]
+
+	add_collision_exception_with(target)   # ele passa "por dentro" de quem contorna
+	target.add_collision_exception_with(self)
+	_dash_begin()
+	if await _dash_to(vertex, dash_speed, true):
+		await _dash_to(exit_point, dash_speed, true)
+	var had_ball: bool = _got_ball
+	_dash_end()
+	if is_instance_valid(target):
+		remove_collision_exception_with(target)
+		target.remove_collision_exception_with(self)
+
+	# Achou a bola no caminho: QTE fácil para ganhar uma ação de habilidade
+	if had_ball and await _run_qte("Path!", path_qte_keys, path_qte_time):
+		extra_skill_left += 1
+	# Garçom: ganha um Correr curto mais rápido e o efeito dele sobe
+	if is_instance_valid(target) and target in _waiters:
+		_waiter_extra += path_waiter_gain
+		await _short_run(target, path_waiter_run_time, path_waiter_run_speed)
+	start_cooldown(CD_PATH, path_cooldown)
+	return true
+
+
+# ---------- BLITZKRIEG / BLINDHEIT ----------
+
+## Curva (Bézier) de 8 pontos saindo de "origin" na direção "dir", com "length" de comprimento
+## bend_sign = +1 / -1 escolhe o lado da curva; 0 sorteia
+func _arc_points(origin: Vector2, dir: Vector2, length: float, bend_sign: float = 0.0) -> Array[Vector2]:
+	var d: Vector2 = dir.normalized()
+	var bend: float = bend_sign if bend_sign != 0.0 else (1.0 if randf() < 0.5 else -1.0)
+	var control: Vector2 = origin + d * length * 0.5 + d.orthogonal() * length * 0.35 * bend
+	var end_point: Vector2 = origin + d * length
+	var pts: Array[Vector2] = []
+	for i in range(1, 9):
+		var t: float = float(i) / 8.0
+		pts.append(_clamp_point(origin.lerp(control, t).lerp(control.lerp(end_point, t), t)))
+	return pts
+
+
+func _launch_blitz(ball: Ball, _dir: Vector2, _speed: float) -> void:
+	KaiserFX.kick_burst(self, ball.global_position, _dir, true)
+	KaiserFX.ball_roses(ball, impact_flight_time + 0.8, true)
+	_drive_ball(ball, impact_flight_time, _impact_step)
+
+
+func _use_blitz() -> bool:
+	var m: MatchManager = _get_manager()
+	var ball: Ball = _get_ball()
+	if m == null or ball == null:
+		return false
+	m.announce_keeper("Blitzkrieg: escolha o aliado que recebe o toque", team)
+	var ally: Player = await m.pick_ally_for_skill(self, blitz_ally_range, false, _ally_ok)
+	if ally == null or m.match_over:
+		return false   # cancelou: não gasta a ação
+	# O lado da curva é sorteado ANTES da mira, para a prévia tracejada ser a mesma do dash
+	_blitz_bend = 1.0 if randf() < 0.5 else -1.0
+	_preview_kind = PathPreview.BLITZ
+	queue_redraw()
+	var arc_dir: Vector2 = await m.aim_for_skill(self, blitz_arc_length)
+	_preview_kind = PathPreview.NONE
+	queue_redraw()
+	if arc_dir == Vector2.ZERO or m.match_over:
+		return false
+	if not await play_action(&"blitzkrieg"):
+		return false
+
+	_dash_begin()
+	# 1) vai até a bola, salta e domina
+	var ok: bool = await _dash_to(ball.global_position, dash_speed)
+	if ok:
+		await jump()
+		ball.register_touch(self)
+		# Domina: a bola gruda nele no ar por um instante antes de ir para o aliado
+		if blitz_catch_time > 0.0 and is_instance_valid(ball) and not m.match_over:
+			KaiserFX.petals(self, ball.global_position + Vector2(0.0, -ball.height), 6)
+			await ball.hover_to(global_position, Heights.SUSPENDED_HEIGHT, blitz_catch_time).finished
+		if m.match_over or not is_instance_valid(ball) or not is_instance_valid(ally):
+			ok = false
+	if ok:
+		# 2) toca num aliado (a bola vai Suspensa até ele)
+		await ball.hover_to(ally.global_position, Heights.SUSPENDED_HEIGHT, blitz_pass_time).finished
+		land()
+		# 3) dash curvo de 280
+		for p in _arc_points(global_position, arc_dir, blitz_arc_length, _blitz_bend):
+			if not await _dash_to(p, dash_speed):
+				ok = false
+				break
+	if not ok or m.match_over:
+		_dash_end()
+		if is_instance_valid(ball) and ball.hovering and ball.held_by == null:
+			ball.release_hover()   # interrompido: a bola não fica pairando para sempre
+		start_cooldown(CD_PATH, path_cooldown)
+		return true
+
+	# 4) o aliado devolve a bola Suspensa enquanto o Kaiser salta com ela
+	_dash_end()
+	ally.face_towards(global_position - ally.global_position)
+	await ally.play_action(Player.ANIM_PASS_HIGH, Player.ANIM_PASS)
+	ball.register_touch(ally)
+	jump()   # sem await: sobe junto com a bola
+	await ball.hover_to(global_position, Heights.SUSPENDED_HEIGHT, blitz_pass_time).finished
+
+	# 5) chute rápido (a bola vai Suspensa). Blindheit: 2+ inimigos perto = mais forte e ignora a colisão deles.
+	var blind: bool = _blind_now()
+	var dir: Vector2 = await _aim_more(kick_aim_range)
+	if dir == Vector2.ZERO:
+		dir = Vector2(float(facing), 0.0)
+	if blind:
+		m.announce_keeper("You're fucking blind.", team)
+		ball.collisions_paused = true   # nenhum jogador trava a bola durante o chute
+		get_tree().create_timer(impact_flight_time + 0.4).timeout.connect(func() -> void:
+			if is_instance_valid(ball):
+				ball.collisions_paused = false)
+	next_kick_force_mult *= blitz_force_mult + (blind_force_add if blind else 0.0)
+	var chance: float = minf(chance_blitz + (blind_bonus if blind else 0.0) + _shot_bonus(), 1.0)
+	await kick_ball(ball, dir, KickType.VOLLEY, true, chance, false, kick_fx, &"blitzkrieg", _launch_blitz)
+	start_cooldown(CD_PATH, path_cooldown)
+	return true
+
+
+# ---------- OPFER (Garçom) ----------
+
+## Garçom com a bola ao alcance do pé e o Kaiser dentro do alcance do Opfer
+func _find_opfer_waiter() -> Player:
+	var ball: Ball = _get_ball()
+	if ball == null:
+		return null
+	var best: Player = null
+	var best_dist: float = INF
+	for w in _waiters:
+		if not is_instance_valid(w) or w.is_down or w.is_locked():
+			continue
+		if w.get_kick_type(ball) == KickType.NONE:
+			continue
+		if w.global_position.distance_to(global_position) > opfer_range:
+			continue
+		var d: float = w.global_position.distance_to(ball.global_position)
+		if d < best_dist:
+			best = w
+			best_dist = d
+	return best
+
+
+## A bola chegou perto de quem devia receber? (se um inimigo interceptou, o Opfer para)
+func _pass_ok(ball: Ball, receiver: Player) -> bool:
+	return is_instance_valid(ball) and is_instance_valid(receiver) \
+		and ball.global_position.distance_to(receiver.global_position) <= receiver.kick_range * 1.5 + 40.0
+
+
+func _use_opfer() -> bool:
+	var m: MatchManager = _get_manager()
+	var waiter: Player = _find_opfer_waiter()
+	var ball: Ball = _get_ball()
+	if m == null or waiter == null or ball == null:
+		return false
+	start_cooldown(CD_OPFER, opfer_cooldown)
+	# 1) o Garçom passa rasteiro para o Kaiser e corre 1 s (mais rápido)
+	await m.run_curved_ground_pass(waiter, self, ball, 0.0, 1.0, &"", kick_fx)
+	if not _pass_ok(ball, self) or m.match_over:
+		return true
+	await _short_run(waiter, opfer_run_time, opfer_run_speed)
+	# 2) o Kaiser devolve e corre também
+	await m.run_curved_ground_pass(self, waiter, ball, 0.0, 1.0, &"", kick_fx)
+	if not _pass_ok(ball, waiter) or m.match_over:
+		return true
+	await _short_run(self, opfer_run_time, opfer_run_speed)
+	# 3) ao fim, o aliado faz um último passe rasteiro para o Kaiser
+	if _pass_ok(ball, waiter):
+		await m.run_curved_ground_pass(waiter, self, ball, 0.0, 1.0, &"", kick_fx)
+	return true
+
+
 # ---------- SISTEMA DE HABILIDADES (menu) ----------
 
 func get_skills() -> Array[Dictionary]:
 	var list: Array[Dictionary] = []
 	list.append({"id": SKILL_SHOT, "name": skill_label(_shot_skill_name(), CD_SHOT)})
+	list.append({"id": SKILL_PATH, "name": skill_label(_path_skill_name(), CD_PATH)})
 	list.append({"id": SKILL_EMPIRE, "name": "Empire (%d)" % _empire_uses_left})
 	list.append({"id": SKILL_KNEE, "name": skill_label("Auf die Knee", CD_KNEE)})
-	list.append({"id": SKILL_PREDATOR, "name": _rose_label("Predator", SKILL_PREDATOR)})
-	list.append({"id": SKILL_META, "name": _rose_label("Meta", SKILL_META)})
+	list.append({"id": SKILL_OPFER, "name": skill_label("Opfer", CD_OPFER)})
 	return list
 
 
-func _rose_label(title: String, variant: StringName) -> String:
-	var full: String = "Blue Rose: " + title
-	if is_rose_active() and _rose_variant == variant:
-		return "%s (ativo)" % full
-	if not is_rose_active() and not is_on_cooldown(CD_ROSE) \
-			and _rose_last == variant and _rose_streak >= rose_max_repeat:
-		return "%s (alterne)" % full
-	return skill_label(full, CD_ROSE)
+## Auf die Knee NÃO gasta a ação de habilidade do Kaiser (só uma ação geral do Palhaço)
+func skill_is_free(skill_id: StringName) -> bool:
+	return skill_id == SKILL_KNEE
 
 
 func can_use_skill(skill_id: StringName = &"default") -> bool:
@@ -804,12 +1408,14 @@ func can_use_skill(skill_id: StringName = &"default") -> bool:
 	match skill_id:
 		SKILL_SHOT:
 			return not is_on_cooldown(CD_SHOT) and get_shot_variant() != ShotVariant.NONE
+		SKILL_PATH:
+			return not is_on_cooldown(CD_PATH) and get_path_variant() != PathVariant.NONE
 		SKILL_EMPIRE:
 			return _empire_uses_left > 0 and not _empire_candidates().is_empty()
 		SKILL_KNEE:
 			return not is_on_cooldown(CD_KNEE) and _find_knee_clown() != null
-		SKILL_PREDATOR, SKILL_META:
-			return _can_use_rose(skill_id)
+		SKILL_OPFER:
+			return not is_on_cooldown(CD_OPFER) and _find_opfer_waiter() != null
 	return false
 
 
@@ -817,14 +1423,14 @@ func use_skill(skill_id: StringName = &"default") -> bool:
 	match skill_id:
 		SKILL_SHOT:
 			return await _use_shot_skill()
+		SKILL_PATH:
+			return await _use_path_skill()
 		SKILL_EMPIRE:
 			return await _use_empire()
 		SKILL_KNEE:
 			return await _use_knee()
-		SKILL_PREDATOR:
-			return await _use_rose(SKILL_PREDATOR)
-		SKILL_META:
-			return await _use_rose(SKILL_META)
+		SKILL_OPFER:
+			return await _use_opfer()
 	return false
 
 
@@ -848,9 +1454,11 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 						text = "Reação Química Superstar com a Kiyora: um Magnus mais forte, com uma trilha de rosas azuis. %d%% de chance de gol.\nA reação recarrega em %d rodadas." % [
 							_pct(chance_be_loved), star.cooldown_rounds]
 					else:
-						text = "Chute curvo que sobe durante o trajeto. %d%% de chance de gol." % _pct(chance_magnus)
+						text = "Chute com curva fixa que sobe até Suspenso durante o trajeto. %.1fx de força e %d%% de chance de gol." % [
+							magnus_force_mult, _pct(chance_magnus)]
 				ShotVariant.BEINSCHUSS:
-					text = "Bicicleta no ar. %d%% de chance de gol." % _pct(chance_beinschuss)
+					text = "Bicicleta no ar. %.1fx de força e %d%% de chance de gol. Com um inimigo no chão a %d, ele serve de apoio (+%d%%)." % [
+						beinschuss_force_mult, _pct(chance_beinschuss), int(beinschuss_support_radius), _pct(beinschuss_support_bonus)]
 				ShotVariant.IMPACT:
 					var reaction: ChemicalReaction = _find_reaction()
 					if reaction != null:
@@ -858,29 +1466,38 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 						text = "Reação Química Herbivicus com o Ness: chute reto, mais forte e mais rápido, com uma rosa azul gigante. %d%% de chance de gol.\nA reação recarrega em %d rodadas." % [
 							_pct(chance_emperor), reaction.cooldown_rounds]
 					else:
-						text = "Chute reto e rápido. %d%% de chance de gol." % _pct(chance_impact)
+						text = "Chute reto e rápido, %.1fx de força e %d%% de chance de gol. Inimigos a %d levam um pequeno empurrão (até %d)." % [
+							impact_force_mult, _pct(chance_impact), int(impact_push_radius), impact_push_max]
+				ShotVariant.UMFANG:
+					text = "Sem a bola por perto: mira agora e deixa um chute instantâneo armado neste turno e no do inimigo (um círculo azul mostra o alcance e a seta, a direção). Se a bola chegar a %d dele, chuta com %.1fx de força e %d%% de chance de gol." % [
+						int(umfang_radius), umfang_force_mult, _pct(chance_umfang)]
 				_:
 					text = "Chute especial que muda conforme a altura dele e da bola. De %d%% a %d%% de chance de gol." % [
 						_pct(minf(chance_magnus, minf(chance_beinschuss, chance_impact))),
 						_pct(maxf(chance_magnus, maxf(chance_beinschuss, chance_impact)))]
 			text += "\nRecarga: %d rodadas." % shot_cooldown
+		SKILL_PATH:
+			title = _path_skill_name()
+			if get_path_variant() == PathVariant.BLITZ:
+				text = "Vai até a bola Suspensa, salta e a domina, toca num aliado (até %d), faz um dash curvo de %d (uma linha tracejada mostra o caminho antes) e o aliado devolve a bola; Kaiser salta e chuta rápido (%.1fx, %d%%)." % [
+					int(blitz_ally_range), int(blitz_arc_length), blitz_force_mult, _pct(chance_blitz)]
+				text += "\nBlindheit: com %d+ inimigos a %d, o chute ganha +%.1fx e +%d%% e ignora a colisão deles." % [
+					blind_enemies_needed, int(blind_enemy_radius), blind_force_add, _pct(blind_bonus)]
+			else:
+				text = "Escolhe um aliado ou inimigo (até %d) e faz um dash em V contornando a pessoa (%d). Uma linha tracejada mostra o caminho antes de ele ir. Se alcançar a bola durante o dash, domina (ela gruda nele) e faz um QTE fácil para ganhar uma ação de habilidade. Em um Garçom, ele ganha um Correr de %d s mais rápido e o efeito do Garçom sobe %d%%." % [
+					int(path_pick_range), int(path_length), int(path_waiter_run_time), _pct(path_waiter_gain)]
+			text += "\nRecarga: %d rodadas (compartilhada)." % path_cooldown
 		SKILL_EMPIRE:
 			title = "Empire"
-			text = ("Marca dois aliados como servos pela partida toda. O Garçom dá +%d%% de chance de gol aos chutes do Kaiser depois de um passe dele; o Palhaço libera o Auf die Knee.\n"
-				+ "Usos restantes: %d.") % [_pct(waiter_bonus), _empire_uses_left]
+			text = (("Marca dois jogadores do time pela partida toda (dá para marcar só um). O Garçom dá +%d%% de chance de gol aos chutes do Kaiser depois de um passe dele, +%d de alcance no Passe e libera o Opfer; o Palhaço libera o Auf die Knee.\n"
+				+ "Usos restantes: %d.") % [_pct(waiter_bonus + _waiter_extra), int(waiter_pass_range_bonus), _empire_uses_left])
 		SKILL_KNEE:
 			title = "Auf die Knee"
-			text = "Obriga o Palhaço a passar a bola para o Kaiser.\nRecarga: %d rodadas." % knee_cooldown
-		SKILL_PREDATOR:
-			title = "Blue Rose: Predator"
-			text = ("Por %d rodadas: o Kaiser chuta mais forte, o Carrinho vai mais longe e os chutes ganham +%d%% de chance de gol.\n"
-				+ "Recarga: %d rodadas.") % [
-				rose_rounds, _pct(predator_shot_bonus), rose_cooldown]
-		SKILL_META:
-			title = "Blue Rose: Meta"
-			text = ("Por %d rodadas: o Kaiser chuta sem QTE e corre por mais tempo. Os Secundários ganham +%d ação de habilidade.\n"
-				+ "Recarga: %d rodadas.") % [
-				rose_rounds, meta_extra_ally_skills, rose_cooldown]
+			text = "Obriga o Palhaço a passar a bola para o Kaiser. Não gasta a ação de habilidade do Kaiser, só uma ação geral do Palhaço.\nRecarga: %d rodadas." % knee_cooldown
+		SKILL_OPFER:
+			title = "Opfer"
+			text = "Passe rasteiro (até %d) do Garçom para o Kaiser; o Garçom corre %d s (%.1fx), o Kaiser devolve e corre também, e no fim o aliado passa de novo para o Kaiser.\nRecarga: %d rodadas." % [
+				int(opfer_range), int(opfer_run_time), opfer_run_speed, opfer_cooldown]
 		_:
 			return {}
 	var icon: Texture2D = skill_icons.get(String(skill_id), skill_icons.get(skill_id)) as Texture2D
@@ -891,18 +1508,26 @@ func get_skill_info(skill_id: StringName) -> Dictionary:
 
 func reset_for_new_match() -> void:
 	super()
+	_pass_bonus_applied = false   # o super() já zerou o pass_range_bonus
 	_clear_servants()
 	_empire_uses_left = empire_starting_uses
-	_rose_variant = &""
-	_rose_until_round = -1
-	_rose_last = &""
-	_rose_streak = 0
-	_meta_ally_from = -1
-	_meta_ally_until = -1
-	_meta_granted_round = -1
+	_waiter_extra = 0.0
+	_vision = Vision.META
+	_sync_vision_fx()
+	_meta_rounds = 0
 	_aiming_magnus = false
+	_preview_kind = PathPreview.NONE
+	_preview_target = null
+	_umfang_turns_left = 0
+	_umfang_firing = false
+	_dash_token += 1
+	_dashing = false
+	if _trail != null:
+		_trail.stop()
+		_trail = null
+	_release_held_ball()
+	_run_boosts.clear()
 	run_duration = _base_run_duration
-	slide_distance = _base_slide_distance
 	queue_redraw()
 
 
@@ -911,30 +1536,46 @@ func reset_for_new_match() -> void:
 func _draw() -> void:
 	super()
 	var center := Vector2(0.0, -height)
-	var ring: float = placeholder_radius + 26.0
-	var gold := Color(0.816, 0.655, 0.0, 0.588)
-	var blue := Color(0.102, 0.2, 0.749, 0.588)
 
-	# Predator: anel dourado com "espinhos"
-	if is_predator_active():
-		draw_arc(center, ring, 0.0, TAU, 40, gold, 3.0)
-		for i in 8:
-			var d := Vector2.from_angle(TAU * float(i) / 8.0)
-			draw_line(center + d * ring, center + d * (ring + 7.0), gold, 3.0)
+	# (Metavisão = radar e Olhar do Predador = garras: nós próprios, veja KaiserFX.VisionAura)
 
-	# Meta: anel azul-escuro tracejado com um fio dourado por dentro
-	elif is_meta_active():
-		var segments: int = 12
-		for i in segments:
-			if i % 2 == 0:
-				var a0: float = TAU * float(i) / float(segments)
-				var a1: float = TAU * float(i + 1) / float(segments)
-				draw_arc(center, ring, a0, a1, 6, blue, 3.0)
-		draw_arc(center, ring - 5.0, 0.0, TAU, 40, Color(gold, 0.6), 1.5)
+	# Umfang armado: um círculo azul no alcance do disparo e uma seta simples na direção do chute
+	if _umfang_turns_left > 0 and _umfang_dir != Vector2.ZERO:
+		var ucol := Color(0.35, 0.58, 1.0, 0.9)
+		draw_circle(center, umfang_radius, Color(ucol, 0.1))
+		draw_arc(center, umfang_radius, 0.0, TAU, 40, ucol, 3.0, true)
+		var d: Vector2 = _umfang_dir
+		var side: Vector2 = d.orthogonal() * 8.0
+		var head_base: Vector2 = center + d * (umfang_radius - 16.0)
+		draw_line(center + d * 8.0, head_base, ucol, 3.0, true)
+		draw_colored_polygon(PackedVector2Array([center + d * (umfang_radius - 2.0), head_base + side, head_base - side]), ucol)
 
 	# Magnus: linha tracejada = o caminho real da bola (a seta laranja do Player é a linha da mira)
 	if is_aiming and _aiming_magnus:
 		_draw_magnus_preview()
+
+	# Path / Blitzkrieg / Blindheit: prévia tracejada de para onde o dash vai
+	if is_aiming and _preview_kind != PathPreview.NONE:
+		_draw_dash_preview()
+
+
+## Linha tracejada com seta: o caminho que o Kaiser fará (mesmas contas do dash de verdade)
+func _draw_dash_preview() -> void:
+	var pts: Array[Vector2] = [Vector2.ZERO]
+	match _preview_kind:
+		PathPreview.PATH:
+			if not is_instance_valid(_preview_target):
+				return
+			for pt: Vector2 in _path_points(_preview_target, aim_direction):
+				pts.append(to_local(pt))
+		PathPreview.BLITZ:
+			var ball: Ball = _get_ball()
+			if ball == null:
+				return
+			pts.append(to_local(ball.global_position))   # 1º trecho: até a bola
+			for pt: Vector2 in _arc_points(ball.global_position, aim_direction, blitz_arc_length, _blitz_bend):
+				pts.append(to_local(pt))                  # 2º trecho: o dash curvo
+	KaiserFX.draw_dash_preview(self, pts, Color(0.45, 0.68, 1.0))
 
 
 ## Previsão do Magnus (estilo do Rin): simula a MESMA condução do _drive_ball (velocidade que
@@ -948,6 +1589,8 @@ func _draw_magnus_preview() -> void:
 	var speed: float = kick_force_ground * kick_force_to_speed
 	if _find_superstar() != null:
 		speed *= be_loved_force_mult   # Be Loved: mais forte, então a linha vai mais longe
+	else:
+		speed *= magnus_force_mult
 	var dt: float = 1.0 / 60.0
 	var air_factor: float = maxf(0.0, 1.0 - ball.air_drag * dt)
 	var pos: Vector2 = start

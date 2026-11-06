@@ -42,7 +42,7 @@ enum ZoneVariant { NONE, CREATE, SHOT }
 @export_group("Match Cut-In / Once More")
 @export var cutin_side_dash: float = 150.0
 @export var cutin_forward_dash: float = 180.0
-@export var cutin_force_mult: float = 0.53
+@export var cutin_force_mult: float = 0.74
 @export_range(0.0, 1.0) var cutin_chance: float = 0.45
 @export var cutin_cooldown: int = 2
 @export var dash_speed: float = 850.0              # velocidade dos dashes (px/s)
