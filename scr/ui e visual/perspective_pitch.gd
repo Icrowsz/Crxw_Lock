@@ -31,6 +31,10 @@ var team_color: Color = Color(0.9, 0.22, 0.27)
 var enemy_color: Color = Color(0.11, 0.44, 0.88)
 var targets: Array[Node2D] = []          # jogadores + goleiro do time + adversários (só visual)
 var slot_marks: Array[Vector2] = []      # marcas de formação (globais)
+## Áreas proibidas desenhadas em vermelho (retângulos em coordenadas LOCAIS do campo; ex: grande área no pênalti)
+var forbidden_areas: Array[Rect2] = []
+## Jogador realçado com um anel dourado (ex: o cobrador na tela de falta)
+var highlight: Node2D = null
 
 var flipped: bool = false
 var hover_index: int = -1
@@ -215,6 +219,14 @@ func _draw() -> void:
 	# Borda do campo
 	draw_polyline(PackedVector2Array([bl, br, tr, tl, bl]), BORDER_COLOR, 2.5)
 
+	# Áreas proibidas
+	for r in forbidden_areas:
+		var corners := PackedVector2Array()
+		for c in [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]:
+			corners.append(_global_to_screen(field.to_global(c)))
+		draw_colored_polygon(corners, Color(0.95, 0.2, 0.2, 0.18))
+		draw_polyline(corners + PackedVector2Array([corners[0]]), Color(1.0, 0.35, 0.3, 0.85), 2.0)
+
 	# Marcas de formação
 	for s in slot_marks:
 		var p: Vector2 = _global_to_screen(s)
@@ -239,6 +251,8 @@ func _draw() -> void:
 			DOT_HOVER_RING if strong else Color(1, 1, 1, 0.75), 3.0 if strong else 1.6)
 		if is_keeper:
 			draw_arc(p, r + 4.0, 0.0, TAU, 26, Color(0.98, 0.98, 0.5, 0.85), 2.0)
+		if t == highlight:
+			draw_arc(p, r + 5.0, 0.0, TAU, 26, Color(1.0, 0.82, 0.2), 3.0)
 
 		var txt: String = "G" if is_keeper else str(_slot_number(t))
 		draw_string_outline(font, p + Vector2(-9.0, 5.0), txt,

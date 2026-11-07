@@ -157,6 +157,7 @@ static func replace_player(old: Player, id: String) -> Player:
 	var node_name: StringName = old.name
 
 	fresh.team = old.team          # antes de entrar na cena
+	fresh.roster_role = String(entry.get("role", ""))   # posição (bônus por zona), se o Inspector deixou em AUTO
 	parent.remove_child(old)       # libera o nome e tira o antigo do grupo "players"
 	fresh.name = node_name         # o nome aparece no placar de gols
 	parent.add_child(fresh)

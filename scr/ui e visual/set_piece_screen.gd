@@ -1,29 +1,30 @@
 class_name SetPieceScreen
 extends CanvasLayer
 ## Telas da falta / pênalti (criada pelo FoulManager):
-##   1) show_whistle(): aviso grande "FALTA!" / "PÊNALTI!" com quem cobra.
-##   2) run_setup(): preparação. O COBRADOR se escolhe numa lista (rostinho + nome) no canto de baixo à direita; ele vai até a bola.
-##      Arraste qualquer jogador com o mouse para reposicioná-lo (no pênalti a grande área é proibida e fica marcada
-##      em vermelho). Cada time confirma no próprio botão; a cobrança só começa quando os DOIS confirmam.
+##   1) show_whistle(): aviso grande "FALTA!" / "PÊNALTI!" / "LATERAL!" / "ESCANTEIO!" com quem cobra.
+##   2) run_setup(): preparação. Na lateral direita da tela fica um CAMPINHO em perspectiva (o mesmo da tela de
+##      formação, perspective_pitch.gd): escolha o time nos botões de cima e arraste as bolinhas dele para
+##      reposicionar os jogadores (no pênalti a grande área é proibida e fica marcada em vermelho). Embaixo dele
+##      fica a lista do COBRADOR (rostinho + nome); o cobrador vai até a bola e não se arrasta.
+##      Cada time confirma no próprio botão; a cobrança só começa quando os DOIS confirmam.
 ##      Mexer num jogador de um time desfaz a confirmação desse time.
 ##
 ## Também tem SetPieceScreen.toast(host, texto, cor): aviso rápido no pé da tela.
 
 signal finished
 
-const PICK_RADIUS: float = 40.0    # distância (px do campo) para pegar um jogador com o mouse
-const DRAG_THRESHOLD: float = 7.0  # menos que isto = foi um clique (escolhe cobrador), mais = arrasto
+const SIDE_WIDTH: float = 400.0      # largura da coluna da direita (campinho + lista de cobradores)
+const PITCH_HEIGHT: float = 270.0
+const TAKER_LIST_MAX_HEIGHT: float = 312.0   # acima disso a lista rola (11 jogadores no Futebol Medonho)
 
 var foul: FoulManager
 var manager: MatchManager
 
 var _ready_teams: Dictionary = {}   # time -> true se já confirmou
-var _hover: Player = null
-var _drag: Player = null
-var _drag_offset: Vector2 = Vector2.ZERO
-var _press_pos: Vector2 = Vector2.ZERO
-var _moved: bool = false
 var _done: bool = false
+var _pitch: PerspectivePitch
+var _pitch_team: int = -1                  # de qual time as bolinhas podem ser arrastadas agora
+var _pitch_buttons: Dictionary = {}        # time -> Button (quem está sendo posicionado)
 
 var _banner: Control
 var _setup_root: Control
@@ -69,9 +70,8 @@ func show_whistle() -> void:
 	box.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	center.add_child(box)
 
-	var penalty: bool = foul.kind == FoulManager.KIND_PENALTY
 	var color: Color = TeamStyle.color_of(foul.fouled_team)
-	var big: Label = UiStyle.make_label("PÊNALTI!" if penalty else "FALTA!", 110, UiStyle.ACCENT_COLOR)
+	var big: Label = UiStyle.make_label(foul.kind_title() + "!", 110, UiStyle.ACCENT_COLOR)   # FALTA / PÊNALTI / LATERAL / ESCANTEIO
 	big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	box.add_child(big)
 	var sub: Label = UiStyle.make_label("%s cobra" % manager.get_team_name(foul.fouled_team), 40, color.lightened(0.3))
@@ -128,11 +128,11 @@ func _build_setup() -> void:
 	var tv := VBoxContainer.new()
 	tv.add_theme_constant_override("separation", 2)
 	top.add_child(tv)
-	var title: Label = UiStyle.make_label("%s para %s" % ["PÊNALTI" if penalty else "FALTA", manager.get_team_name(foul.fouled_team)],
+	var title: Label = UiStyle.make_label("%s para %s" % [foul.kind_title(), manager.get_team_name(foul.fouled_team)],
 		30, UiStyle.ACCENT_COLOR)
 	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	tv.add_child(title)
-	var how: String = "Escolha o cobrador na lista (embaixo à direita)\nArraste os jogadores para reposicionar"
+	var how: String = "Escolha o cobrador na lista (à direita)\nArraste as bolinhas no campinho para reposicionar"
 	if penalty:
 		how += "\nNinguém pode ficar na grande área"
 	how += "\nNinguém dentro do gol · %s fica a %d px+ do cobrador" % [manager.get_team_name(foul.fouling_team),
@@ -168,23 +168,131 @@ func _build_setup() -> void:
 	_status = UiStyle.make_label("", 17, UiStyle.MUTED_COLOR)
 	_status.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	bv.add_child(_status)
-	_build_taker_list()
+	_build_side_panel()
 	_refresh_buttons()
 	UiStyle.pop(top, 1.15, 0.3)
 	UiStyle.pop(bottom, 1.15, 0.3)
 
 
-## Lista de personagens do time que sofreu a falta (com rostinho), no lugar do menu de habilidades
-func _build_taker_list() -> void:
+## Coluna da direita: o campinho (arrastar jogadores) e, embaixo, a lista de cobradores
+func _build_side_panel() -> void:
+	var col := VBoxContainer.new()
+	col.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	col.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	col.grow_vertical = Control.GROW_DIRECTION_END
+	col.offset_right = -12.0
+	col.offset_top = 64.0   # abaixo dos botões de pausa
+	col.custom_minimum_size = Vector2(SIDE_WIDTH, 0.0)
+	col.add_theme_constant_override("separation", 8)
+	_setup_root.add_child(col)
+	_build_pitch_panel(col)
+	_build_taker_list(col)
+
+
+## Campinho em perspectiva: botões escolhem de qual time são as bolinhas que dá para arrastar
+func _build_pitch_panel(parent: Control) -> void:
 	var panel := PanelContainer.new()
 	UiStyle.style_panel(panel, Color(TeamStyle.color_of(foul.fouled_team), 0.7))
-	panel.set_anchors_preset(Control.PRESET_BOTTOM_RIGHT)
-	panel.grow_horizontal = Control.GROW_DIRECTION_BEGIN
-	panel.grow_vertical = Control.GROW_DIRECTION_BEGIN
-	panel.offset_right = -12.0
-	panel.offset_bottom = -12.0
-	panel.custom_minimum_size = Vector2(272.0, 0.0)
-	_setup_root.add_child(panel)
+	parent.add_child(panel)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	panel.add_child(v)
+
+	var head: Label = UiStyle.make_label("Posições", 18, UiStyle.ACCENT_COLOR)
+	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	v.add_child(head)
+
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 8)
+	v.add_child(row)
+	for t in manager.team_count:
+		var b := Button.new()
+		b.text = "Mover %s" % manager.get_team_name(t)
+		b.focus_mode = Control.FOCUS_NONE
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.custom_minimum_size = Vector2(0.0, 36.0)
+		UiStyle.style_button(b, TeamStyle.color_of(t))
+		b.pressed.connect(_select_pitch_team.bind(t, true))
+		row.add_child(b)
+		_pitch_buttons[t] = b
+
+	_pitch = PerspectivePitch.new()
+	_pitch.field = foul.field
+	_pitch.custom_minimum_size = Vector2(0.0, PITCH_HEIGHT)
+	_pitch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_pitch.slot_dragged.connect(_on_pitch_dragged)
+	var marks: Array[Vector2] = [foul.spot]   # anel branco = onde está a bola
+	_pitch.slot_marks = marks
+	if foul.kind == FoulManager.KIND_PENALTY:
+		var areas: Array[Rect2] = [foul.field.get_penalty_area_rect(foul.fouling_team)]
+		_pitch.forbidden_areas = areas
+	v.add_child(_pitch)
+
+	var tip: Label = UiStyle.make_label("Arraste as bolinhas do time escolhido · anel dourado = cobrador", 13, UiStyle.MUTED_COLOR)
+	tip.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	tip.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	v.add_child(tip)
+
+	_select_pitch_team(foul.fouled_team, false)
+
+
+## Passa a poder arrastar os jogadores deste time (o campinho gira para o gol dele ficar perto)
+func _select_pitch_team(team: int, animate: bool) -> void:
+	if _done or _pitch == null:
+		return
+	_pitch_team = team
+	_pitch.team = team
+	_pitch.team_color = TeamStyle.color_of(team)
+	_pitch.enemy_color = TeamStyle.color_of((team + 1) % maxi(manager.team_count, 2))
+	var want_flip: bool = foul.field.defend_dir(team) > 0
+	if animate:
+		_pitch.flip_to(want_flip)
+	else:
+		_pitch.flipped = want_flip
+
+	# Do time escolhido primeiro (números 1..n, igual à lista), depois o goleiro dele e por fim os adversários
+	var mine: Array[Node2D] = []
+	var keepers_mine: Array[Node2D] = []
+	var others: Array[Node2D] = []
+	for p: Player in get_tree().get_nodes_in_group("players"):
+		if p.team == team:
+			mine.append(p)
+		else:
+			others.append(p)
+	for k: Goalkeeper in get_tree().get_nodes_in_group("goalkeepers"):
+		if k.team == team:
+			keepers_mine.append(k)
+		else:
+			others.append(k)
+	var all_targets: Array[Node2D] = []
+	all_targets.append_array(mine)
+	all_targets.append_array(keepers_mine)
+	all_targets.append_array(others)
+	_pitch.targets = all_targets
+	_pitch.queue_redraw()
+
+	for t in _pitch_buttons:
+		(_pitch_buttons[t] as Button).modulate = Color.WHITE if t == team else Color(1, 1, 1, 0.55)
+
+
+## Arrastou uma bolinha no campinho: o jogador vai para lá, respeitando as regras (gol, grande área, distância)
+func _on_pitch_dragged(target: Node2D, new_global: Vector2) -> void:
+	if _done or not (target is Player):
+		return   # goleiro não se arrasta
+	var p := target as Player
+	if p == foul.taker:
+		return   # o cobrador fica na bola
+	foul.stop_motion(p)
+	p.global_position = foul.constrain_position(p, new_global)
+	_ready_teams[p.team] = false
+	_refresh_buttons()
+
+
+## Lista de personagens do time que sofreu a falta (com rostinho); rola quando há muitos jogadores
+func _build_taker_list(parent: Control) -> void:
+	var panel := PanelContainer.new()
+	UiStyle.style_panel(panel, Color(TeamStyle.color_of(foul.fouled_team), 0.7))
+	parent.add_child(panel)
 	_taker_panel = panel
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 6)
@@ -196,6 +304,14 @@ func _build_taker_list() -> void:
 	for p: Player in get_tree().get_nodes_in_group("players"):
 		if p.team == foul.fouled_team:
 			team_players.append(p)
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(0.0, minf(float(team_players.size()) * 52.0, TAKER_LIST_MAX_HEIGHT))
+	v.add_child(scroll)
+	var list := VBoxContainer.new()
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	list.add_theme_constant_override("separation", 6)
+	scroll.add_child(list)
 	for p in team_players:
 		var b := Button.new()
 		b.text = " " + p.get_display_name()
@@ -207,7 +323,7 @@ func _build_taker_list() -> void:
 		b.add_theme_constant_override("icon_max_width", 40)
 		UiStyle.style_button(b, TeamStyle.color_of(p.team))
 		b.pressed.connect(_on_taker_picked.bind(p))
-		v.add_child(b)
+		list.add_child(b)
 		_taker_buttons[p] = b
 	_refresh_taker_list()
 
@@ -300,7 +416,6 @@ func _finish() -> void:
 		return
 	_done = true
 	_restore_skill_menu()
-	_drag = null
 	await get_tree().create_timer(0.35, true, false, true).timeout
 	finished.emit()
 
@@ -311,65 +426,12 @@ func _process(_delta: float) -> void:
 	if manager.match_over:
 		_finish()
 		return
-	if _drag == null:
-		_hover = _player_under_mouse()
 	_menu_scan -= _delta
 	_hide_skill_menu()
 	_overlay.queue_redraw()
-
-
-# ---------- MOUSE: ESCOLHER COBRADOR / ARRASTAR ----------
-
-func _mouse_world() -> Vector2:
-	return foul.field.get_global_mouse_position()
-
-
-func _player_under_mouse() -> Player:
-	var m: Vector2 = _mouse_world()
-	var best: Player = null
-	var best_d: float = PICK_RADIUS
-	for p: Player in get_tree().get_nodes_in_group("players"):
-		var d: float = (p.global_position + Vector2(0.0, -18.0)).distance_to(m)
-		if d < best_d:
-			best_d = d
-			best = p
-	return best
-
-
-func _unhandled_input(event: InputEvent) -> void:
-	if _done or _setup_root == null:
-		return
-	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
-		if event.pressed:
-			var p: Player = _player_under_mouse()
-			if p == null:
-				return
-			_drag = p
-			_hover = p
-			_moved = false
-			_press_pos = event.position
-			_drag_offset = p.global_position - _mouse_world()
-			get_viewport().set_input_as_handled()
-		elif _drag != null:
-			_release_drag()
-			get_viewport().set_input_as_handled()
-	elif event is InputEventMouseMotion and _drag != null:
-		if not _moved and (event.position - _press_pos).length() > DRAG_THRESHOLD:
-			_moved = true
-		if _moved and _drag != foul.taker:
-			foul.stop_motion(_drag)
-			_drag.global_position = foul.constrain_position(_drag, _mouse_world() + _drag_offset)
-			_ready_teams[_drag.team] = false
-			_refresh_buttons()
-		get_viewport().set_input_as_handled()
-
-
-func _release_drag() -> void:
-	var p: Player = _drag
-	_drag = null
-	if _moved or p == null:
-		return
-	# Foi só um clique no campo: o cobrador agora se escolhe na lista (embaixo à direita)
+	if _pitch != null:
+		_pitch.highlight = foul.taker
+		_pitch.queue_redraw()   # os jogadores andam sozinhos até a bola: o campinho acompanha
 
 
 # ---------- DESENHO POR CIMA DO CAMPO ----------
@@ -413,8 +475,6 @@ class _Overlay extends Control:
 				draw_string(font, at, label, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, UiStyle.ACCENT_COLOR)
 			else:
 				draw_arc(pos, radius, 0.0, TAU, 32, Color(color, 0.6), 1.5)
-			if p == screen._hover or p == screen._drag:
-				draw_arc(pos, radius + 2.0 * zoom, 0.0, TAU, 32, Color(1, 1, 1, 0.95), 2.0)
 
 
 # ---------- AVISO RÁPIDO ----------

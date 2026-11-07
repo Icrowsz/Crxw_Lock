@@ -8,6 +8,9 @@ const PRESETS := {
 	6: ["3-2-1", "2-3-1", "1-3-2", "3-1-2", "2-1-2-1", "4-1-1"],
 	7: ["3-3-1", "2-3-2", "4-2-1", "3-2-2", "2-4-1", "2-2-3",
 		"3-1-2-1", "4-1-2", "2-1-3-1"],
+	# FUTEBOL MEDONHO (11 por time = 10 de linha + o goleiro, que não entra aqui): só aparecem nesse modo,
+	# pois o jogo normal tem outro número de jogadores. A primeira é a que o time começa usando.
+	10: ["4-4-2", "4-3-3", "3-5-2", "4-2-3-1", "5-3-2", "4-5-1", "3-4-3", "4-1-4-1"],
 }
 
 const NICKNAMES := {
@@ -38,6 +41,14 @@ const NICKNAMES := {
 	"3-1-2-1": "Losango com três na defesa",
 	"4-1-2": "Defesa sólida com dois atacantes",
 	"2-1-3-1": "Losango ofensivo",
+	"4-4-2": "Clássica: duas linhas de quatro",
+	"4-3-3": "Três atacantes, meio de controle",
+	"3-5-2": "Três zagueiros e alas no meio",
+	"4-2-3-1": "Dois volantes e um armador atrás do centroavante",
+	"5-3-2": "Retranca de cinco, contra-ataque em dupla",
+	"4-5-1": "Meio-campo povoado, um só na frente",
+	"3-4-3": "Ofensiva: três zagueiros e três no ataque",
+	"4-1-4-1": "Um volante protegendo a zaga",
 }
 
 const DEPTH_FIRST := 0.30

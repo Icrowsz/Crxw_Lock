@@ -31,7 +31,7 @@ extends CanvasLayer
 ## Depois de confirmar um time, o botão "Voltar" deixa editar o time anterior de novo.
 ## Passar o mouse numa formação pronta mostra os espaços dela no campo antes de aplicar.
 ##
-## BANCO: embaixo do campo há 3 vagas de RESERVAS por time (BenchManager.RESERVES).
+## BANCO: embaixo do campo há 3 vagas de RESERVAS por time (7 no Futebol Medonho) (BenchManager.RESERVES).
 ## Clicar numa vaga abre o mesmo seletor; o reserva escolhido entra numa substituição durante o jogo.
 
 signal finished
@@ -734,7 +734,7 @@ func _build_ui() -> void:
 	# Reservas
 	_bench_row = HBoxContainer.new()
 	_bench_row.alignment = BoxContainer.ALIGNMENT_CENTER
-	_bench_row.add_theme_constant_override("separation", 12)
+	_bench_row.add_theme_constant_override("separation", 12 if BenchManager.RESERVES <= 4 else 6)
 	right.add_child(_bench_row)
 
 	# Voltar (editar de novo o time que já confirmou) + Confirmar
@@ -1176,7 +1176,8 @@ func _rebuild_bench() -> void:
 		var entry: Dictionary = CharacterRoster.find(id) if id != "" else {}
 		var chip := Button.new()
 		chip.focus_mode = Control.FOCUS_NONE
-		chip.custom_minimum_size = Vector2(82.0, 82.0)
+		var chip_size: float = 82.0 if BenchManager.RESERVES <= 4 else 60.0   # 7 reservas precisam caber na linha
+		chip.custom_minimum_size = Vector2(chip_size, chip_size)
 		chip.expand_icon = true
 		chip.icon_alignment = HORIZONTAL_ALIGNMENT_CENTER
 		chip.tooltip_text = "Reserva %d: %s\nEntra no jogo quando o time faz uma substituição (máx. %d por partida)" \

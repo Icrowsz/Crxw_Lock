@@ -31,6 +31,17 @@ const ACTION_PHOTO: StringName = &"toggle_photo_mode"
 @export var clamp_to_field: bool = true
 @export var field_margin: float = 150.0
 
+@export_group("Ajuste ao tamanho do campo")
+## Afasta o enquadramento normal para o campo inteiro caber na tela. Só age no Futebol Medonho
+## (campo gigante); no jogo normal vale o zoom/posição da cena, como sempre.
+@export var auto_fit_field: bool = true
+## Faz o ajuste também no jogo normal (só afasta, nunca aproxima além do zoom da cena)
+@export var auto_fit_always: bool = false
+## Folga ao redor do campo no enquadramento, em px do mundo
+@export var fit_margin: Vector2 = Vector2(120.0, 90.0)
+## Inclui os bancos de reservas (fora da linha lateral de baixo) no enquadramento
+@export var fit_include_benches: bool = true
+
 @export_group("Modo foto (F3)")
 ## Telas acima desta camada (formação, pausa...) bloqueiam o modo foto
 @export var photo_modal_layer: int = 10
@@ -42,6 +53,10 @@ const ACTION_PHOTO: StringName = &"toggle_photo_mode"
 
 var _home_position: Vector2
 var _home_zoom: Vector2
+## Zoom "de jogada" (o da cena): focar um jogador / escolher passe é medido a partir dele, e não do
+## zoom afastado do campo grande. No jogo normal é igual ao _home_zoom.
+var _base_zoom: Vector2
+var _home_ready: bool = false
 var _focused: bool = false
 var _manager: MatchManager = null
 
@@ -60,6 +75,7 @@ func _ready() -> void:
 	_ensure_input_map()
 	_home_position = global_position
 	_home_zoom = zoom
+	_base_zoom = zoom
 	_setup.call_deferred()   # o MatchManager e os jogadores entram na árvore no mesmo frame
 
 
@@ -78,6 +94,8 @@ static func _ensure_input_map() -> void:
 
 
 func _setup() -> void:
+	_refresh_home(true)
+	get_viewport().size_changed.connect(_refresh_home)   # janela redimensionada: enquadra de novo
 	_manager = get_tree().get_first_node_in_group("match_manager") as MatchManager
 	if _manager:
 		_manager.turn_ended.connect(_on_reset)
@@ -88,6 +106,34 @@ func _setup() -> void:
 	for p: Player in get_tree().get_nodes_in_group("players"):
 		_watch(p)
 	get_tree().node_added.connect(_on_node_added)   # jogadores criados depois (troca de formação)
+
+
+## Enquadramento normal (o "home"). No campo grande (Medonho) ele é calculado para o campo inteiro
+## (e os bancos) caber na janela; senão fica o que está na cena.
+func _refresh_home(snap: bool = false) -> void:
+	var field := get_tree().get_first_node_in_group("field") as Field
+	var fit: bool = auto_fit_field and (GameMode.medonho or auto_fit_always)
+	if not fit or field == null:
+		if _home_ready:
+			_home_zoom = _base_zoom   # (volta ao da cena se o ajuste foi desligado)
+		_home_ready = true
+		return
+	var half: Vector2 = field.pitch_size * 0.5
+	var top: float = -half.y - fit_margin.y
+	var bottom: float = half.y + fit_margin.y
+	if fit_include_benches and field.show_benches:
+		bottom += field.bench_distance + 40.0
+	var width: float = half.x * 2.0 + fit_margin.x * 2.0
+	var height: float = bottom - top
+	var view: Vector2 = get_viewport_rect().size
+	var z: float = minf(view.x / width, view.y / height)
+	z = minf(z, _base_zoom.x)   # só afasta: nunca fica mais perto que o zoom da cena
+	_home_zoom = Vector2(z, z)
+	_home_position = field.global_position + Vector2(0.0, (top + bottom) * 0.5)
+	_home_ready = true
+	if snap:
+		zoom = _home_zoom                  # primeira vez: já começa enquadrado, sem "voo" até lá
+		global_position = _home_position
 
 
 func _on_node_added(node: Node) -> void:
@@ -164,7 +210,7 @@ func _process(delta: float) -> void:
 			var z: float = focus_zoom
 			if _manager.phase == MatchManager.Phase.CHOOSING_PASS_TARGET:
 				z = pass_target_zoom
-			target_zoom = _home_zoom * z
+			target_zoom = _base_zoom * z   # a partir do zoom da cena (no Medonho o "home" é bem mais afastado)
 			target_pos = actor.global_position + Vector2(0.0, -actor.height * 0.5)
 			# Bola saindo em velocidade (chute, passe): acompanha ela
 			if follow_ball_in_motion and _manager.phase == MatchManager.Phase.EXECUTING:

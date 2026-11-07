@@ -3,8 +3,8 @@ extends Node
 ## FALTAS E PÊNALTIS.
 ##
 ## COMO UMA FALTA ACONTECE
-## - Um jogador do time que NÃO está jogando o turno cai por causa de uma ação do adversário (Carrinho ou
-##   qualquer habilidade que chame knock_down()). Aí o juiz tem `whistle_chance` (50%) de apitar.
+## - SÓ O CARRINHO pode gerar falta: um jogador do time que NÃO está jogando o turno cai porque um adversário
+##   deu Carrinho nele. Aí o juiz tem `whistle_chance` de apitar. Queda causada por HABILIDADE nunca é falta.
 ## - Quedas por erro do próprio jogador (errou o QTE do chute) NÃO contam: Player.knock_down_by_mistake().
 ##   Cair no turno do próprio time (ex: um contra-ataque que derruba quem deu o Carrinho) também não conta.
 ## - Se o jogador caído estava dentro da grande área de quem fez a falta, é PÊNALTI; senão, falta comum.
@@ -14,15 +14,29 @@ extends Node
 ##   2. Tela de preparação (set_piece_screen.gd): o time que sofreu a falta escolhe o COBRADOR (clique num
 ##      jogador dele; começa com o que caiu) e ele vai até a bola. Os dois times podem ARRASTAR os próprios
 ##      jogadores para onde quiserem (no pênalti ninguém entra na grande área) e cada um confirma.
-##   3. Turno da cobrança: o cobrador é o Protagonista e o time sofre a falta joga um turno com ações próprias:
-##        cobrador   = 1 ação geral (só Chutar ou Passe: a cobrança) + 2 de habilidade;
-##        secundários = 2 gerais + 1 de habilidade (pool compartilhada, como no turno normal).
+##   3. Turno da cobrança: o cobrador é o Protagonista e o time que sofreu a falta joga um turno com as MESMAS
+##      ações de um turno comum (as do MatchManager: protagonist_*/secondary_*, então acompanham o modo de jogo,
+##      como o Futebol Medonho). Todas as ações valem para o cobrador (Correr, Pular, Carrinho, habilidades...).
 ##      Cobrar (o Chutar, renomeado) = mais forte (kick_force_mult), chance 45%, e é o ÚNICO chute que abre a
-##      telinha de efeito (Kick Spin Picker). Passe = alcance maior (+50).
+##      telinha de efeito (Kick Spin Picker). Passe = alcance maior (+50). O bônus vale para a PRIMEIRA bola que o
+##      cobrador bater (o MatchManager avisa por note_kick()).
 ##      Os secundários só podem Chutar/Passar DEPOIS da cobrança (quem bate primeiro é o cobrador); o resto vale antes.
+##      No lateral o cobrador não pode Chutar (só Passar).
 ##   4. Acabou o turno da cobrança: a vez vai para o time que FEZ a falta (ele recomeça o turno dele, com ações novas,
 ##      como na rodada bônus) e depois o jogo segue a ordem de sempre. O time que cobrou NÃO joga de novo em seguida.
 ##
+## LATERAL E ESCANTEIO (mesma tela de preparação e mesmo turno de cobrança da falta)
+## - Quando a bola cruza uma linha (Field.ball_left_pitch), quem cobra é o time ADVERSÁRIO de quem tocou nela por último.
+##   Linha lateral = lateral; linha de fundo tocada por quem defende aquele gol = escanteio. (Linha de fundo tocada por
+##   quem ataca seria tiro de meta: ainda não existe, a bola quica como antes.)
+## - A bola fica parada na linha até o turno poder ser interrompido (fim da ação em andamento).
+## - O TURNO EM ANDAMENTO É PULADO: se era o do time que tirou a bola, ele conta como jogado e a vez vai para quem cobra;
+##   se era o do próprio time cobrador, o turno dele vira a cobrança. O turno da cobrança conta como o turno do time e,
+##   depois dele, a ordem segue normal (não há turno bônus como na falta).
+## - Cobrador, preparação e regra de posicionamento são os da falta: o time que tirou a bola não fica a menos de
+##   opponent_min_distance do cobrador. Lateral: o cobrador só pode PASSAR. Escanteio: Cobrar (chute) ou Passe.
+## - Desligar só isto: out_enabled = false (ou use_out_of_play no MatchManager).
+
 ## Para desligar tudo: enabled = false (ou use_fouls no MatchManager).
 
 signal whistled(kind: StringName, fouled_team: int, victim: Player)
@@ -33,23 +47,21 @@ signal set_piece_finished(kind: StringName, team: int)
 
 const KIND_FOUL: StringName = &"foul"
 const KIND_PENALTY: StringName = &"penalty"
+const KIND_THROW_IN: StringName = &"throw_in"   # lateral
+const KIND_CORNER: StringName = &"corner"       # escanteio
 
 enum State { IDLE, SETUP, TAKER_TURN }
 
 @export var enabled: bool = true
 ## Chance de o juiz apitar quando alguém é derrubado por uma ação do adversário
-@export_range(0.0, 1.0) var whistle_chance: float = 0.9
+@export_range(0.0, 1.0) var whistle_chance: float = 0.4
 
 @export_group("Cobrança")
 @export_range(0.0, 1.0) var foul_shot_chance: float = 0.45      # chance do Chutar da falta
 @export_range(0.0, 1.0) var penalty_shot_chance: float = 0.45   # chance do Chutar do pênalti
 @export var kick_force_mult: float = 2    # o "Cobrar" (Chutar da cobrança) é bem mais forte
 @export var pass_range_bonus: float = 50.0   # o Passe da cobrança alcança mais (px)
-## Ações do turno da cobrança
-@export var taker_general_actions: int = 1       # a cobrança (Chutar ou Passe)
-@export var taker_skill_actions: int = 2
-@export var secondary_general_actions: int = 2   # pool compartilhada entre os secundários
-@export var secondary_skill_actions: int = 1
+## (O número de ações do turno da cobrança é o do turno comum: vem do MatchManager, veja _begin_taker_turn.)
 ## Distância do cobrador até a bola (px, no chão). A bola fica na "ponta" dele: o círculo dele encosta nela, sem sobrepor.
 ## Menor que isso a bola entra "por baixo" do cobrador; maior abre um vão entre os dois.
 @export var taker_distance: float = 46.0
@@ -58,6 +70,16 @@ enum State { IDLE, SETUP, TAKER_TURN }
 @export var opponent_min_distance: float = 300.0
 ## Ninguém pode ficar dentro do gol (entre as traves, na linha de fundo): folga em px em volta das traves
 @export var goal_block_margin: float = 8.0
+
+@export_group("Lateral e escanteio")
+## Liga o lateral e o escanteio (independe de enabled, que liga as faltas)
+@export var out_enabled: bool = true
+## Chance do Cobrar (chute direto) do escanteio
+@export_range(0.0, 1.0) var corner_shot_chance: float = 0.3
+## O Passe do lateral alcança mais (px). O do escanteio usa pass_range_bonus (o da falta).
+@export var throw_in_pass_range_bonus: float = 30.0
+## O lateral é cobrado a pelo menos isto (px) das pontas da linha lateral (perto demais seria quase escanteio)
+@export var throw_in_corner_margin: float = 40.0
 
 @export_group("Aviso")
 @export var banner_time: float = 1.5
@@ -79,6 +101,8 @@ var _motion: Dictionary = {}   # Player -> Tween (jogadores sendo levados para a
 var _screen: SetPieceScreen
 var _kick_done: bool = false   # o cobrador já usou a ação geral dele (a cobrança)
 var _scan_wait: float = 0.0    # intervalo entre as buscas do botão "Chutar"
+var _out: Dictionary = {}      # lateral/escanteio esperando a jogada poder parar (kind, spot, taking_team, sender_team)
+var _cuts: int = 0             # quantos turnos já foram pulados para chegar ao time cobrador (trava de segurança)
 
 
 func _ready() -> void:
@@ -90,6 +114,15 @@ func _ready() -> void:
 		return
 	_watch_all.call_deferred()   # o MatchManager e os jogadores entram na árvore no mesmo frame
 	get_tree().node_added.connect(_on_node_added)
+	_connect_field.call_deferred()
+
+
+func _connect_field() -> void:
+	field = get_tree().get_first_node_in_group("field") as Field
+	if field == null:
+		push_warning("FoulManager: nenhum Field encontrado; lateral e escanteio ficam desligados.")
+		return
+	field.ball_left_pitch.connect(_on_ball_left_pitch)
 
 
 func _watch_all() -> void:
@@ -114,8 +147,11 @@ func _watch(p: Player) -> void:
 func _on_knocked_down(by_mistake: bool, p: Player) -> void:
 	if not enabled or by_mistake or manager == null or manager.match_over or state != State.IDLE:
 		return
-	# Só vale queda no meio de uma ação (Carrinho, habilidade...) e de quem NÃO está jogando o turno
+	# Só vale queda no meio de uma ação e de quem NÃO está jogando o turno
 	if manager.phase != MatchManager.Phase.EXECUTING or p.team == manager.current_team:
+		return
+	# E só se a queda veio de um CARRINHO: habilidades que derrubam nunca dão falta (nem chance de apito)
+	if not _slide_in_progress():
 		return
 	if not _pending.is_empty():
 		return   # uma falta por jogada
@@ -126,9 +162,47 @@ func _on_knocked_down(by_mistake: bool, p: Player) -> void:
 	_pending = {"victim": p, "pos": p.global_position, "fouling_team": manager.current_team}
 
 
-## O juiz vai apitar quando a ação em andamento terminar
+## Alguém do time da vez está no meio de um Carrinho agora? (o Carrinho derruba durante o próprio movimento)
+func _slide_in_progress() -> bool:
+	for p in manager.get_team_players(manager.current_team):
+		if is_instance_valid(p) and p.state == Player.State.SLIDING:
+			return true
+	return false
+
+
+## O MatchManager chama quando um jogador GASTA uma ação de Chutar/Passe (depois de confirmar a mira/alvo).
+## A primeira do cobrador encerra a cobrança: aí os secundários também podem bater na bola.
+func note_kick(actor: Player) -> void:
+	if state == State.TAKER_TURN and actor == taker:
+		_kick_done = true
+
+
+## O juiz vai apitar (ou a bola saiu) quando a ação em andamento terminar
 func has_pending() -> bool:
-	return not _pending.is_empty() and is_instance_valid(_pending.get("victim"))
+	if not _pending.is_empty() and is_instance_valid(_pending.get("victim")):
+		return true
+	if not _out.is_empty():
+		if _out_still_valid():
+			return true
+		_drop_out()   # alguém devolveu a bola ao jogo: não há mais lateral/escanteio
+	return false
+
+
+## Palavra do aviso e do título da tela de preparação
+func kind_title() -> String:
+	match kind:
+		KIND_PENALTY:
+			return "PÊNALTI"
+		KIND_THROW_IN:
+			return "LATERAL"
+		KIND_CORNER:
+			return "ESCANTEIO"
+	return "FALTA"
+
+
+## true para lateral e escanteio (bola que saiu), false para falta e pênalti
+func is_out_kind() -> bool:
+	return kind == KIND_THROW_IN or kind == KIND_CORNER
 
 
 func clear_pending() -> void:
@@ -152,7 +226,8 @@ func allows_general(action: int) -> bool:
 		return true
 	var is_kick: bool = action == MatchManager.GeneralAction.SHOOT or action == MatchManager.GeneralAction.PASS
 	if manager.active_player == taker:
-		return is_kick   # a ação geral do cobrador é a cobrança
+		# O cobrador age normalmente (Correr, Pular, Carrinho...). Única regra: no lateral não se chuta
+		return not (kind == KIND_THROW_IN and action == MatchManager.GeneralAction.SHOOT)
 	# Os outros jogam à vontade, mas só batem na bola depois que o cobrador cobrou
 	return _kick_done or not is_kick
 
@@ -161,6 +236,13 @@ func allows_general(action: int) -> bool:
 
 ## Chamado pelo MatchManager quando a ação termina e has_pending(). Roda a falta inteira até a cobrança começar.
 func start_foul() -> void:
+	# Só a bola saiu (sem falta pendente): lateral ou escanteio
+	if _pending.is_empty() or not is_instance_valid(_pending.get("victim")):
+		if not _out.is_empty():
+			_start_out_of_play()
+			return
+	else:
+		_out = {}   # falta e bola fora ao mesmo tempo: a falta vale
 	var info: Dictionary = _pending
 	_pending = {}
 	var victim: Player = info.get("victim") as Player
@@ -406,9 +488,10 @@ func _begin_taker_turn() -> void:
 		"chance": taker.shot_chance_default,
 		"force": taker.next_kick_force_mult,
 	}
-	taker.pass_range_bonus += pass_range_bonus
-	taker.shot_chance_default = penalty_shot_chance if kind == KIND_PENALTY else foul_shot_chance
-	taker.next_kick_force_mult *= kick_force_mult
+	taker.pass_range_bonus += throw_in_pass_range_bonus if kind == KIND_THROW_IN else pass_range_bonus
+	taker.shot_chance_default = _shot_chance_for_kind()
+	if kind != KIND_THROW_IN:   # lateral não chuta: sem bônus de força
+		taker.next_kick_force_mult *= kick_force_mult
 	taker.facing = taker.get_attack_dir()
 
 	# O time que sofreu a falta joga: o cobrador vira Protagonista
@@ -420,12 +503,22 @@ func _begin_taker_turn() -> void:
 		on_turn_end()
 		manager._end_turn()
 		return
-	manager.protagonist_general_left = taker_general_actions
-	manager.protagonist_skill_left = taker_skill_actions
-	manager.secondary_general_left = secondary_general_actions
-	manager.secondary_skill_left = secondary_skill_actions
+	# Mesmas ações de um turno comum (e não as do turno bônus), seja qual for o modo de jogo
+	manager.protagonist_general_left = manager.protagonist_general_actions
+	manager.protagonist_skill_left = manager.protagonist_skill_actions
+	manager.secondary_general_left = manager.secondary_general_actions
+	manager.secondary_skill_left = manager.secondary_skill_actions
 	manager.state_changed.emit()
 	set_piece_started.emit(kind, fouled_team, taker)
+
+
+func _shot_chance_for_kind() -> float:
+	match kind:
+		KIND_PENALTY:
+			return penalty_shot_chance
+		KIND_CORNER:
+			return corner_shot_chance
+	return foul_shot_chance
 
 
 ## O MatchManager chama no começo de _end_turn(): fecha a cobrança e passa a vez para o time que FEZ a falta.
@@ -439,6 +532,11 @@ func on_turn_end() -> void:
 	_rename_shoot_button(false)
 	_restore_taker()
 	_kick_done = false
+	if is_out_kind():
+		# Lateral/escanteio: o turno da cobrança foi o turno do time; o _end_turn() segue a ordem normal
+		state = State.IDLE
+		set_piece_finished.emit(kind, fouled_team)
+		return
 	if not manager.in_bonus_turn:   # (se a falta foi numa rodada bônus, ela segue o caminho dela)
 		manager.in_bonus_turn = true
 		manager._resume_team = fouling_team
@@ -475,9 +573,11 @@ func _collect_buttons(node: Node) -> void:
 
 
 func _process(delta: float) -> void:
+	_poll_out()
 	if state != State.TAKER_TURN:
 		return
-	# A cobrança acabou quando a ação geral do cobrador foi gasta e o menu voltou
+	# Rede de segurança: se o cobrador gastou TODAS as ações gerais sem bater na bola, a cobrança acabou
+	# (senão os secundários ficariam sem poder chutar/passar). O normal é o note_kick() marcar.
 	if not _kick_done and manager.protagonist_general_left <= 0 and manager.phase == MatchManager.Phase.CHOOSING_ACTION:
 		_kick_done = true
 	# O botão só se chama "Cobrar" durante a cobrança; o menu pode recriar os botões, então procura de novo a cada 0,1 s
@@ -516,6 +616,196 @@ func _abort() -> void:
 		_screen.queue_free()
 	_screen = null
 	_pending = {}
+	_out = {}
+	_cuts = 0
 	_kick_done = false
 	state = State.IDLE
 	taker = null
+
+
+# ---------- LATERAL E ESCANTEIO ----------
+
+## O Field avisou: a bola cruzou uma linha. Descobre quem cobra e para a bola ali até a jogada poder parar.
+func _on_ball_left_pitch(local_pos: Vector2, goal_line: bool) -> void:
+	# (no turno da cobrança também vale: a cobrança pode mandar a bola para fora de novo)
+	if not out_enabled or manager == null or manager.match_over or state == State.SETUP or not _pending.is_empty():
+		return
+	if GameMode.training or manager.team_count < 2:
+		return
+	match manager.phase:
+		MatchManager.Phase.FORMATION, MatchManager.Phase.MATCH_OVER, MatchManager.Phase.SET_PIECE:
+			return
+	# Resets (gol, troca de tempo, juiz carregando a bola): a bola anda fora do campo de propósito
+	if manager._repositioning or manager._reset_running or manager._awaiting_goal_reset:
+		return
+	var ball: Ball = manager._get_ball()
+	if ball == null or ball.is_held() or not is_instance_valid(ball.last_toucher):
+		return
+	# A bola parada na marca do lateral/escanteio/falta (antes de a cobrança sair) NÃO conta como "saiu de novo":
+	# ela fica encostada na linha, e o Field avisava a cada quadro, o que recomeçava a cobrança sem parar e
+	# congelava a bola (ninguém conseguia interagir com ela).
+	if state == State.TAKER_TURN and not _kick_done and ball.global_position.distance_to(spot) < 40.0:
+		return
+	field = get_tree().get_first_node_in_group("field") as Field
+	if field == null:
+		return
+
+	var sender: int = ball.last_toucher.team           # quem tirou a bola
+	var taking: int = (sender + 1) % manager.team_count   # o outro time cobra
+	var half: Vector2 = field.pitch_size * 0.5
+	var info: Dictionary = {"sender_team": sender, "taking_team": taking}
+	if goal_line:
+		var side: int = 1 if local_pos.x > 0.0 else -1
+		if _team_defending(side) != sender:
+			return   # quem ataca mandou para fora = tiro de meta (ainda não existe): a bola quica como antes
+		var corner_y: float = half.y if local_pos.y >= 0.0 else -half.y
+		info["kind"] = KIND_CORNER
+		info["spot"] = field.to_global(Vector2(side * half.x, corner_y))
+	else:
+		var x: float = clampf(local_pos.x, -half.x + throw_in_corner_margin, half.x - throw_in_corner_margin)
+		var y: float = half.y if local_pos.y >= 0.0 else -half.y
+		info["kind"] = KIND_THROW_IN
+		info["spot"] = field.to_global(Vector2(x, y))
+	_out = info
+	_place_ball(field.to_global(local_pos), true)   # a bola para onde saiu e ninguém mexe nela
+
+
+## Time que defende o gol deste lado (-1 esquerda / +1 direita)
+func _team_defending(side: int) -> int:
+	for t in manager.team_count:
+		if field.defend_dir(t) == side:
+			return t
+	return -1
+
+
+## A bola ainda está na linha (ou fora)? Se um jogador a devolveu ao campo, o lateral/escanteio cai.
+func _out_still_valid() -> bool:
+	var ball: Ball = manager._get_ball() if manager != null else null
+	if ball == null or field == null or ball.is_held():
+		return false
+	var l: Vector2 = field.to_local(ball.global_position)
+	var half: Vector2 = field.pitch_size * 0.5
+	return absf(l.x) >= half.x - 6.0 or absf(l.y) >= half.y - 6.0
+
+
+## O menu de pausa pediu para pular o turno: esquece o lateral/escanteio que esperava
+func discard_out() -> void:
+	if not _out.is_empty():
+		_drop_out()
+
+
+## Descarta o lateral/escanteio esperando e solta a bola que estava parada na linha
+func _drop_out() -> void:
+	_out = {}
+	var ball: Ball = manager._get_ball() if manager != null else null
+	if ball != null and state == State.IDLE:
+		ball.collisions_paused = false
+
+
+## Fora de uma ação (menus, goleiros, efeitos), começa assim que o jogo está parado numa escolha
+func _poll_out() -> void:
+	if _out.is_empty() or state == State.SETUP or manager == null:
+		return
+	if manager.match_over:
+		_drop_out()
+		return
+	if manager.phase != MatchManager.Phase.CHOOSING_PROTAGONIST and manager.phase != MatchManager.Phase.CHOOSING_ACTION:
+		return
+	if manager.paused or manager._repositioning or manager._reset_running or manager._picking_skill_target \
+			or manager._picking_skill_point:
+		return
+	if manager.active_player != null and manager.active_player.is_aiming:
+		return
+	if not _out_still_valid():
+		_drop_out()
+		return
+	_start_out_of_play()
+
+
+## Pula o turno em andamento (se não for do time que cobra) e roda a cobrança no turno de quem cobra
+func _start_out_of_play() -> void:
+	var taking: int = int(_out["taking_team"])
+	if state == State.TAKER_TURN:
+		# A bola saiu de novo durante uma cobrança: ela acaba aqui (devolve o que o cobrador tinha)
+		_rename_shoot_button(false)
+		_restore_taker()
+		_kick_done = false
+		state = State.IDLE
+		set_piece_finished.emit(kind, fouled_team)
+	if manager.current_team != taking and _cuts < manager.team_count + 1:
+		_cuts += 1
+		_stop_current_play()
+		manager._set_phase(MatchManager.Phase.SET_PIECE)   # só volta a CHOOSING_PROTAGONIST no turno de quem cobra
+		SetPieceScreen.toast(self, "Bola fora! O turno de %s é pulado" % manager.get_team_name(manager.current_team),
+			UiStyle.MUTED_COLOR, 1.6)
+		manager._end_turn()   # conta como turno jogado; a vez passa ao próximo time (o cobrador)
+		return
+	if manager.current_team != taking:   # (não deveria acontecer: segura o jogo certo mesmo assim)
+		manager.current_team = taking
+	_cuts = 0
+	_run_out_of_play()
+
+
+## Cancela o que estava em andamento (mira, passe escolhido, papéis): nada fica pela metade
+func _stop_current_play() -> void:
+	if manager.active_player != null and manager.active_player.is_aiming:
+		manager.active_player.cancel_aim()
+	manager._hide_pass_preview()
+	manager.clear_pending_pass()
+	manager._clear_roles()
+	manager.protagonist = null
+	manager.active_player = null
+
+
+func _run_out_of_play() -> void:
+	var info: Dictionary = _out
+	_out = {}
+	field = get_tree().get_first_node_in_group("field") as Field
+	if field == null or manager.match_over:
+		manager._set_phase(MatchManager.Phase.CHOOSING_PROTAGONIST)
+		return
+
+	state = State.SETUP
+	kind = info["kind"]
+	fouled_team = int(info["taking_team"])    # (nos campos da falta: "fouled" = quem cobra, "fouling" = quem tirou a bola)
+	fouling_team = int(info["sender_team"])
+	taker = null
+	_stop_current_play()
+	manager._set_phase(MatchManager.Phase.SET_PIECE)
+
+	_screen = SetPieceScreen.new()
+	_screen.foul = self
+	_screen.manager = manager
+	manager.add_child(_screen)
+	await _screen.show_whistle()
+	if manager.match_over:
+		_abort()
+		return
+
+	# A bola da cobrança fica um pouco DENTRO da linha (e não em cima dela): em cima, qualquer arredondamento
+	# a deixava "fora do campo" e o Field/limites a seguravam ou a empurravam de volta
+	spot = _clamp_to_pitch(info["spot"], 8.0)
+	_place_ball(spot, true)
+	_choose_taker_near_ball()
+	_enforce_rules_on_everyone()
+
+	await _screen.run_setup()
+	_screen = null
+	if manager.match_over or taker == null or not is_instance_valid(taker):
+		_abort()
+		return
+	_stop_all_motion()
+	_place_ball(spot)
+	_begin_taker_turn()
+
+
+## Cobrador inicial: o companheiro mais perto da bola (o jogador troca na lista da tela)
+func _choose_taker_near_ball() -> void:
+	var best: Player = null
+	for p in manager.get_team_players(fouled_team):
+		if manager.is_protagonist_blocked(p):
+			continue
+		if best == null or p.global_position.distance_to(spot) < best.global_position.distance_to(spot):
+			best = p
+	if best != null:
+		set_taker(best)

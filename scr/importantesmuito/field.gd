@@ -21,6 +21,9 @@ extends Node2D
 
 signal goal_scored(team: int)
 signal ball_out(local_position: Vector2)
+## A bola cruzou uma linha do campo (fora da boca do gol). goal_line = true: linha de fundo; false: lateral.
+## O FoulManager escuta isto para o lateral e o escanteio; a bola já está sobre a linha, no ponto por onde saiu.
+signal ball_left_pitch(local_position: Vector2, goal_line: bool)
 ## A bola voltou ao centro depois de um gol (o MatchManager aproveita para reposicionar os times)
 signal ball_reset_after_goal
 
@@ -48,6 +51,29 @@ signal ball_reset_after_goal
 @export var post_bounce: float = 0.6
 @export var reset_delay: float = 2.0                   # tempo até a bola voltar ao centro após o gol
 @export var goal_replay: bool = true                   # replay rápido do gol antes de a bola voltar ao centro (goal_replay.gd)
+
+@export_group("Zonas de posição")
+## Meio-campo = faixa central do campo (fração do COMPRIMENTO; 0.34 = o terço do meio). Bônus do Meio-campista.
+@export_range(0.1, 0.9) var midfield_zone_fraction: float = 0.5
+## Faixa lateral = cada borda do campo (fração da LARGURA; 0.25 = o quarto de fora). Bônus do Ala.
+@export_range(0.05, 0.5) var flank_zone_fraction: float = 0.25
+
+@export_group("Ver zonas dos bônus")
+## Só para VER: contorna no campo onde valem os bônus de posição (meio-campo, faixas laterais e grandes áreas).
+## Também liga/desliga pelo menu de pausa (ESC > "Ver posições bônus").
+@export var show_bonus_zones: bool = false:
+	set(value):
+		show_bonus_zones = value
+		_refresh_zone_overlay()
+
+@export_group("Limites dos jogadores")
+## Segura jogadores e goleiros dentro do campo POR CÓDIGO, usando o pitch_size. Assim o limite acompanha
+## o tamanho do campo (normal ou Medonho) e não depende de paredes (StaticBody2D) colocadas na cena.
+@export var contain_players: bool = true
+## Folga além das linhas, em px (0 = o centro do jogador pode ir até a linha; negativo = fica por dentro)
+@export var player_margin: float = 0.0
+## Futebol Medonho: desliga as paredes da cena (feitas para o campo menor e que ficariam no meio do campo grande)
+@export var disable_scene_walls_in_medonho: bool = true
 
 @export_group("Goleiros")
 @export var spawn_goalkeepers: bool = true             # cria um goleiro por time (se a cena não tiver)
@@ -156,7 +182,24 @@ class _Drawer extends Node2D:
 			fn.call(self)
 
 
+## Futebol Medonho: campo bem maior (proporções do futebol real), definido ANTES de grama/linhas serem montadas
+func _apply_medonho_layout() -> void:
+	pitch_size = GameMode.MEDONHO_PITCH_SIZE
+	center_circle_radius = 150.0
+	penalty_area_size = Vector2(300.0, 650.0)
+	goal_area_size = Vector2(110.0, 290.0)
+	penalty_spot_distance = 205.0
+	penalty_arc_radius = 150.0
+	blade_density = minf(blade_density, 0.6)   # campo grande: menos folhas para manter o desempenho
+	bench_x_offset = 520.0
+	bench_width = 400.0   # cabem os 7 reservas do Medonho
+
+
 func _ready() -> void:
+	if GameMode.medonho:
+		_apply_medonho_layout()
+		if disable_scene_walls_in_medonho:
+			_disable_scene_walls.call_deferred()   # espera a cena inteira entrar na árvore
 	add_to_group("field")  # o MatchManager e os goleiros encontram o campo por aqui
 	_spawn_goalkeepers.call_deferred()
 	z_index = -4096  # o chão fica atrás de tudo
@@ -177,6 +220,7 @@ func _ready() -> void:
 	_build_flags()
 	_build_wind_particles()
 	goal_scored.connect(_on_goal_cheer)
+	_refresh_zone_overlay()   # (se show_bonus_zones já vem ligado do Inspector)
 
 
 ## Cria um goleiro para cada time que ainda não tem um (você pode colocar os seus na cena).
@@ -246,7 +290,72 @@ func _add_drawer(local_pos: Vector2, fn: Callable) -> void:
 
 # ---------- FÍSICA: LIMITES, TRAVES E GOL ----------
 
+## Mantém jogadores e goleiros dentro do retângulo do campo (+ player_margin), no jogo normal e no Medonho
+func _contain_actors() -> void:
+	var half: Vector2 = pitch_size * 0.5 + Vector2(player_margin, player_margin)
+	for group in [&"players", &"goalkeepers"]:
+		for n in get_tree().get_nodes_in_group(group):
+			var node := n as Node2D
+			if node == null or not node.is_inside_tree():
+				continue
+			var l: Vector2 = to_local(node.global_position)
+			var c := Vector2(clampf(l.x, -half.x, half.x), clampf(l.y, -half.y, half.y))
+			if c == l:
+				continue
+			node.global_position = to_global(c)
+			if "velocity" in node:   # não continua "empurrando" contra o limite
+				var v: Vector2 = node.get("velocity")
+				if l.x != c.x:
+					v.x = 0.0
+				if l.y != c.y:
+					v.y = 0.0
+				node.set("velocity", v)
+
+
+## Medonho: desliga as paredes retangulares (StaticBody2D só com RectangleShape2D) que existem na cena
+## para o campo menor. O limite passa a ser o _contain_actors acima. A cena em si não é alterada.
+func _disable_scene_walls() -> void:
+	var root: Node = get_tree().current_scene
+	if root == null:
+		return
+	var walls: Array[StaticBody2D] = []
+	_collect_wall_bodies(root, walls)
+	for body in walls:
+		body.collision_layer = 0
+		body.collision_mask = 0
+		for c in body.get_children():
+			if c is CollisionShape2D:
+				(c as CollisionShape2D).set_deferred("disabled", true)
+	if not walls.is_empty():
+		var names := PackedStringArray()
+		for body in walls:
+			names.append(str(body.get_path()))
+		print("Field: Medonho desligou %d parede(s) da cena: %s" % [walls.size(), ", ".join(names)])
+
+
+func _collect_wall_bodies(node: Node, out: Array[StaticBody2D]) -> void:
+	for child in node.get_children():
+		if child is StaticBody2D and not child.is_in_group("keep_collision") and _is_rect_wall(child as StaticBody2D):
+			out.append(child as StaticBody2D)
+		_collect_wall_bodies(child, out)
+
+
+## Só tem CollisionShape2D retangulares (pelo menos um)? Então é uma parede de borda.
+func _is_rect_wall(body: StaticBody2D) -> bool:
+	var shapes: int = 0
+	for c in body.get_children():
+		if c is CollisionShape2D:
+			if not ((c as CollisionShape2D).shape is RectangleShape2D):
+				return false
+			shapes += 1
+		elif c is CollisionPolygon2D:
+			return false
+	return shapes > 0
+
+
 func _physics_process(_delta: float) -> void:
+	if contain_players:
+		_contain_actors()
 	if ball == null:
 		return
 
@@ -388,6 +497,8 @@ func _clamp_to_pitch(p: Vector2) -> Vector2:
 
 	if went_out:
 		ball.velocity = v
+		var goal_line: bool = absf(p.x) > half.x
+		ball_left_pitch.emit(out, goal_line)   # quem cuida do lateral/escanteio pode parar a bola aqui
 		ball_out.emit(out)
 	return out
 
@@ -430,6 +541,112 @@ func get_goal_area_rect(team: int) -> Rect2:
 ## Esta posição (global) está dentro da grande área defendida por esse time?
 func is_in_penalty_area(global_pos: Vector2, team: int) -> bool:
 	return get_penalty_area_rect(team).has_point(to_local(global_pos))
+
+
+var _zone_overlay: _BonusZones = null
+
+
+## Liga/desliga os contornos das zonas dos bônus. Devolve o novo estado.
+func toggle_bonus_zones() -> bool:
+	show_bonus_zones = not show_bonus_zones
+	return show_bonus_zones
+
+
+func _refresh_zone_overlay() -> void:
+	if not is_inside_tree():
+		return   # o _ready chama de novo
+	if show_bonus_zones and _zone_overlay == null:
+		_zone_overlay = _BonusZones.new()
+		_zone_overlay.field = self
+		add_child(_zone_overlay)
+	if _zone_overlay != null:
+		_zone_overlay.visible = show_bonus_zones
+		_zone_overlay.queue_redraw()
+
+
+## Contornos simples das zonas (só para ver). Fica por cima dos jogadores.
+class _BonusZones extends Node2D:
+	const MID_COLOR := Color(0.35, 1.0, 0.45, 0.95)
+	const FLANK_COLOR := Color(0.3, 0.9, 1.0, 0.95)
+	const AREA_COLOR := Color(1.0, 0.6, 0.2, 0.95)
+	var field: Field
+	var _swapped: bool = false
+
+	func _ready() -> void:
+		z_as_relative = false
+		z_index = 4000
+
+	func _process(_delta: float) -> void:
+		if field != null and field.sides_swapped != _swapped:
+			_swapped = field.sides_swapped
+			queue_redraw()   # trocou de lado no 2º tempo: esquerda/direita das alas mudam
+
+	func _draw() -> void:
+		if field == null:
+			return
+		var half: Vector2 = field.pitch_size * 0.5
+		var font: Font = ThemeDB.fallback_font
+
+		# Meio-campo (Meio-campista: + alcance de passe)
+		var mx: float = half.x * field.midfield_zone_fraction
+		_zone(Rect2(-mx, -half.y, mx * 2.0, half.y * 2.0), MID_COLOR)
+		_label(font, Vector2(-mx + 14.0, -half.y + 40.0), "MEIO-CAMPO: Meio +alcance de passe", MID_COLOR)
+
+		# Faixas laterais (Ala: + velocidade ao correr). Esquerda/direita são vistas de quem ataca.
+		var band: float = field.pitch_size.y * field.flank_zone_fraction
+		for sign_y in [-1.0, 1.0]:
+			var top: float = -half.y if sign_y < 0.0 else half.y - band
+			_zone(Rect2(-half.x, top, field.pitch_size.x, band), FLANK_COLOR)
+			var y_text: float = top + 40.0 if sign_y < 0.0 else top + band - 18.0
+			_label(font, Vector2(-half.x + 14.0, y_text), "FAIXA LATERAL: Ala +velocidade  (%s)" % _side_text(sign_y), FLANK_COLOR)
+
+		# Grandes áreas (Atacante: + força de chute na do adversário; Zagueiro: + carrinho na da própria)
+		for team in 2:
+			var r: Rect2 = field.get_penalty_area_rect(team)
+			_zone(r, AREA_COLOR)
+			_label(font, r.position + Vector2(8.0, -12.0), "ÁREA: Atacante +chute / Zagueiro +carrinho", AREA_COLOR)
+
+	func _zone(r: Rect2, color: Color) -> void:
+		draw_rect(r, color, false, 5.0)
+
+	func _label(font: Font, pos: Vector2, text: String, color: Color) -> void:
+		draw_string_outline(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, 26, 6, Color(0, 0, 0, 0.8))
+		draw_string(font, pos, text, HORIZONTAL_ALIGNMENT_LEFT, -1, 26, color)
+
+	## Quem tem esta faixa à esquerda e quem à direita (a de cima é a esquerda de quem ataca para a direita)
+	func _side_text(sign_y: float) -> String:
+		var names: Array = ["Time 1", "Time 2"]
+		var mm: Node = field.get_tree().get_first_node_in_group("match_manager")
+		if mm != null and "team_names" in mm:
+			var tn: Array = mm.get("team_names")
+			for i in mini(2, tn.size()):
+				names[i] = str(tn[i])
+		var left_team: int = 0
+		var probe: Vector2 = field.to_global(Vector2(0.0, sign_y * field.pitch_size.y * 0.5))
+		if field.flank_of(probe, 0) > 0:
+			left_team = 1
+		return "esq. de %s · dir. de %s" % [names[left_team], names[1 - left_team]]
+
+
+## Esta posição (global) está na grande área do ADVERSÁRIO (a que o time ataca)?
+func is_in_attack_area(global_pos: Vector2, team: int) -> bool:
+	return is_in_penalty_area(global_pos, 1 - team)
+
+
+## Esta posição (global) está no meio-campo (faixa central do comprimento)?
+func is_in_midfield(global_pos: Vector2) -> bool:
+	return absf(to_local(global_pos).x) <= pitch_size.x * 0.5 * midfield_zone_fraction
+
+
+## Faixa lateral do ponto, do ponto de vista de quem ataca: 0 = centro, -1 = esquerda, +1 = direita.
+## (Quem ataca para a direita tem a esquerda em cima da tela; quem ataca para a esquerda, embaixo.)
+func flank_of(global_pos: Vector2, team: int) -> int:
+	var y: float = to_local(global_pos).y
+	if absf(y) < pitch_size.y * 0.5 - pitch_size.y * flank_zone_fraction:
+		return 0   # (cada faixa lateral tem flank_zone_fraction da largura do campo)
+	var attack_x: float = -float(defend_dir(team))
+	var left_y: float = -attack_x   # lado do eixo Y que é a "esquerda" de quem ataca
+	return -1 if signf(y) == left_y else 1
 
 
 ## Centro (global) do gol que o time ataca — útil para IA e chutes
@@ -712,7 +929,7 @@ func _draw_bench(n: Node2D, team: int) -> void:
 
 	# Reservas sentados (corpo na cor do time + rosto redondo)
 	var ids: Array = _bench_ids[team]
-	var spacing: float = (bench_width - 50.0) / 2.0
+	var spacing: float = (bench_width - 50.0) / float(maxi(ids.size() - 1, 1))   # reservas distribuídos pelo banco
 	for slot in ids.size():
 		var id: String = String(ids[slot])
 		if id == "":

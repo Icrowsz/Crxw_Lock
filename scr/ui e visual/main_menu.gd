@@ -78,11 +78,13 @@ func _build() -> void:
 	# Os botões
 	var play := _menu_button("JOGAR", "Partida normal: monte os times na tela de formação")
 	play.pressed.connect(_go.bind(false))
+	var scary := _menu_button("FUTEBOL MEDONHO", "11 contra 11 (com goleiro) em campo gigante: 5+2 ações do Protagonista e 11+4 dos Secundários, 7 reservas e 6 substituições")
+	scary.pressed.connect(_go.bind(false, true))
 	var train := _menu_button("MODO TREINO", "Partida de teste: sem formação, sem fim de jogo e com menu de debug")
 	train.pressed.connect(_go.bind(true))
 	var quit := _menu_button("SAIR", "")
 	quit.pressed.connect(_quit)
-	for b in [play, train, quit]:
+	for b in [play, scary, train, quit]:
 		var holder := CenterContainer.new()
 		holder.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		holder.add_child(b)
@@ -188,7 +190,7 @@ func _spawn_faces() -> void:
 
 # ---------- AÇÕES ----------
 
-func _go(training: bool) -> void:
+func _go(training: bool, medonho: bool = false) -> void:
 	if _leaving:
 		return
 	if not ResourceLoader.exists(game_scene):
@@ -197,7 +199,7 @@ func _go(training: bool) -> void:
 	_leaving = true
 	_error.text = ""
 	GameMode.menu_scene = scene_file_path
-	GameMode.start(training)
+	GameMode.start(training, medonho)
 	_fade.mouse_filter = Control.MOUSE_FILTER_STOP
 	var tw := create_tween()
 	tw.tween_property(_fade, "color:a", 1.0, fade_time)

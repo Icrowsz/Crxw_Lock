@@ -27,6 +27,10 @@ enum KickType { NONE, GROUND, VOLLEY, FLYING, HIGH_BALL }
 
 ## Pé dominante (muda como a telinha de efeito do Chutar funciona: ver kick_spin_picker.gd)
 enum Foot { RIGHT, LEFT }
+## Posição do personagem em campo (dá bônus em certas zonas do campo). AUTO = vem do CharacterRoster (campo "role")
+enum FieldPosition { AUTO, NONE, ATTACKER, MIDFIELDER, DEFENDER, WINGER }
+## Alas/laterais: em que faixa lateral do campo o bônus de velocidade vale (esquerda/direita são vistas de quem ataca)
+enum WingSide { BOTH, LEFT, RIGHT }
 
 
 # Nomes das animações que o Player toca sozinho (crie com estes nomes na SpriteFrames).
@@ -92,6 +96,21 @@ const ACTION_TIMEOUT: float = 3.0
 ## e, se não achar, usa a imagem do MVP.
 @export var face_image: Texture2D
 @export var goal_line_time: float = 3.5   # quanto tempo a fala fica na tela (s)
+
+@export_group("Posição em campo")
+## ATACANTE, MEIO, ZAGUEIRO ou ALA. AUTO = usa a categoria do CharacterRoster (atacante/meio/zagueiro/lateral);
+## NONE = sem bônus de posição. As zonas (meio-campo, faixas laterais) são ajustadas no Field.
+@export var field_position: FieldPosition = FieldPosition.AUTO
+## ALA: faixa lateral onde o bônus de velocidade vale (AMBOS, ESQUERDA ou DIREITA, do ponto de vista de quem ataca)
+@export var wing_side: WingSide = WingSide.BOTH
+## ATACANTE: força extra do chute (soma em todas as forças kick_force_*) dentro da grande área do ADVERSÁRIO
+@export var attacker_kick_force_bonus: float = 12.0
+## MEIO: alcance extra dos passes (px) enquanto ele está no meio-campo
+@export var midfielder_pass_range_bonus: float = 20.0
+## ZAGUEIRO: distância extra do Carrinho (px) dentro da grande área do PRÓPRIO time
+@export var defender_slide_bonus: float = 60.0
+## ALA: velocidade extra do Correr enquanto ele está na faixa lateral dele
+@export var winger_move_speed_bonus: float = 80.0
 
 @export_group("Pular")
 @export var jump_rise_time: float = 0.25
@@ -190,6 +209,10 @@ var slide_immune: bool = false
 var jump_redirected: bool = false
 ## Soma no alcance do Passe (px) e no tempo do Correr (s)
 var pass_range_bonus: float = 0.0
+## Categoria do CharacterRoster ("atacante", "meio", "zagueiro", "lateral"); o roster preenche ao criar o personagem
+var roster_role: String = ""
+## Distância do Carrinho em andamento (fixada no início: o bônus de zona não muda no meio do carrinho)
+var _slide_distance_now: float = 0.0
 var run_time_bonus: float = 0.0
 ## Chance de gol extra que vale só no PRÓXIMO chute deste jogador (é gasta ao chutar)
 var next_shot_bonus: float = 0.0
@@ -413,6 +436,8 @@ func get_face_image() -> Texture2D:
 
 
 func _hook_goal_lines() -> void:
+	if not is_inside_tree():
+		return   # foi trocado/removido antes da chamada adiada rodar (ex: replace_player no Futebol Medonho)
 	var m: MatchManager = _get_manager()
 	if m != null and not m.goal_scored.is_connected(_on_goal_for_lines):
 		m.goal_scored.connect(_on_goal_for_lines)
@@ -568,7 +593,7 @@ func start_run() -> void:
 
 func _process_run(delta: float) -> void:
 	var dir: Vector2 = _get_run_input()
-	velocity = dir * move_speed * get_run_speed_mult()
+	velocity = dir * get_move_speed() * get_run_speed_mult()
 	move_and_slide()
 
 	run_time_left -= delta
@@ -589,6 +614,70 @@ func _get_run_input() -> Vector2:
 ## Multiplicador de velocidade / de tempo do Correr vindo de habilidades de ADVERSÁRIOS
 ## (ex: Yo.. do Lorenzo). Quem aplica entra no grupo "control_sources" e implementa
 ## run_speed_mult_on(p) / run_time_mult_on(p) (1.0 = sem efeito).
+# ---------- BÔNUS POR POSIÇÃO ----------
+
+## Posição efetiva: a do Inspector, ou (AUTO) a categoria do roster
+func get_field_position() -> FieldPosition:
+	if field_position != FieldPosition.AUTO:
+		return field_position
+	match roster_role:
+		"atacante":
+			return FieldPosition.ATTACKER
+		"meio":
+			return FieldPosition.MIDFIELDER
+		"zagueiro":
+			return FieldPosition.DEFENDER
+		"lateral":
+			return FieldPosition.WINGER
+	return FieldPosition.NONE
+
+
+func _get_field() -> Field:
+	return get_tree().get_first_node_in_group("field") as Field if is_inside_tree() else null
+
+
+## Atacante: + força do chute na grande área do adversário
+func get_position_kick_force_bonus() -> float:
+	if get_field_position() != FieldPosition.ATTACKER:
+		return 0.0
+	var f: Field = _get_field()
+	if f != null and f.is_in_attack_area(global_position, team):
+		return attacker_kick_force_bonus
+	return 0.0
+
+
+## Meio-campista: + alcance dos passes no meio-campo
+func get_position_pass_bonus() -> float:
+	if get_field_position() != FieldPosition.MIDFIELDER:
+		return 0.0
+	var f: Field = _get_field()
+	if f != null and f.is_in_midfield(global_position):
+		return midfielder_pass_range_bonus
+	return 0.0
+
+
+## Zagueiro: + distância do Carrinho na grande área do próprio time
+func get_slide_distance() -> float:
+	if get_field_position() == FieldPosition.DEFENDER:
+		var f: Field = _get_field()
+		if f != null and f.is_in_penalty_area(global_position, team):
+			return slide_distance + defender_slide_bonus
+	return slide_distance
+
+
+## Ala: + velocidade ao correr na faixa lateral dele
+func get_move_speed() -> float:
+	if get_field_position() != FieldPosition.WINGER:
+		return move_speed
+	var f: Field = _get_field()
+	if f == null:
+		return move_speed
+	var flank: int = f.flank_of(global_position, team)   # 0 = centro, -1 = esquerda, +1 = direita (de quem ataca)
+	var applies: bool = flank != 0 and (wing_side == WingSide.BOTH \
+		or (wing_side == WingSide.LEFT and flank < 0) or (wing_side == WingSide.RIGHT and flank > 0))
+	return move_speed + winger_move_speed_bonus if applies else move_speed
+
+
 func get_run_speed_mult() -> float:
 	var mult: float = 1.0
 	for src in get_tree().get_nodes_in_group("control_sources"):
@@ -660,6 +749,7 @@ func land() -> void:
 
 func start_slide(direction: Vector2) -> void:
 	slides_this_turn += 1
+	_slide_distance_now = get_slide_distance()
 	slide_dir = direction.normalized()
 	slide_time_left = slide_duration
 	_slide_hit_players.clear()
@@ -672,7 +762,7 @@ func _process_slide(delta: float) -> void:
 	slide_time_left -= delta
 	# Desacelera linearmente: a distância total percorrida = slide_distance
 	var frac: float = clampf(slide_time_left / slide_duration, 0.0, 1.0)
-	velocity = slide_dir * (2.0 * slide_distance / slide_duration) * frac
+	velocity = slide_dir * (2.0 * _slide_distance_now / slide_duration) * frac
 	_update_slide_collision_exceptions()
 	move_and_slide()
 
@@ -827,6 +917,7 @@ func kick_ball(ball: Ball, direction: Vector2, kind: KickType, qte_success: bool
 		KickType.HIGH_BALL:
 			force = kick_force_high_ball
 
+	force += get_position_kick_force_bonus()   # atacante na área adversária
 	force *= force_mult
 	var dir: Vector2 = direction.normalized()
 	if not qte_success:
@@ -1219,12 +1310,14 @@ func _stop_current_action() -> void:
 # ---------- RECARGA (COOLDOWN) DAS HABILIDADES ----------
 
 func _get_manager() -> MatchManager:
-	if _manager == null:
+	if _manager == null and is_inside_tree():
 		_manager = get_tree().get_first_node_in_group("match_manager") as MatchManager
 	return _manager
 
 
 func _get_ball() -> Ball:
+	if not is_inside_tree():
+		return null
 	return get_tree().get_first_node_in_group("ball") as Ball
 
 

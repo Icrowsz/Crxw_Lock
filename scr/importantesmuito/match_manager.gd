@@ -108,7 +108,10 @@ const PASS_VARIANT_NAMES := {
 @export var keeper_wait_timeout: float = 8.0   # trava de segurança: máximo que o jogo espera os goleiros
 
 @export_group("Faltas e replay")
-@export var use_fouls: bool = false         # faltas e pênaltis (foul_manager.gd)
+@export var use_fouls: bool = true         # faltas e pênaltis (foul_manager.gd)
+@export var use_out_of_play: bool = true    # lateral e escanteio quando a bola sai (foul_manager.gd)
+## Menu de pausa (ESC) > "Pular turno": se uma ação em andamento não terminar neste tempo (s), o turno é pulado à força
+@export var force_skip_timeout: float = 3.5
 @export var use_goal_replay: bool = true   # replay rápido depois de cada gol (goal_replay.gd)
 
 @export_group("Tempo de jogo")
@@ -125,10 +128,10 @@ const PASS_VARIANT_NAMES := {
 ## parou, leva até o centro e a coloca no chão. Desligado: tudo volta na hora, como antes (reposition_time).
 @export var animated_reset: bool = true
 @export var use_referee: bool = true            # o juiz (referee.gd) cuida da bola nos resets
-@export var reset_walk_speed: float = 230.0     # px/s dos jogadores voltando às posições
+@export var reset_walk_speed: float = 600.0     # px/s dos jogadores voltando às posições
 @export var reset_min_time: float = 0.8         # o mais rápido que um jogador chega (mesmo estando perto)
 @export var reset_max_time: float = 3.0         # o mais devagar (mesmo estando longe)
-@export var referee_walk_speed: float = 320.0   # px/s do juiz
+@export var referee_walk_speed: float = 700.0   # px/s do juiz
 
 @export_group("MVP")
 @export var mvp_goal_points: int = 1          # pontos por gol (gol contra não pontua)
@@ -177,6 +180,10 @@ var effects: MatchEffects
 var bench: BenchManager
 ## Faltas e pênaltis (foul_manager.gd) e replay do gol (goal_replay.gd): criados no _setup
 var fouls: FoulManager
+var pause_menu: PauseMenu
+var _skip_requested: bool = false   # "Pular turno" pedido: acontece assim que der (veja _poll_force_skip)
+var _skip_wait: float = 0.0
+var _swallow_until_ms: int = 0      # até esta hora, o próximo _after_action de uma ação já abandonada é ignorado
 var replay: GoalReplay
 ## true enquanto a tela de pausa está aberta: ninguém age
 var paused: bool = false
@@ -287,7 +294,12 @@ func _setup() -> void:
 	fouls = FoulManager.new()
 	fouls.manager = self
 	fouls.enabled = use_fouls
+	fouls.out_enabled = use_out_of_play
 	add_child(fouls)
+
+	pause_menu = PauseMenu.new()
+	pause_menu.manager = self
+	add_child(pause_menu)
 
 	# O Field pode já ter criado um GoalReplay (grupo "goal_replay"): usa esse em vez de duplicar
 	replay = get_tree().get_first_node_in_group("goal_replay") as GoalReplay
@@ -897,7 +909,7 @@ func do_general_action(action: GeneralAction) -> void:
 		GeneralAction.SLIDE:
 			# Primeiro mira; só gasta a ação se o jogador confirmar
 			_set_phase(Phase.AIMING)
-			actor.begin_aim(actor.slide_distance)
+			actor.begin_aim(actor.get_slide_distance())
 			var dir: Vector2 = await actor.aim_finished
 			if dir == Vector2.ZERO:
 				_set_phase(Phase.CHOOSING_ACTION)
@@ -933,6 +945,8 @@ func do_general_action(action: GeneralAction) -> void:
 			# Telinha do efeito (curva, sobe, desce): EXCLUSIVA da cobrança de falta/pênalti ("Cobrar").
 			# O Chutar comum não abre mais. (só abre se o personagem tem o efeito ligado: Player.kick_spin_enabled)
 			var set_piece_kick: bool = fouls != null and fouls.is_taking()
+			if fouls != null:
+				fouls.note_kick(actor)   # a primeira bola do cobrador encerra a cobrança
 			if set_piece_kick and kick_spin_enabled and actor.kick_spin_enabled and not match_over:
 				actor.pending_spin_point = await _pick_kick_spin(actor, ball)
 			await actor.kick_ball(ball, kick_dir, kind, qte_ok)
@@ -1006,6 +1020,8 @@ func _execute_pass(target: Player) -> void:
 
 	_hide_pass_preview()
 	_consume_general(GeneralAction.PASS)
+	if fouls != null:
+		fouls.note_kick(actor)   # o passe do cobrador também encerra a cobrança
 	_set_phase(Phase.EXECUTING)
 	if pass_variant == PassVariant.GROUND:
 		await _run_ground_pass(actor, target, ball)
@@ -1239,6 +1255,7 @@ func _pass_landing_point() -> Vector2:
 
 
 func _process(_delta: float) -> void:
+	_poll_force_skip(_delta)
 	if _picking_skill_point and _skill_point_marker != null and _skill_point_actor != null:
 		var mouse: Vector2 = _skill_point_actor.get_global_mouse_position()
 		var offset: Vector2 = mouse - _skill_point_actor.global_position
@@ -1303,7 +1320,7 @@ func _remove_pass_marker() -> void:
 ## passer (opcional) soma o bônus de alcance do jogador (ex: Orbital Orbital do Kurona)
 func pass_range_for(variant: PassVariant, passer: Player = null) -> float:
 	var base: float = high_pass_range if variant == PassVariant.HIGH else ground_pass_range
-	return base + (passer.pass_range_bonus if passer != null else 0.0)
+	return base + (passer.pass_range_bonus + passer.get_position_pass_bonus() if passer != null else 0.0)
 
 
 ## O alvo é companheiro (outro jogador do time) e está dentro do alcance da variante?
@@ -1654,6 +1671,15 @@ func _after_action() -> void:
 	if match_over:
 		return
 
+	# Ação que o "Pular turno" já abandonou: o turno já passou, ela só termina sozinha
+	if Time.get_ticks_msec() < _swallow_until_ms:
+		_swallow_until_ms = 0
+		return
+	# "Pular turno" pedido durante a ação: ela acabou, agora o turno passa
+	if _skip_requested:
+		_skip_now()
+		return
+
 	# Falta apitada durante a ação: a jogada para e o time que sofreu a falta cobra (foul_manager.gd)
 	if fouls != null and fouls.has_pending():
 		fouls.start_foul()
@@ -1683,6 +1709,75 @@ func _auto_stand_up() -> void:
 		p.rounds_down += 1
 		if p.rounds_down >= auto_stand_up_rounds:
 			p.get_up_now()
+
+
+# ---------- PULAR TURNO (menu de pausa) ----------
+
+func can_force_skip() -> bool:
+	return not match_over and phase != Phase.FORMATION and phase != Phase.MATCH_OVER
+
+
+## Pula o turno do time da vez, ACONTEÇA O QUE ACONTECER: cancela mira, escolha de passe/alvo e preparação de falta,
+## lateral ou escanteio; se uma ação está rodando, o turno passa quando ela termina (no máximo force_skip_timeout s);
+## se o jogo está entre dois turnos (goleiros, efeitos), pula o turno que vai abrir.
+func force_skip_turn() -> void:
+	if not can_force_skip():
+		return
+	_skip_requested = true
+	_skip_wait = 0.0
+	_poll_force_skip(0.0)
+
+
+func _poll_force_skip(delta: float) -> void:
+	if not _skip_requested:
+		return
+	if not can_force_skip():
+		_skip_requested = false
+		return
+	if paused:
+		return   # a tela de pausa do banco está aberta: espera fechar
+	# Escolhas que esperam o jogador (alvo/ponto de habilidade, alvo do lançamento do goleiro): cancela
+	if _picking_skill_target:
+		skill_target_picked.emit(null)
+		return
+	if _picking_skill_point:
+		skill_point_picked.emit(Vector2.INF)
+		return
+	match phase:
+		Phase.CHOOSING_PROTAGONIST, Phase.CHOOSING_ACTION:
+			_skip_now()
+		Phase.AIMING:
+			if active_player != null and active_player.is_aiming:
+				active_player.cancel_aim()   # a ação volta para a escolha e o próximo quadro pula o turno
+		Phase.CHOOSING_PASS_VARIANT, Phase.CHOOSING_PASS_TARGET:
+			cancel_pass()
+		Phase.SET_PIECE:
+			# Preparação de falta/pênalti/lateral/escanteio: cancela. (Fora disso é a troca de turno em andamento: espera.)
+			if fouls != null and fouls.state == FoulManager.State.SETUP:
+				fouls.reset()
+				_skip_now()
+		Phase.EXECUTING:
+			_skip_wait += delta
+			if _skip_wait >= force_skip_timeout:
+				# A ação não termina: abandona. Se ela terminar depois, o _after_action ignora.
+				_swallow_until_ms = Time.get_ticks_msec() + 8000
+				_skip_now()
+		_:
+			pass   # goleiros agindo / efeitos de fim de turno: espera o próximo turno abrir
+
+
+func _skip_now() -> void:
+	_skip_requested = false
+	_skip_wait = 0.0
+	if active_player != null and active_player.is_aiming:
+		active_player.cancel_aim()
+	_hide_pass_preview()
+	_clear_pending_pass()
+	if fouls != null:
+		fouls.clear_pending()
+		fouls.discard_out()
+	announce_keeper("Turno pulado!", current_team)
+	_end_turn()
 
 
 # ---------- EFEITOS DE FIM DE TURNO ----------

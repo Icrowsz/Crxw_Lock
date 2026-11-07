@@ -2,11 +2,11 @@ class_name BenchManager
 extends CanvasLayer
 ## Banco de reservas, substituições e pausas.
 ##
-## - Cada time escolhe RESERVES (3) reservas na tela de formação, antes da partida.
+## - Cada time escolhe RESERVES (3; 7 no Futebol Medonho) reservas na tela de formação, antes da partida.
 ## - Cada time pode pedir PAUSA até MAX_PAUSES (2) vezes, nos momentos em que o MatchManager deixa
 ##   (veja MatchManager.pause_window): depois de um gol, no fim do tempo e com o goleiro
 ##   segurando a bola. Os botões de pausa ficam no canto inferior direito.
-## - Na pausa o time pode fazer até MAX_SUBS (2) substituições (somando a partida inteira) e
+## - Na pausa o time pode fazer até MAX_SUBS (2; 6 no Futebol Medonho) substituições (somando a partida inteira) e
 ##   editar a formação. As posições novas valem a partir do PRÓXIMO reset (gol ou troca de lado):
 ##   os jogadores não saem do lugar na hora.
 ## - Quem sai não volta. Quem entra nasce no lugar de quem saiu, com as recargas zeradas.
@@ -16,12 +16,27 @@ extends CanvasLayer
 ## Interno: a tela de pausa terminou (botão "Continuar o jogo")
 signal _screen_closed
 
-const RESERVES: int = 3          # vagas de reserva por time
-const MAX_SUBS: int = 2          # substituições por time na partida inteira
+const DEFAULT_RESERVES: int = 3  # vagas de reserva por time (partida normal)
+const DEFAULT_MAX_SUBS: int = 2  # substituições por time (partida normal)
 const MAX_PAUSES: int = 2        # pausas por time na partida inteira
 const BUTTON_LAYER: int = 11     # acima do placar (10) e abaixo da tela de formação (12)
 const SCREEN_LAYER: int = 14     # a tela de pausa fica acima de tudo
 const GHOST_PICK_RADIUS: float = 28.0   # distância (px) para pegar uma posição com o mouse
+
+## Valem para a partida atual: 3 reservas / 2 trocas no jogo normal; no Futebol Medonho vêm do GameMode
+## (7 reservas / 6 trocas). Continuam sendo lidos como BenchManager.RESERVES / MAX_SUBS por quem usa.
+static var RESERVES: int = DEFAULT_RESERVES
+static var MAX_SUBS: int = DEFAULT_MAX_SUBS
+
+
+## Ajusta RESERVES e MAX_SUBS ao modo de jogo (chamado pelo GameMode e a cada reset_match)
+static func apply_mode_limits() -> void:
+	if GameMode.medonho:
+		RESERVES = GameMode.MEDONHO_RESERVES
+		MAX_SUBS = GameMode.MEDONHO_MAX_SUBS
+	else:
+		RESERVES = DEFAULT_RESERVES
+		MAX_SUBS = DEFAULT_MAX_SUBS
 
 var manager: MatchManager
 
@@ -78,6 +93,7 @@ func _ready() -> void:
 
 ## Zera tudo (começo de uma partida nova): reservas vazias e contadores cheios
 func reset_match() -> void:
+	apply_mode_limits()
 	_reserves.clear()
 	_subs_left.clear()
 	_pauses_left.clear()
@@ -254,7 +270,16 @@ func _build_screen() -> void:
 
 	var columns := HBoxContainer.new()
 	columns.add_theme_constant_override("separation", 14)
-	box.add_child(columns)
+	columns.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	if manager.get_team_players(_team).size() > 6 or RESERVES > 4:
+		# 11 em campo + 7 no banco não cabem na tela: as listas rolam
+		var scroll := ScrollContainer.new()
+		scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		scroll.custom_minimum_size = Vector2(0.0, 330.0)
+		box.add_child(scroll)
+		scroll.add_child(columns)
+	else:
+		box.add_child(columns)
 	_out_box = _make_column(columns, "Em campo")
 	_in_box = _make_column(columns, "Banco")
 

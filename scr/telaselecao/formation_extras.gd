@@ -267,10 +267,12 @@ class _Links extends Control:
 			return
 		var editable: int = int(pitch.get("editable_team"))
 		for pr in extras._pairs:
-			var a := pr["trigger"] as Node2D
-			var b := pr["partner"] as Node2D
-			if not is_instance_valid(a) or not is_instance_valid(b):
+			var a_raw: Variant = pr["trigger"]
+			var b_raw: Variant = pr["partner"]
+			if not is_instance_valid(a_raw) or not is_instance_valid(b_raw):
 				continue
+			var a := a_raw as Node2D
+			var b := b_raw as Node2D
 			var r := pr["reaction"] as ChemicalReaction
 			var mine: bool = int(pr["team"]) == editable
 			var fade: float = 1.0 if mine else 0.4
