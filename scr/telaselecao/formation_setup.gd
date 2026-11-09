@@ -36,6 +36,11 @@ extends CanvasLayer
 
 signal finished
 
+## Opções da partida escolhidas na aba "Opções" (-1 = ainda não mexeu: vale o que o MatchManager já tem).
+## Ficam guardadas entre partidas (como o TeamStyle).
+static var _saved_fouls: int = -1
+static var _saved_out: int = -1
+
 var manager: MatchManager
 
 var _field: Field
@@ -132,6 +137,8 @@ var _icon_hint: Label
 var _icon_grid: GridContainer
 const ICON_COLUMNS: int = 5
 var _confirm_button: Button
+var _drawer_field: _SideDrawer          # aba "Campo" (horário e clima)
+var _drawer_options: _SideDrawer        # aba "Opções" (faltas e laterais)
 
 
 ## Destaque desenhado no campo: metade do time, espaços da formação e anel nos jogadores
@@ -564,6 +571,78 @@ class _PerspectivePitch extends Control:
 				HORIZONTAL_ALIGNMENT_CENTER, br * 2.0, fsz, Color.WHITE)
 
 
+## ABA LATERAL ("notificação"): só a aba aparece na borda da tela; passar o mouse puxa o painel para fora
+## e tirar o mouse recolhe de novo. Fica no canto de baixo à esquerda.
+class _SideDrawer extends Control:
+	const HANDLE_W: float = 128.0
+	const HANDLE_H: float = 46.0
+	const SPEED: float = 7.0
+
+	var bottom_margin: float = 24.0
+	var locked: bool = false          # outra janela aberta: a aba some
+	var _open: float = 0.0            # 0 = recolhida, 1 = aberta
+	var _row: HBoxContainer
+	var _panel: PanelContainer
+	var _handle: PanelContainer
+
+
+	## content = o que aparece no painel; framed = desenha moldura própria (false se o conteúdo já tem a sua)
+	func setup(title: String, accent: Color, content: Control, framed: bool = true) -> void:
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_row = HBoxContainer.new()
+		_row.add_theme_constant_override("separation", 0)
+		_row.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		add_child(_row)
+
+		_panel = PanelContainer.new()
+		_panel.mouse_filter = Control.MOUSE_FILTER_STOP
+		if framed:
+			var sb: StyleBoxFlat = UiStyle.panel_style(accent, 26.0, 20.0)
+			sb.set_corner_radius_all(16)
+			sb.set_border_width_all(3)
+			_panel.add_theme_stylebox_override("panel", sb)
+		else:
+			_panel.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
+		_panel.add_child(content)
+		_row.add_child(_panel)
+
+		_handle = PanelContainer.new()
+		_handle.mouse_filter = Control.MOUSE_FILTER_STOP
+		_handle.custom_minimum_size = Vector2(HANDLE_W, HANDLE_H)
+		_handle.size_flags_vertical = Control.SIZE_SHRINK_END   # a aba fica no pé do painel
+		var hb: StyleBoxFlat = UiStyle.panel_style(accent, 14.0, 8.0)
+		hb.set_corner_radius_all(12)
+		hb.set_border_width_all(3)
+		_handle.add_theme_stylebox_override("panel", hb)
+		var label: Label = UiStyle.make_label("%s  ▸" % title, 20, accent.lightened(0.25))
+		label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		_handle.add_child(label)
+		_row.add_child(_handle)
+		position = Vector2(-4000.0, 0.0)   # escondida até o primeiro layout
+
+
+	func _process(delta: float) -> void:
+		if _panel == null:
+			return
+		if locked:
+			visible = false
+			_open = 0.0
+			return
+		visible = true
+		var w: float = _panel.size.x
+		if w < 2.0:
+			return   # o layout ainda não saiu
+		var m: Vector2 = get_global_mouse_position()
+		var hover: bool = _handle.get_global_rect().grow(6.0).has_point(m)
+		if _open > 0.02 and _panel.get_global_rect().grow(6.0).has_point(m):
+			hover = true
+		_open = move_toward(_open, 1.0 if hover else 0.0, delta * SPEED)
+		var e: float = _open * _open * (3.0 - 2.0 * _open)
+		var h: float = _row.get_combined_minimum_size().y
+		position = Vector2(lerpf(-w, 0.0, e), get_viewport_rect().size.y - bottom_margin - h)
+
+
 func _ready() -> void:
 	layer = 12  # acima do placar e do menu da partida
 	_field = get_tree().get_first_node_in_group("field") as Field
@@ -582,8 +661,15 @@ func _ready() -> void:
 	_overlay.visible = false   # o campo do jogo fica escondido; o destaque agora é desenhado no campo em perspectiva
 	_field.add_child(_overlay)
 
+	if _saved_fouls >= 0:
+		_set_fouls(_saved_fouls == 1)
+	if _saved_out >= 0:
+		_set_out_of_play(_saved_out == 1)
+
 	_build_ui()
+	var left_before: Array = _left_col.get_children()
 	FormationExtras.attach(self)
+	_build_drawers(left_before)
 	_pitch.slots = _overlay.slots
 	_begin_team(0)
 	_intro.call_deferred()
@@ -636,7 +722,7 @@ func _build_ui() -> void:
 	margin.set_anchors_preset(Control.PRESET_FULL_RECT)
 	margin.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 44)
+		margin.add_theme_constant_override("margin_" + side, 30)
 	add_child(margin)
 
 	var cols := HBoxContainer.new()
@@ -649,7 +735,7 @@ func _build_ui() -> void:
 	_left_col.alignment = BoxContainer.ALIGNMENT_CENTER
 	_left_col.add_theme_constant_override("separation", 30)
 	_left_col.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	_left_col.size_flags_stretch_ratio = 0.8
+	_left_col.size_flags_stretch_ratio = 0.75
 	_left_col.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cols.add_child(_left_col)
 
@@ -680,7 +766,7 @@ func _build_ui() -> void:
 	# ---------- DIREITA: faixa do time, campo em perspectiva, reservas e botões ----------
 	var right := VBoxContainer.new()
 	right.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	right.size_flags_stretch_ratio = 1.2
+	right.size_flags_stretch_ratio = 1.6   # campo em perspectiva maior
 	right.add_theme_constant_override("separation", 12)
 	right.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	cols.add_child(right)
@@ -692,6 +778,7 @@ func _build_ui() -> void:
 	_title_style.set_border_width_all(3)
 	_top_panel.add_theme_stylebox_override("panel", _title_style)
 	right.add_child(_top_panel)
+	_top_panel.visible = false   # a faixa em cima do campo foi retirada (o campo ganha o espaço); os textos ainda são atualizados
 
 	var top_row := HBoxContainer.new()
 	top_row.add_theme_constant_override("separation", 16)
@@ -725,6 +812,7 @@ func _build_ui() -> void:
 	_pitch.team_count = manager.team_count
 	_pitch.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_pitch.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_pitch.tooltip_text = "Arraste uma bolinha para mover • duplo clique para trocar o personagem"
 	_pitch.dot_double_clicked.connect(_on_dot_double_clicked)
 	_pitch.drag_started.connect(_on_dot_drag_started)
 	_pitch.dragged.connect(_on_dot_dragged)
@@ -767,24 +855,135 @@ func _build_ui() -> void:
 		b.pressed.connect(_poke_ui)
 
 
+# ---------- ABAS LATERAIS: CAMPO E OPÇÕES ----------
+
+## Cria as abas do canto de baixo à esquerda. "Campo" adota o painel de horário/clima que o
+## FormationExtras colocou na coluna da esquerda (left_before = filhos dela ANTES do attach).
+func _build_drawers(left_before: Array) -> void:
+	var added: Array[Control] = []
+	for c in _left_col.get_children():
+		if c is Control and not left_before.has(c):
+			added.append(c as Control)
+
+	if added.is_empty():
+		push_warning("FormationSetup: não achei o painel 'Campo' na coluna da esquerda; a aba 'Campo' não foi criada.")
+	else:
+		var content: Control
+		if added.size() == 1:
+			content = added[0]
+			_left_col.remove_child(content)
+		else:
+			var box := VBoxContainer.new()
+			box.add_theme_constant_override("separation", 12)
+			for c in added:
+				_left_col.remove_child(c)
+				box.add_child(c)
+			content = box
+		content.visible = true
+		content.size_flags_horizontal = Control.SIZE_FILL
+		content.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+		content.custom_minimum_size.x = maxf(content.custom_minimum_size.x, 460.0)
+		_drawer_field = _SideDrawer.new()
+		_drawer_field.bottom_margin = 24.0 + 56.0   # uma aba acima da "Opções"
+		_drawer_field.setup("Campo", Color(0.35, 0.62, 0.95), content, false)
+		add_child(_drawer_field)
+
+	_drawer_options = _SideDrawer.new()
+	_drawer_options.bottom_margin = 24.0
+	_drawer_options.setup("Opções", UiStyle.ACCENT_COLOR, _build_options_content(), true)
+	add_child(_drawer_options)
+
+
+func _build_options_content() -> Control:
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 14)
+	v.custom_minimum_size = Vector2(460.0, 0.0)
+	var head: Label = UiStyle.make_label("Opções da partida", _fs(18), UiStyle.ACCENT_COLOR)
+	head.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	v.add_child(head)
+	v.add_child(_make_option_row("Faltas e pênaltis",
+		"Carrinho em um adversário pode virar falta (ou pênalti, dentro da grande área).",
+		manager.use_fouls, _on_fouls_toggled))
+	v.add_child(_make_option_row("Laterais e escanteios",
+		"Quando a bola sai do campo, o outro time cobra lateral ou escanteio.",
+		manager.use_out_of_play, _on_out_toggled))
+	return v
+
+
+func _make_option_row(title: String, desc: String, on: bool, handler: Callable) -> Control:
+	var row := HBoxContainer.new()
+	row.add_theme_constant_override("separation", 14)
+	var texts := VBoxContainer.new()
+	texts.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	texts.add_theme_constant_override("separation", 2)
+	row.add_child(texts)
+	var t: Label = UiStyle.make_label(title, _fs(15))
+	t.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	texts.add_child(t)
+	var d: Label = UiStyle.make_label(desc, _fs(10), UiStyle.MUTED_COLOR)
+	d.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	d.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	d.custom_minimum_size = Vector2(300.0, 0.0)
+	texts.add_child(d)
+	var check := CheckButton.new()
+	check.focus_mode = Control.FOCUS_NONE
+	check.button_pressed = on
+	check.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	check.toggled.connect(handler)
+	check.toggled.connect(func(_on: bool) -> void: _poke_ui())
+	row.add_child(check)
+	return row
+
+
+func _on_fouls_toggled(on: bool) -> void:
+	_saved_fouls = 1 if on else 0
+	_set_fouls(on)
+
+
+func _on_out_toggled(on: bool) -> void:
+	_saved_out = 1 if on else 0
+	_set_out_of_play(on)
+
+
+func _set_fouls(on: bool) -> void:
+	manager.use_fouls = on
+	if manager.fouls != null:
+		manager.fouls.enabled = on
+
+
+func _set_out_of_play(on: bool) -> void:
+	manager.use_out_of_play = on
+	if manager.fouls != null:
+		manager.fouls.out_enabled = on
+
+
+## Alguma janela por cima do campo está aberta? (as abas laterais somem para não ficarem por cima dela)
+func _any_window_open() -> bool:
+	return _modal_open \
+		or (_team_modal != null and _team_modal.visible) \
+		or (_icon_picker != null and _icon_picker.visible) \
+		or (_picker != null and _picker.visible) \
+		or (_reveal != null and _reveal.visible)
+
+
 ## Entrada: os elementos "pulam" um depois do outro e depois ficam balançando de leve
 func _intro() -> void:
 	await get_tree().process_frame
-	var floaters: Array = [_card_team, _card_forms, _top_panel, _pitch, _confirm_button]
+	var floaters: Array = [_card_team, _card_forms, _pitch, _confirm_button]
 	for i in floaters.size():
 		var c: Control = floaters[i]
 		c.pivot_offset = c.size * 0.5
 		if c != _pitch:   # o campo tem a própria molinha
 			UiStyle.alive(c, float(i) / float(floaters.size()))
 	_card_badge.pivot_offset = _card_badge.size * 0.5
-	UiStyle.jelly_chain([_card_team, _card_forms, _top_panel, _confirm_button], 1.12, 0.07)
+	UiStyle.jelly_chain([_card_team, _card_forms, _confirm_button], 1.12, 0.07)
 	_pitch.kick(1.6)
 
 
 ## Mexeu em qualquer botão: o campo e os cartões balançam um pouco mais
 func _poke_ui() -> void:
 	_pitch.kick(0.7)
-	UiStyle.jelly_chain([_card_team, _card_forms, _top_panel], 1.05, 0.05)
+	UiStyle.jelly_chain([_card_team, _card_forms], 1.05, 0.05)
 
 
 func _toggle_presets() -> void:
@@ -2328,6 +2527,11 @@ func _process(_delta: float) -> void:
 		return
 	# Com o seletor aberto o campo continua mexível; com as outras janelas, não
 	_pitch.locked = _modal_open and not _picker.visible
+	var blocked: bool = _any_window_open()
+	if _drawer_field != null:
+		_drawer_field.locked = blocked
+	if _drawer_options != null:
+		_drawer_options.locked = blocked
 
 
 ## Mantém o jogador dentro da metade do time e fora de cima de outros jogadores e goleiros
